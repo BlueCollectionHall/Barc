@@ -1,0 +1,195 @@
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.miaoyu.barc.api.work.mapper.WorkMapper">
+    <!-- 条件筛选片段SQL -->
+    <sql id="whereConditions">
+        <where>
+            <!-- 必要筛选作品状态 -->
+            w.status = #{status}
+            <!-- 确保condition存在 -->
+            <if test="condition != null">
+                <!-- 筛选keyword -->
+                <if test="condition.keyword != null and condition.keyword != ''">
+                    AND (
+                        w.title LIKE CONCAT('%', #{condition.keyword}, '%')
+                        OR w.description LIKE CONCAT('%', #{condition.keyword}, '%')
+                    )
+                </if>
+                <!-- 筛选学生名 -->
+                <if test="condition.student != null and condition.student != ''">
+                    AND w.student IN (
+                        <!-- 子查询联表 -->
+                        SELECT s.id FROM student s
+                        WHERE s.cn_name LIKE CONCAT('%', #{condition.student}, '%')
+                        OR s.jp_name LIKE CONCAT('%', #{condition.student}, '%')
+                        OR s.kr_name LIKE CONCAT('%', #{condition.student}, '%')
+                        OR s.en_name LIKE CONCAT('%', #{condition.student}, '%')
+                    )
+                </if>
+                <!-- 筛选学园名 -->
+                <if test="condition.school != null and condition.school != ''">
+                    AND w.student IN (
+                        SELECT s.id FROM student s
+                        INNER JOIN school sc ON s.school = sc.id
+                        WHERE sc.cn_name LIKE CONCAT ('%', #{condition.school}, '%')
+                    )
+                </if>
+                <!-- 筛选部团名 -->
+                <if test="condition.club != null and condition.club != ''">
+                    AND w.student IN (
+                        SELECT s.id FROM student s
+                        INNER JOIN club c ON s.club = c.id
+                        WHERE c.cn_name LIKE CONCAT('%', #{condition.club}, '%')
+                    )
+                </if>
+                <!-- 筛选拥有student_id的情况 -->
+                <if test="condition.student_id != null and condition.student_id != ''">
+                    AND w.student IN (
+                        SELECT s.id FROM student s
+                        WHERE #{condition.student_id} = s.id
+                    )
+                </if>
+                <!-- 筛选拥有school_id的情况 -->
+                <if test="condition.school_id != null and condition.school_id != ''">
+                    AND w.student IN (
+                        SELECT s.id FROM student s
+                        INNER JOIN school sch ON s.school = sch.id
+                        WHERE #{condition.school_id} = sch.id
+                    )
+                </if>
+                <!-- 筛选拥有club_id的情况 -->
+                <if test="condition.club_id != null and condition.club_id != ''">
+                    AND w.student IN (
+                        SELECT s.id FROM student s
+                        INNER JOIN club c ON s.club = c.id
+                        WHERE #{condition.club_id} = c.id
+                    )
+                </if>
+                <!-- （创作者本人）筛选用户名username符合的情况 -->
+                <if test="condition.author_username != null and condition.author_username != ''">
+                    AND w.author IN (
+                        SELECT ub.uuid FROM user_basic ub
+                        WHERE ub.username = #{condition.author_username}
+                        AND w.author = ub.uuid
+                    )
+                </if>
+                <!-- （创作者本人）筛选唯一检索id符合的情况 -->
+                <if test="condition.author_uuid != null and condition.author_uuid != ''">
+                    AND w.author = #{condition.author_uuid}
+                </if>
+                <!-- （收录者）筛选用户名username符合的情况 -->
+                <if test="condition.uploader_username != null and condition.uploader_username != ''">
+                    AND w.uploader IN (
+                        SELECT ub.uuid FROM user_basic ub
+                        WHERE ub.username = #{condition.uploader_username}
+                        AND w.uploader = ub.uuid
+                    )
+                </if>
+                <!-- （收录者）筛选唯一检索ID符合的情况 -->
+                <if test="condition.uploader_uuid != null and condition.uploader_uuid != ''">
+                    AND w.uploader = #{condition.uploader_uuid}
+                </if>
+            </if>
+        </where>
+    </sql>
+    <!-- 按条件筛选内容 -->
+    <select id="selectByPage" resultType="com.miaoyu.barc.api.work.model.WorkModel">
+        SELECT
+            w.id,
+            w.title,
+            w.description,
+            w.cover_image,
+            w.author,
+            w.author_nickname,
+            w.uploader,
+            w.is_claim,
+            w.status,
+            w.student,
+            w.updated_at
+        FROM work w
+        <include refid="whereConditions"/>
+        ORDER BY w.updated_at DESC
+        LIMIT #{offset}, #{page_size}
+    </select>
+    <!-- 按条件查出总数 -->
+    <select id="countByPage" resultType="long">
+        SELECT COUNT(*)
+        FROM work w
+        <include refid="whereConditions"/>
+    </select>
+    <!-- 分类以及分页条件筛选片段SQL -->
+    <sql id="whereConditionOnCategory">
+        JOIN work_category wc
+        ON w.id = wc.work_id
+        <where>
+            wc.category_id = #{category_id}
+            <!-- 必要筛选作品状态 -->
+            AND w.status = #{status}
+            <if test="condition.keyword != null and condition.keyword != ''">
+                AND (
+                    <!-- 筛选keyword -->
+                    w.title LIKE CONCAT('%', #{condition.keyword}, '%')
+                    OR w.description LIKE CONCAT('%', #{condition.keyword}, '%')
+                    <!-- 筛选学生名 -->
+                    OR w.student IN (
+                        <!-- 子查询联表 -->
+                        SELECT s.id FROM student s
+                        WHERE s.cn_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                        OR s.jp_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                        OR s.kr_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                        OR s.en_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                    )
+                    <!-- 筛选学园名 -->
+                    OR w.student IN (
+                        SELECT s.id FROM student s
+                        INNER JOIN school sc ON s.school = sc.id
+                        WHERE sc.cn_name LIKE CONCAT ('%', #{condition.keyword}, '%')
+                    )
+                    <!-- 筛选部团名 -->
+                    OR w.student IN (
+                        SELECT s.id FROM student s
+                        INNER JOIN club c ON s.club = c.id
+                        WHERE c.cn_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                    )
+                    <!-- 筛选作者昵称 或者 收录者昵称 或者 三方作者昵称 -->
+                    OR w.author IN (
+                        SELECT ua.uuid FROM user_archive ua
+                        WHERE ua.nickname = #{condition.keyword}
+                        AND w.author = ua.uuid
+                    )
+                    OR w.author_nickname LIKE CONCAT('%', #{condition.keyword}, '%')
+                    OR w.uploader IN (
+                        SELECT ua.uuid FROM user_archive ua
+                        WHERE ua.nickname = #{condition.keyword}
+                        AND w.uploader = ua.uuid
+                    )
+                )
+            </if>
+        </where>
+    </sql>
+    <!-- 按照分类以及分页和条件筛选内容 -->
+    <select id="selectByPageOnCategory" resultType="com.miaoyu.barc.api.work.model.WorkModel">
+        SELECT
+        w.id,
+        w.title,
+        w.description,
+        w.cover_image,
+        w.author,
+        w.author_nickname,
+        w.uploader,
+        w.is_claim,
+        w.status,
+        w.student,
+        w.updated_at
+        FROM work w
+        <include refid="whereConditionOnCategory"/>
+        ORDER BY w.updated_at DESC
+        LIMIT #{offset}, #{page_size}
+    </select>
+    <!-- 按照分类以及分页和条件查出总数 -->
+    <select id="countByPageOnCategory" resultType="long">
+        SELECT COUNT(*)
+        FROM work w
+        <include refid="whereConditionOnCategory"/>
+    </select>
+</mapper>
