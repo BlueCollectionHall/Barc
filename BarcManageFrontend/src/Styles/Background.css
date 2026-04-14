@@ -1,0 +1,19 @@
+.bg_box {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  z-index: -5;
+}
+.bgi, .bgv{
+  min-height: 100%;
+  /*max-width: 100%;*/
+  background-size: contain;
+}
+.zhezhao {
+  position: absolute;
+  height: 100vh;
+  width: 100%;
+}
