@@ -16,7 +16,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class WorkImageService {
@@ -27,16 +29,28 @@ public class WorkImageService {
 
     public ResponseEntity<J> getImagesByWorkService(String workId) {
         List<WorkImageModel> images = workImageMapper.selectByWorkId(workId);
-        for (WorkImageModel image : images) {
-            String url = cosService.generateSignedUrl(image.getObject_key(), new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
-            image.setObject_key(url);
-        }
-        List<String> urls = images.stream()
-                .sorted(Comparator.comparing(WorkImageModel::getSort))
-                .toList()
-                .stream()
+        
+        // 1. 收集所有 object_key
+        List<String> objectKeys = images.stream()
                 .map(WorkImageModel::getObject_key)
                 .toList();
+        
+        // 2. 批量生成签名 URL（使用并行流优化）
+        Date expiration = new Date(System.currentTimeMillis() + 60 * 1000);
+        List<String> signedUrls = cosService.generateBatchSignedUrl(objectKeys, expiration, CosBucketConfigEnum.image);
+        
+        // 3. 建立 object_key -> signed_url 映射（防止并行流导致的顺序错位）
+        Map<String, String> objectKeyToSignedUrl = new HashMap<>();
+        for (int i = 0; i < objectKeys.size(); i++) {
+            objectKeyToSignedUrl.put(objectKeys.get(i), signedUrls.get(i));
+        }
+        
+        // 4. 按 sort 排序并返回签名后的 URL 列表
+        List<String> urls = images.stream()
+                .sorted(Comparator.comparing(WorkImageModel::getSort))
+                .map(image -> objectKeyToSignedUrl.get(image.getObject_key()))
+                .toList();
+        
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, urls));
     }
 

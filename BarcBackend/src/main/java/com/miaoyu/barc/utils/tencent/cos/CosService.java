@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Date;
+import java.util.List;
 
 /**
  * 腾讯云COS对象存储业务层
@@ -129,5 +130,18 @@ public class CosService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * 批量生成预签名URL
+     * 使用 COS SDK 的 generatePresignedUrl 批量生成签名
+     * @param keys 文件路径列表
+     * @param expiration 过期时间
+     * @return 签名后URL列表
+     * */
+    public List<String> generateBatchSignedUrl(List<String> keys, Date expiration, CosBucketConfigEnum clientName) {
+        return keys.parallelStream()
+                .map(key -> generateSignedUrl(key, expiration, clientName))
+                .toList();
     }
 }
