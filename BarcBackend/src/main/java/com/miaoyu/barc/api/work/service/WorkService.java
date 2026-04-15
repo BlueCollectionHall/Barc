@@ -37,9 +37,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -297,12 +300,34 @@ public class WorkService {
     }
 
     private List<WorkModel> loopSignatureWorkCover(List<WorkModel> works) {
-        // 循环所有作品获取封面图并签名
+        // 1. 批量查询所有作品的封面图
+        List<String> workIds = works.stream().map(WorkModel::getId).toList();
+        List<WorkCoverImageModel> coverImages = workCoverImageMapper.selectByWorkIds(workIds);
+        
+        // 2. 收集所有 object_key 用于批量签名
+        Map<String, String> workIdToObjectKey = coverImages.stream()
+                .collect(Collectors.toMap(
+                        WorkCoverImageModel::getWork_id,
+                        WorkCoverImageModel::getObject_key
+                ));
+        
+        List<String> objectKeys = new ArrayList<>(workIdToObjectKey.values());
+        
+        // 3. 批量生成签名 URL（使用并行流优化）
+        Date expiration = new Date(System.currentTimeMillis() + 60 * 1000);
+        List<String> signedUrls = cosService.generateBatchSignedUrl(objectKeys, expiration, CosBucketConfigEnum.image);
+        
+        // 4. 建立 objectKey -> signedUrl 的映射
+        Map<String, String> objectKeyToSignedUrl = new HashMap<>();
+        for (int i = 0; i < objectKeys.size(); i++) {
+            objectKeyToSignedUrl.put(objectKeys.get(i), signedUrls.get(i));
+        }
+        
+        // 5. 为每个作品设置签名后的封面图 URL
         for (WorkModel model : works) {
-            WorkCoverImageModel coverImageModel = workCoverImageMapper.selectByWorkId(model.getId());
-            if (coverImageModel != null) {
-                String coverImageUrl = cosService.generateSignedUrl(coverImageModel.getObject_key(), new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
-                model.setCover_image(coverImageUrl);
+            String objectKey = workIdToObjectKey.get(model.getId());
+            if (objectKey != null) {
+                model.setCover_image(objectKeyToSignedUrl.get(objectKey));
             }
         }
         return works;

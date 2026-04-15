@@ -6,6 +6,8 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+
 public interface WorkCoverImageMapper {
     @Select("SELECT * FROM work_cover_image WHERE work_id = #{work_id}")
     WorkCoverImageModel selectByWorkId(@Param("work_id") String workId);
@@ -18,4 +20,7 @@ public interface WorkCoverImageMapper {
 
     @Delete("DELETE FROM work_cover_image WHERE work_id = #{work_id}")
     boolean deleteByWorkId(@Param("work_id") String workId);
+
+    @Select("<script>SELECT * FROM work_cover_image WHERE work_id IN <foreach collection='workIds' item='id' open='(' separator=',' close=')'>#{id}</foreach></script>")
+    List<WorkCoverImageModel> selectByWorkIds(@Param("workIds") List<String> workIds);
 }
