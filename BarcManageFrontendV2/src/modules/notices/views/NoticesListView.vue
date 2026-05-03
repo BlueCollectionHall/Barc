@@ -208,9 +208,8 @@ onMounted(async () => {
 
 <template>
   <RoutePageShell
-    eyebrow="Notices"
     title="公告列表"
-    subtitle="不再做 V1 的额外作者信息补查，只展示当前已确认接口能稳定提供的公告字段。"
+    eyebrow="Notice List"
   >
     <template #actions>
       <el-button plain @click="loadNotices">刷新</el-button>

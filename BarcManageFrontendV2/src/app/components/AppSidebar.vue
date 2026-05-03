@@ -68,42 +68,42 @@ async function handleSelect(routeName: string): Promise<void> {
 </script>
 
 <template>
-  <aside class="app-sidebar glass-panel">
+  <aside class="app-sidebar">
     <div class="app-sidebar__surface">
-      <div class="app-sidebar__intro">
-        <div class="app-sidebar__kicker">Manage V2</div>
-        <strong>Phase 0 导航</strong>
-        <span>菜单直接由 route meta 生成，避免壳层和路由配置脱节。</span>
+      <div class="app-sidebar__groups">
+        <section v-for="group in menuGroups" :key="group.key" class="app-sidebar__group">
+          <div class="app-sidebar__group-label">{{ group.label }}</div>
+          <button
+            v-for="item in group.items"
+            :key="item.name"
+            class="app-sidebar__link"
+            :class="{ 'is-active': route.name === item.name }"
+            type="button"
+            @click="handleSelect(item.name)"
+          >
+            <span>{{ item.label }}</span>
+          </button>
+        </section>
       </div>
-
-      <el-scrollbar>
-        <div class="app-sidebar__groups">
-          <section v-for="group in menuGroups" :key="group.key" class="app-sidebar__group">
-            <div class="app-sidebar__group-label">{{ group.label }}</div>
-            <button
-              v-for="item in group.items"
-              :key="item.name"
-              class="app-sidebar__link"
-              :class="{ 'is-active': route.name === item.name }"
-              type="button"
-              @click="handleSelect(item.name)"
-            >
-              <span>{{ item.label }}</span>
-            </button>
-          </section>
-        </div>
-      </el-scrollbar>
     </div>
   </aside>
 </template>
 
 <style scoped>
 .app-sidebar {
-  min-height: calc(100vh - var(--barc-header-height) - 2rem);
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  height: calc(100vh - var(--barc-header-height) - 2rem);
   padding: 0;
   overflow: hidden;
+  border: 1px solid var(--barc-border);
+  border-radius: var(--barc-radius-md);
   background: var(--barc-surface-sidebar);
+  box-shadow: var(--barc-shadow-md);
   color: var(--barc-text-inverse);
+  backdrop-filter: none;
+  isolation: isolate;
 }
 
 .app-sidebar__surface {
@@ -112,30 +112,29 @@ async function handleSelect(routeName: string): Promise<void> {
   flex-direction: column;
 }
 
-.app-sidebar__intro {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 1.4rem 1.2rem 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.app-sidebar__intro span,
-.app-sidebar__group-label {
-  color: rgba(247, 251, 255, 0.75);
-}
-
-.app-sidebar__kicker {
-  font-size: 0.78rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
 .app-sidebar__groups {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.app-sidebar__groups::-webkit-scrollbar {
+  width: 6px;
+}
+
+.app-sidebar__groups::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-sidebar__groups::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .app-sidebar__group {
@@ -146,6 +145,7 @@ async function handleSelect(routeName: string): Promise<void> {
 
 .app-sidebar__group-label {
   padding-inline: 0.65rem;
+  color: rgba(247, 251, 255, 0.75);
   font-size: 0.82rem;
   letter-spacing: 0.08em;
 }
@@ -160,7 +160,7 @@ async function handleSelect(routeName: string): Promise<void> {
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: all 0.22s ease;
+  transition: background-color 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
 }
 
 .app-sidebar__link:hover,

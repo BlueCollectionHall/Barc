@@ -8,6 +8,7 @@ import { queryUsersByPage } from '@/modules/users/api/users.service'
 import { getErrorMessage, type PageResult } from '@/shared/types/api'
 import type { UserIdentity, UserListFilters, UserListItem } from '@/shared/types/user'
 import { showError } from '@/shared/utils/message'
+import { useMouseTooltip } from '@/shared/utils/mouse-tooltip'
 
 interface CreateFeedback {
   description: string
@@ -25,6 +26,7 @@ interface QuickCreateSubmittedPayload {
 }
 
 const permissionStore = usePermissionStore()
+const tooltip = useMouseTooltip()
 
 const filters = reactive<UserListFilters>({
   identity: 'USER',
@@ -218,23 +220,16 @@ onMounted(async () => {
 </script>
 
 <template>
-  <RoutePageShell
-    eyebrow="Users"
-    title="用户列表"
-    subtitle="分页列表延续 V1 的管理节奏，但把查询、权限文案和新建入口整合成更稳定的模块边界。"
-  >
+  <RoutePageShell title="用户列表" eyebrow="User List">
     <template #actions>
+      <span class="header-meta">
+        当前页 {{ pageResult?.list.length ?? 0 }} 条 · 管理员 {{ managerCount }} 条 · 总计 {{ pageResult?.total ?? 0 }} 条
+      </span>
       <el-button plain @click="loadUsers">刷新</el-button>
       <el-button type="primary" @click="createDrawerVisible = true">新增用户</el-button>
     </template>
 
     <section class="glass-panel page-card">
-      <div class="summary-row">
-        <el-statistic title="当前页条目" :value="pageResult?.list.length ?? 0" />
-        <el-statistic title="管理员条目" :value="managerCount" />
-        <el-statistic title="总记录数" :value="pageResult?.total ?? 0" />
-      </div>
-
       <el-form class="filters" label-position="top" @submit.prevent="submitFilters">
         <el-form-item label="用户名">
           <el-input v-model="filters.username" clearable />
@@ -305,7 +300,16 @@ onMounted(async () => {
           </template>
         </el-table-column>
         <el-table-column prop="username" label="用户名" min-width="140" />
-        <el-table-column prop="nickname" label="昵称" min-width="140" />
+        <el-table-column label="昵称" min-width="140">
+          <template #default="scope">
+            <span
+              class="ellipsis-text"
+              @mouseenter="tooltip.show(scope.row.nickname, $event)"
+              @mousemove="tooltip.move($event)"
+              @mouseleave="tooltip.hide()"
+            >{{ scope.row.nickname }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="身份" min-width="110">
           <template #default="scope">
             <el-tag :type="scope.row.identity === 'MANAGER' ? 'warning' : 'info'">{{ scope.row.identity }}</el-tag>
@@ -337,6 +341,16 @@ onMounted(async () => {
       v-model:loading="createSubmitting"
       @submitted="handleQuickCreateSubmitted"
     />
+
+    <teleport to="body">
+      <div
+        v-show="tooltip.visible"
+        class="mouse-tooltip"
+        :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+      >
+        {{ tooltip.text }}
+      </div>
+    </teleport>
   </RoutePageShell>
 </template>
 
@@ -345,7 +359,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 1.25rem;
+  padding: 0.85rem 1.25rem;
 }
 
 .page-card--table {
@@ -425,16 +439,15 @@ onMounted(async () => {
   line-height: 1.7;
 }
 
-.summary-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-}
-
 .filters {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 1rem;
+  align-items: end;
+}
+
+.filters :deep(.el-form-item) {
+  margin-bottom: 0;
 }
 
 .filters__actions {
@@ -493,6 +506,27 @@ onMounted(async () => {
   gap: 0.75rem;
 }
 
+.ellipsis-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mouse-tooltip {
+  position: fixed;
+  z-index: 9999;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(23, 33, 45, 0.92);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
 .user-avatar {
   width: 42px;
   height: 42px;
@@ -509,7 +543,6 @@ onMounted(async () => {
 }
 
 @media (max-width: 1080px) {
-  .summary-row,
   .filters {
     grid-template-columns: 1fr;
   }
