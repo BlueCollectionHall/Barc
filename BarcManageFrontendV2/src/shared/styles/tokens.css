@@ -1,0 +1,43 @@
+:root {
+  --barc-font-body: 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --barc-font-display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', serif;
+
+  --barc-bg: #edf2f8;
+  --barc-bg-accent: rgba(143, 181, 214, 0.22);
+  --barc-bg-warm: rgba(255, 246, 235, 0.45);
+  --barc-surface: rgba(255, 255, 255, 0.62);
+  --barc-surface-strong: rgba(255, 255, 255, 0.78);
+  --barc-surface-deep: rgba(88, 99, 112, 0.6);
+  --barc-surface-sidebar: rgba(74, 84, 95, 0.64);
+  --barc-border: rgba(255, 255, 255, 0.45);
+  --barc-border-strong: rgba(123, 146, 168, 0.26);
+  --barc-text: #17212d;
+  --barc-text-soft: #5c6672;
+  --barc-text-inverse: #f7fbff;
+  --barc-accent: #5f88ad;
+  --barc-accent-strong: #466d90;
+  --barc-danger: #c85d63;
+  --barc-success: #4f8b77;
+
+  --barc-shadow-sm: 0 10px 30px rgba(61, 83, 104, 0.08);
+  --barc-shadow-md: 0 18px 48px rgba(61, 83, 104, 0.14);
+  --barc-shadow-lg: 0 28px 68px rgba(61, 83, 104, 0.18);
+  --barc-radius-sm: 14px;
+  --barc-radius-md: 22px;
+  --barc-radius-lg: 30px;
+  --barc-blur: 18px;
+
+  --barc-space-1: 0.25rem;
+  --barc-space-2: 0.5rem;
+  --barc-space-3: 0.75rem;
+  --barc-space-4: 1rem;
+  --barc-space-5: 1.5rem;
+  --barc-space-6: 2rem;
+  --barc-space-8: 3rem;
+  --barc-header-height: 78px;
+  --barc-sidebar-width: 280px;
+
+  color: var(--barc-text);
+  font-family: var(--barc-font-body);
+  background-color: var(--barc-bg);
+}
