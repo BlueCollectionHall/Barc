@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '@/app/stores/auth'
 import { formatRelativeGreeting } from '@/shared/utils/date'
 import { showSuccess } from '@/shared/utils/message'
 
-const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
 const greeting = computed(() => formatRelativeGreeting())
-const title = computed(() => route.meta.title ?? 'BARC Manage V2')
-const subtitle = computed(() => route.meta.subtitle ?? '更清晰的 Phase 0 管理入口')
 const displayName = computed(() => authStore.userArchive?.nickname ?? '未命名管理员')
 const avatar = computed(() => authStore.userArchive?.avatar ?? '')
 
@@ -24,23 +21,19 @@ async function logout(): Promise<void> {
 </script>
 
 <template>
-  <header class="app-header glass-panel">
+  <header class="app-header">
     <div class="app-header__brand">
       <div class="app-header__logo">B.A.R.C</div>
-      <div class="app-header__copy">
-        <div class="app-header__title">{{ title }}</div>
-        <div class="app-header__subtitle">{{ subtitle }}</div>
-      </div>
+      <span class="app-header__greeting">{{ greeting }}</span>
     </div>
 
-    <div class="app-header__user glass-panel">
+    <div class="app-header__user">
+      <img v-if="avatar" class="app-header__avatar" :src="avatar" alt="avatar" />
+      <div v-else class="app-header__avatar app-header__avatar--fallback">{{ displayName.slice(0, 1) }}</div>
       <div class="app-header__meta">
-        <span class="app-header__greeting">{{ greeting }}</span>
         <strong>{{ displayName }}</strong>
         <span>{{ authStore.managerPermissionLabel }}</span>
       </div>
-      <img v-if="avatar" class="app-header__avatar" :src="avatar" alt="avatar" />
-      <div v-else class="app-header__avatar app-header__avatar--fallback">{{ displayName.slice(0, 1) }}</div>
       <el-button plain @click="logout">退出登录</el-button>
     </div>
   </header>
@@ -54,6 +47,12 @@ async function logout(): Promise<void> {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.95rem 1.1rem;
+  border: 1px solid var(--barc-border);
+  border-radius: var(--barc-radius-md);
+  background: var(--barc-surface);
+  box-shadow: var(--barc-shadow-md);
+  backdrop-filter: none;
+  isolation: isolate;
 }
 
 .app-header__brand,
@@ -66,35 +65,20 @@ async function logout(): Promise<void> {
 .app-header__logo {
   font-family: var(--barc-font-display);
   font-size: 1.6rem;
+  line-height: 1;
   letter-spacing: 0.18em;
 }
 
-.app-header__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.app-header__title {
-  font-weight: 600;
-}
-
-.app-header__subtitle,
 .app-header__greeting,
 .app-header__meta span {
   color: var(--barc-text-soft);
-  font-size: 0.9rem;
-}
-
-.app-header__user {
-  padding: 0.45rem 0.55rem 0.45rem 0.8rem;
-  background: var(--barc-surface-strong);
+  font-size: 1.08rem;
 }
 
 .app-header__meta {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .app-header__avatar {
@@ -122,10 +106,6 @@ async function logout(): Promise<void> {
 
   .app-header__user {
     justify-content: space-between;
-  }
-
-  .app-header__meta {
-    align-items: flex-start;
   }
 }
 </style>
