@@ -21,37 +21,46 @@ async function logout(): Promise<void> {
 </script>
 
 <template>
-  <header class="app-header">
-    <div class="app-header__brand">
-      <div class="app-header__logo">B.A.R.C</div>
-      <span class="app-header__greeting">{{ greeting }}</span>
-    </div>
-
-    <div class="app-header__user">
-      <img v-if="avatar" class="app-header__avatar" :src="avatar" alt="avatar" />
-      <div v-else class="app-header__avatar app-header__avatar--fallback">{{ displayName.slice(0, 1) }}</div>
-      <div class="app-header__meta">
-        <strong>{{ displayName }}</strong>
-        <span>{{ authStore.managerPermissionLabel }}</span>
+  <div class="app-header">
+    <header class="app-header__card">
+      <div class="app-header__brand">
+        <div class="app-header__logo">B.A.R.C</div>
       </div>
-      <el-button plain @click="logout">退出登录</el-button>
-    </div>
-  </header>
+
+      <span class="app-header__greeting">{{ greeting }}</span>
+
+      <div class="app-header__user">
+        <img v-if="avatar" class="app-header__avatar" :src="avatar" alt="avatar" />
+        <div v-else class="app-header__avatar app-header__avatar--fallback">{{ displayName.slice(0, 1) }}</div>
+        <div class="app-header__meta">
+          <strong>{{ displayName }}</strong>
+          <span>{{ authStore.managerPermissionLabel }}</span>
+        </div>
+        <el-button plain @click="logout">退出登录</el-button>
+      </div>
+    </header>
+  </div>
 </template>
 
 <style scoped>
 .app-header {
+  display: block;
+  min-width: 0;
+}
+
+.app-header__card {
+  position: relative;
   display: flex;
+  width: 100%;
   min-height: var(--barc-header-height);
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.95rem 1.1rem;
+  gap: var(--barc-space-4);
+  padding: var(--barc-space-4);
   border: 1px solid var(--barc-border);
   border-radius: var(--barc-radius-md);
-  background: var(--barc-surface);
+  background: linear-gradient(160deg, var(--barc-surface-strong), var(--barc-surface));
   box-shadow: var(--barc-shadow-md);
-  backdrop-filter: none;
   isolation: isolate;
 }
 
@@ -59,7 +68,7 @@ async function logout(): Promise<void> {
 .app-header__user {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: var(--barc-space-4);
 }
 
 .app-header__logo {
@@ -69,16 +78,29 @@ async function logout(): Promise<void> {
   letter-spacing: 0.18em;
 }
 
-.app-header__greeting,
-.app-header__meta span {
+.app-header__greeting {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   color: var(--barc-text-soft);
   font-size: 1.08rem;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .app-header__meta {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+}
+
+.app-header__meta strong {
+  line-height: 1.3;
+}
+
+.app-header__meta span {
+  color: var(--barc-text-soft);
+  font-size: 0.9rem;
 }
 
 .app-header__avatar {
@@ -99,13 +121,26 @@ async function logout(): Promise<void> {
 }
 
 @media (max-width: 960px) {
-  .app-header {
+  .app-header__card {
     flex-direction: column;
     align-items: stretch;
   }
 
   .app-header__user {
+    flex-wrap: wrap;
     justify-content: space-between;
+  }
+
+  .app-header__greeting {
+    position: static;
+    transform: none;
+    text-align: center;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-header__user {
+    align-items: flex-start;
   }
 }
 </style>
