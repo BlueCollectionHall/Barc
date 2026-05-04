@@ -68,7 +68,14 @@ select {
 
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-  transition: all 0.28s ease;
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+
+.route-transition-stage > .fade-slide-enter-active,
+.route-transition-stage > .fade-slide-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
 }
 
 .fade-slide-enter-from,

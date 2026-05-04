@@ -5,41 +5,83 @@ import AppSidebar from '@/app/components/AppSidebar.vue'
 
 <template>
   <div class="admin-layout">
-    <AppHeader />
-    <div class="admin-layout__body">
-      <AppSidebar class="admin-layout__sidebar" />
+    <AppSidebar class="admin-layout__sidebar" />
+    <section class="admin-layout__content">
+      <AppHeader class="admin-layout__header" />
       <main class="admin-layout__main">
-        <router-view />
+        <router-view v-slot="{ Component, route }">
+          <div class="route-transition-stage">
+            <Transition name="fade-slide" mode="out-in">
+              <div :key="route.fullPath" class="route-transition-view">
+                <component :is="Component" />
+              </div>
+            </Transition>
+          </div>
+        </router-view>
       </main>
-    </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
 .admin-layout {
-  display: flex;
-  min-height: 100vh;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1rem;
+  display: grid;
+  height: 100vh;
+  height: 100dvh;
+  align-items: stretch;
+  grid-template-columns: minmax(240px, var(--barc-sidebar-width)) minmax(0, 1fr);
+  grid-template-areas: 'sidebar content';
+  gap: var(--barc-space-4);
+  padding: var(--barc-space-4);
+  overflow: hidden;
 }
 
-.admin-layout__body {
-  display: grid;
+.admin-layout__sidebar {
+  grid-area: sidebar;
+  min-width: 0;
   min-height: 0;
-  flex: 1;
-  grid-template-columns: minmax(240px, var(--barc-sidebar-width)) minmax(0, 1fr);
-  gap: 1rem;
+}
+
+.admin-layout__content {
+  grid-area: content;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--barc-space-4);
+}
+
+.admin-layout__header {
+  min-width: 0;
+  flex-shrink: 0;
 }
 
 .admin-layout__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   min-width: 0;
-  min-height: calc(100vh - var(--barc-header-height) - 2rem);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.route-transition-stage {
+  position: relative;
+  min-height: 100%;
+}
+
+.route-transition-view {
+  min-height: 100%;
 }
 
 @media (max-width: 1080px) {
-  .admin-layout__body {
+  .admin-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-areas:
+      'content'
+      'sidebar';
   }
 }
 </style>

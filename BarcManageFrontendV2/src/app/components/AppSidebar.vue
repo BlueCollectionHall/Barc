@@ -91,10 +91,10 @@ async function handleSelect(routeName: string): Promise<void> {
 
 <style scoped>
 .app-sidebar {
-  position: sticky;
-  top: 1rem;
-  align-self: start;
-  height: calc(100vh - var(--barc-header-height) - 2rem);
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--barc-border);
@@ -102,24 +102,27 @@ async function handleSelect(routeName: string): Promise<void> {
   background: var(--barc-surface-sidebar);
   box-shadow: var(--barc-shadow-md);
   color: var(--barc-text-inverse);
-  backdrop-filter: none;
   isolation: isolate;
 }
 
 .app-sidebar__surface {
   display: flex;
+  width: 100%;
   height: 100%;
+  min-height: 0;
   flex-direction: column;
 }
 
 .app-sidebar__groups {
   display: flex;
   flex: 1;
+  min-height: 0;
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
