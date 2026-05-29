@@ -122,7 +122,20 @@ public class SignService {
                 }
                 return ResponseEntity.ok(new SignR().signIn(false));
             }
-            // 得到交换表记录签发token令牌
+            // 得到交换表记录，检查是否被封号
+            UserBasicModel naigosUser = userBasicMapper.selectByUuid(barcNaigosUuid.getUuid());
+            if (naigosUser != null && naigosUser.getSafe_level() != null && naigosUser.getSafe_level() < 0) {
+                String banStatus = BanTypeEnum.getStatusBySafeLevel(naigosUser.getSafe_level());
+                // 临时封号显示解封时间
+                if (naigosUser.getSafe_level() == BanTypeEnum.TEMPORARY_BAN.getSafeLevelValue()) {
+                    UserBanRecordModel latestBan = userBanRecordMapper.selectLatestByUserId(naigosUser.getUuid());
+                    if (latestBan != null && latestBan.getBannedAt() != null && latestBan.getBanDurationDays() != null) {
+                        LocalDateTime unbanTime = latestBan.getBannedAt().plusDays(latestBan.getBanDurationDays());
+                        return ResponseEntity.ok(new ErrorR().normal("账号已被" + banStatus + "，解封时间：" + unbanTime.toString()));
+                    }
+                }
+                return ResponseEntity.ok(new ErrorR().normal("账号已被" + banStatus + "，无法登录"));
+            }
             return ResponseEntity.ok(new SuccessR().normal(jwtService.jwtSigned(barcNaigosUuid.getUuid())));
         } catch (IOException | InterruptedException e) {
             return ResponseEntity.status(401).body(new ErrorR().normal("请求出错"));

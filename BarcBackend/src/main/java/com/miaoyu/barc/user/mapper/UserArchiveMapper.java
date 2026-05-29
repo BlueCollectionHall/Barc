@@ -31,6 +31,7 @@ public interface UserArchiveMapper {
             "   a.gender, " +
             "   a.identity, " +
             "   a.permission, " +
+            "   b.safe_level, " +
             "   a.updated_at " +
             "FROM user_archive a " +
             "LEFT JOIN user_basic b ON a.uuid = b.uuid " +

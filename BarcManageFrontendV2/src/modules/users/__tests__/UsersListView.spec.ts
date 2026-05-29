@@ -74,6 +74,7 @@ function createUserListItem(overrides: Partial<UserListItem> = {}): UserListItem
     gender: null,
     identity: 'USER',
     permission: 1,
+    safe_level: null,
     ...overrides,
   }
 }

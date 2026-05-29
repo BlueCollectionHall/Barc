@@ -1,8 +1,12 @@
 import { http } from '@/shared/api/http'
 import type { PageRequest, PageResult, ValueLabel } from '@/shared/types/api'
 import type {
+  BanRecord,
+  BanRequest,
   IdentityOption,
   PermissionOption,
+  UnbanRequest,
+  UserBanStatus,
   UserIdentity,
   UserListFilters,
   UserListItem,
@@ -34,4 +38,25 @@ export function fetchMyPermissionNearMax(): Promise<ValueLabel<number>> {
 
 export function changePermission(payload: UserPermissionChangePayload): Promise<string> {
   return http.post<string>('/user/permission/change_permission', payload)
+}
+
+// 封号相关API
+export function banUser(payload: BanRequest): Promise<string> {
+  return http.post<string>('/user/ban', payload)
+}
+
+export function unbanUser(payload: UnbanRequest): Promise<string> {
+  return http.post<string>('/user/ban/unban', payload)
+}
+
+export function getBanHistory(userId: string, page: number = 1, size: number = 10): Promise<PageResult<BanRecord>> {
+  return http.get<PageResult<BanRecord>>('/user/ban/history', {
+    params: { userId, page, size },
+  })
+}
+
+export function getUserBanStatus(userId: string): Promise<UserBanStatus> {
+  return http.get<UserBanStatus>('/user/ban/status', {
+    params: { userId },
+  })
 }
