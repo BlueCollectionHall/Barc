@@ -1,11 +1,11 @@
 -- V3__add_user_ban_support.sql
 -- 为用户封号功能添加数据库支持
 
--- 1. 为student表添加safe_level_before_ban字段
-ALTER TABLE student ADD COLUMN safe_level_before_ban INT DEFAULT NULL COMMENT '封号前的safe_level值，用于解封恢复';
+-- 1. 为user_basic表添加safe_level_before_ban字段
+ALTER TABLE user_basic ADD COLUMN safe_level_before_ban INT DEFAULT NULL COMMENT '封号前的safe_level值，用于解封恢复';
 
 -- 2. 创建封号记录表
-CREATE TABLE user_ban_record (
+CREATE TABLE IF NOT EXISTS user_ban_record (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     user_id VARCHAR(255) NOT NULL COMMENT '被封号用户ID',
     ban_type TINYINT NOT NULL COMMENT '封号类型：0-风险冻结，1-临时封号，2-违规封号',

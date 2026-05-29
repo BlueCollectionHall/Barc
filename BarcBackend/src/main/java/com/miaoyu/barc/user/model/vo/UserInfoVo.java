@@ -16,4 +16,5 @@ public class UserInfoVo {
     private Integer gender;
     private UserIdentityEnum identity;
     private Integer permission;
+    private Integer safe_level;
 }

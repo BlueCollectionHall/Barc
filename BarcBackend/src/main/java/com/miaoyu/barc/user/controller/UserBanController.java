@@ -5,7 +5,6 @@ import com.miaoyu.barc.permission.PermissionConst;
 import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
 import com.miaoyu.barc.user.service.UserBanService;
 import com.miaoyu.barc.utils.J;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,12 +34,13 @@ public class UserBanController {
     /**
      * 封号用户
      *
-     * @param request    HTTP请求（含操作人uuid）
+     * @param operatorId 操作人UUID（从请求头中获取）
      * @param banRequest 封号请求体
      * @return 封号结果
      */
     @RequireUserAndPermissionAnno({
             @RequireUserAndPermissionAnno.Check(
+                    uuidIndex = 0,
                     identity = UserIdentityEnum.MANAGER,
                     targetPermission = PermissionConst.ADMINISTRATOR,
                     isSuchElseRequire = false,
@@ -49,10 +49,9 @@ public class UserBanController {
     })
     @PostMapping
     public ResponseEntity<J> banUserControl(
-            HttpServletRequest request,
+            @RequestAttribute("uuid") String operatorId,
             @RequestBody BanRequest banRequest
     ) {
-        String operatorId = request.getAttribute("uuid").toString();
         return userBanService.banUser(
                 operatorId, 1, banRequest.getUserId(),
                 banRequest.getBanType(), banRequest.getReason(), banRequest.getDurationDays()
@@ -62,12 +61,13 @@ public class UserBanController {
     /**
      * 解封用户
      *
-     * @param request    HTTP请求（含操作人uuid）
+     * @param operatorId 操作人UUID（从请求头中获取）
      * @param banRequest 解封请求体（userId, reason）
      * @return 解封结果
      */
     @RequireUserAndPermissionAnno({
             @RequireUserAndPermissionAnno.Check(
+                    uuidIndex = 0,
                     identity = UserIdentityEnum.MANAGER,
                     targetPermission = PermissionConst.ADMINISTRATOR,
                     isSuchElseRequire = false,
@@ -76,24 +76,24 @@ public class UserBanController {
     })
     @PostMapping("/unban")
     public ResponseEntity<J> unbanUserControl(
-            HttpServletRequest request,
+            @RequestAttribute("uuid") String operatorId,
             @RequestBody BanRequest banRequest
     ) {
-        String operatorId = request.getAttribute("uuid").toString();
         return userBanService.unbanUser(operatorId, banRequest.getUserId(), banRequest.getReason());
     }
 
     /**
      * 查询封号历史
      *
-     * @param request HTTP请求（含操作人uuid）
-     * @param userId  被查询用户ID
-     * @param page    页码
-     * @param size    每页大小
+     * @param operatorId 操作人UUID（从请求头中获取）
+     * @param userId     被查询用户ID
+     * @param page       页码
+     * @param size       每页大小
      * @return 封号历史列表
      */
     @RequireUserAndPermissionAnno({
             @RequireUserAndPermissionAnno.Check(
+                    uuidIndex = 0,
                     identity = UserIdentityEnum.MANAGER,
                     targetPermission = PermissionConst.ADMINISTRATOR,
                     isSuchElseRequire = false,
@@ -102,8 +102,8 @@ public class UserBanController {
     })
     @GetMapping("/history")
     public ResponseEntity<J> getBanHistoryControl(
-            HttpServletRequest request,
-            @RequestParam("user_id") String userId,
+            @RequestAttribute("uuid") String operatorId,
+            @RequestParam("userId") String userId,
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "size", defaultValue = "10") int size
     ) {
@@ -113,12 +113,13 @@ public class UserBanController {
     /**
      * 查询用户状态
      *
-     * @param request HTTP请求（含操作人uuid）
-     * @param userId  被查询用户ID
+     * @param operatorId 操作人UUID（从请求头中获取）
+     * @param userId     被查询用户ID
      * @return 用户状态信息
      */
     @RequireUserAndPermissionAnno({
             @RequireUserAndPermissionAnno.Check(
+                    uuidIndex = 0,
                     identity = UserIdentityEnum.MANAGER,
                     targetPermission = PermissionConst.ADMINISTRATOR,
                     isSuchElseRequire = false,
@@ -127,8 +128,8 @@ public class UserBanController {
     })
     @GetMapping("/status")
     public ResponseEntity<J> getUserStatusControl(
-            HttpServletRequest request,
-            @RequestParam("user_id") String userId
+            @RequestAttribute("uuid") String operatorId,
+            @RequestParam("userId") String userId
     ) {
         return userBanService.getUserStatus(userId);
     }

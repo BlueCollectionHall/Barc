@@ -90,6 +90,39 @@ Barc/
 
 **禁止使用弃用的复数形式表名！**
 
+### 6.2 字段命名与索引规范
+
+**字段命名规则：**
+| 表类型 | 主键字段名 | 说明 |
+|--------|-----------|------|
+| 用户相关表（student, club, school 等） | `uuid` | 用户表使用 `uuid` 作为主键字段名 |
+| 其他实体表 | `id` | 其他表使用 `id` 作为主键字段名（值通常也是 uuid 格式） |
+
+**用户索引原则：**
+
+在需要索引或关联用户时，**尽量使用 `uuid` 字段**，避免使用 `username`、`email` 等字段。
+
+| 场景 | 推荐做法 | 避免做法 |
+|------|----------|----------|
+| **关联用户表** | 使用 `uuid` 字段关联 | 使用 `username` 关联 |
+| **查询用户** | 使用 `uuid` 查询 | 使用 `email` 查询 |
+| **外键引用** | 存储 `uuid` 值 | 存储 `username` 值 |
+
+**示例：**
+```sql
+-- ✅ 推荐：使用 uuid 关联用户
+SELECT s.*, sc.* 
+FROM student s 
+JOIN school_club sc ON s.uuid = sc.student_uuid
+
+-- ⚠️ 尽量避免：使用 username 关联
+SELECT * FROM student WHERE username = 'xxx'
+```
+
+**说明：**
+- 仅在业务必须时（如登录、注册校验）才使用 `username`/`email` 查询用户
+- 其他场景一律使用 `uuid` 进行索引和关联
+
 ---
 
 ## 七、测试规范

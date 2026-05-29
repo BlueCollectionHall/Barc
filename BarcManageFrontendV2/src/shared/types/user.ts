@@ -39,6 +39,7 @@ export interface UserListItem {
   gender: number | null
   identity: UserIdentity
   permission: number
+  safe_level: number | null
 }
 
 export interface UserListFilters extends Record<string, unknown> {
@@ -65,3 +66,59 @@ export interface UserPermissionChangePayload {
 
 export type IdentityOption = ValueLabel<UserIdentity>
 export type PermissionOption = ValueLabel<number>
+
+// 封号相关类型
+export type BanType = 0 | 1 | 2 | 3
+
+export interface BanRequest {
+  userId: string
+  banType: BanType
+  reason: string
+  durationDays?: number
+}
+
+export interface UnbanRequest {
+  userId: string
+  reason: string
+}
+
+export interface BanRecord {
+  id: number
+  userId: string
+  banType: BanType
+  banReason: string
+  banDurationDays: number | null
+  bannedAt: string
+  unbannedAt: string | null
+  unbanReason: string | null
+  operatorId: string
+  operatorType: number
+  safeLevelBeforeBan: number
+  safeLevelAfterBan: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UserBanStatus {
+  userId: string
+  safeLevel: number | null
+  safeLevelBeforeBan: number | null
+  banStatus: string
+  banReason: string | null
+  banTime: string | null
+  unbanTime: string | null
+}
+
+export const BAN_TYPE_LABELS: Record<BanType, string> = {
+  0: '风险冻结',
+  1: '临时封号',
+  2: '违规封号',
+  3: '软删除',
+}
+
+export const SAFE_LEVEL_STATUS: Record<number, string> = {
+  0: '风险冻结',
+  [-1]: '临时封号',
+  [-2]: '违规封号',
+  [-3]: '软删除',
+}
