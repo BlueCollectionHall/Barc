@@ -9,6 +9,9 @@ const UsersListView = () => import('@/modules/users/views/UsersListView.vue')
 const UsersPermissionsView = () => import('@/modules/users/views/UsersPermissionsView.vue')
 const NoticesListView = () => import('@/modules/notices/views/NoticesListView.vue')
 const NoticeEditorView = () => import('@/modules/notices/views/NoticeEditorView.vue')
+const SchoolListView = () => import('@/modules/school-club-student/views/SchoolListView.vue')
+const ClubListView = () => import('@/modules/school-club-student/views/ClubListView.vue')
+const StudentListView = () => import('@/modules/school-club-student/views/StudentListView.vue')
 const ForbiddenView = () => import('@/modules/system/views/ForbiddenView.vue')
 
 export const adminChildren: RouteRecordRaw[] = [
@@ -99,6 +102,49 @@ export const adminChildren: RouteRecordRaw[] = [
       subtitle: '支持作者本人或更高权限管理员修改公告。',
       requiresAuth: true,
       requiresManager: true,
+      hiddenInMenu: true,
+    },
+  },
+  {
+    path: 'schools',
+    name: 'schools-list',
+    component: SchoolListView,
+    meta: {
+      title: '学园列表',
+      subtitle: '管理所有学园及其下属的部团与学生。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermission: 16,
+      menuLabel: '学园、部团、学生',
+      menuGroup: 'content',
+      menuGroupLabel: '内容管理',
+      groupOrder: 50,
+      menuOrder: 50,
+    },
+  },
+  {
+    path: 'schools/:schoolId/clubs',
+    name: 'clubs-list',
+    component: ClubListView,
+    meta: {
+      title: '部团列表',
+      subtitle: '管理该学园下的所有部团。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermission: 16,
+      hiddenInMenu: true,
+    },
+  },
+  {
+    path: 'schools/:schoolId/clubs/:clubId/students',
+    name: 'students-list',
+    component: StudentListView,
+    meta: {
+      title: '学生列表',
+      subtitle: '管理该部团下的所有学生。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermission: 16,
       hiddenInMenu: true,
     },
   },

@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '@/app/stores/auth'
 import { formatRelativeGreeting } from '@/shared/utils/date'
 import { showSuccess } from '@/shared/utils/message'
 
-const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
 const greeting = computed(() => formatRelativeGreeting())
-const title = computed(() => route.meta.title ?? 'BARC Manage V2')
-const subtitle = computed(() => route.meta.subtitle ?? '更清晰的 Phase 0 管理入口')
 const displayName = computed(() => authStore.userArchive?.nickname ?? '未命名管理员')
 const avatar = computed(() => authStore.userArchive?.avatar ?? '')
 
@@ -24,77 +21,86 @@ async function logout(): Promise<void> {
 </script>
 
 <template>
-  <header class="app-header glass-panel">
-    <div class="app-header__brand">
-      <div class="app-header__logo">B.A.R.C</div>
-      <div class="app-header__copy">
-        <div class="app-header__title">{{ title }}</div>
-        <div class="app-header__subtitle">{{ subtitle }}</div>
+  <div class="app-header">
+    <header class="app-header__card">
+      <div class="app-header__brand">
+        <div class="app-header__logo">B.A.R.C</div>
       </div>
-    </div>
 
-    <div class="app-header__user glass-panel">
-      <div class="app-header__meta">
-        <span class="app-header__greeting">{{ greeting }}</span>
-        <strong>{{ displayName }}</strong>
-        <span>{{ authStore.managerPermissionLabel }}</span>
+      <span class="app-header__greeting">{{ greeting }}</span>
+
+      <div class="app-header__user">
+        <img v-if="avatar" class="app-header__avatar" :src="avatar" alt="avatar" />
+        <div v-else class="app-header__avatar app-header__avatar--fallback">{{ displayName.slice(0, 1) }}</div>
+        <div class="app-header__meta">
+          <strong>{{ displayName }}</strong>
+          <span>{{ authStore.managerPermissionLabel }}</span>
+        </div>
+        <el-button plain @click="logout">退出登录</el-button>
       </div>
-      <img v-if="avatar" class="app-header__avatar" :src="avatar" alt="avatar" />
-      <div v-else class="app-header__avatar app-header__avatar--fallback">{{ displayName.slice(0, 1) }}</div>
-      <el-button plain @click="logout">退出登录</el-button>
-    </div>
-  </header>
+    </header>
+  </div>
 </template>
 
 <style scoped>
 .app-header {
+  display: block;
+  min-width: 0;
+}
+
+.app-header__card {
+  position: relative;
   display: flex;
+  width: 100%;
   min-height: var(--barc-header-height);
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.95rem 1.1rem;
+  gap: var(--barc-space-4);
+  padding: var(--barc-space-4);
+  border: 1px solid var(--barc-border);
+  border-radius: var(--barc-radius-md);
+  background: linear-gradient(160deg, var(--barc-surface-strong), var(--barc-surface));
+  box-shadow: var(--barc-shadow-md);
+  isolation: isolate;
 }
 
 .app-header__brand,
 .app-header__user {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: var(--barc-space-4);
 }
 
 .app-header__logo {
   font-family: var(--barc-font-display);
   font-size: 1.6rem;
+  line-height: 1;
   letter-spacing: 0.18em;
 }
 
-.app-header__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.app-header__title {
-  font-weight: 600;
-}
-
-.app-header__subtitle,
-.app-header__greeting,
-.app-header__meta span {
+.app-header__greeting {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   color: var(--barc-text-soft);
-  font-size: 0.9rem;
-}
-
-.app-header__user {
-  padding: 0.45rem 0.55rem 0.45rem 0.8rem;
-  background: var(--barc-surface-strong);
+  font-size: 1.08rem;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .app-header__meta {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
+}
+
+.app-header__meta strong {
+  line-height: 1.3;
+}
+
+.app-header__meta span {
+  color: var(--barc-text-soft);
+  font-size: 0.9rem;
 }
 
 .app-header__avatar {
@@ -115,16 +121,25 @@ async function logout(): Promise<void> {
 }
 
 @media (max-width: 960px) {
-  .app-header {
+  .app-header__card {
     flex-direction: column;
     align-items: stretch;
   }
 
   .app-header__user {
+    flex-wrap: wrap;
     justify-content: space-between;
   }
 
-  .app-header__meta {
+  .app-header__greeting {
+    position: static;
+    transform: none;
+    text-align: center;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-header__user {
     align-items: flex-start;
   }
 }

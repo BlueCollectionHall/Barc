@@ -35,5 +35,20 @@ export function getManagerPermissionLabel(permission: number | null | undefined)
     return '未设置'
   }
 
-  return MANAGER_PERMISSION_LABELS[permission] ?? `权限值 ${permission}`
+  const exact = MANAGER_PERMISSION_LABELS[permission]
+  if (exact) {
+    return exact
+  }
+
+  const sorted = Object.entries(MANAGER_PERMISSION_LABELS)
+    .map(([value, label]) => ({ value: Number(value), label }))
+    .sort((a, b) => b.value - a.value)
+
+  for (const item of sorted) {
+    if ((permission & item.value) === item.value) {
+      return item.label
+    }
+  }
+
+  return `权限值 ${permission}`
 }
