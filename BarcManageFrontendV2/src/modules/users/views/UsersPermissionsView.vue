@@ -8,6 +8,7 @@ import { changePermission, queryUsersByPage } from '@/modules/users/api/users.se
 import { getErrorMessage, type PageResult } from '@/shared/types/api'
 import type { PermissionOption, UserIdentity, UserListFilters, UserListItem } from '@/shared/types/user'
 import { showError, showSuccess } from '@/shared/utils/message'
+import { useMouseTooltip } from '@/shared/utils/mouse-tooltip'
 
 interface EditingState {
   uuid: string
@@ -30,6 +31,7 @@ interface AppliedPermissionFeedback extends PermissionChangePreview {
 }
 
 const permissionStore = usePermissionStore()
+const tooltip = useMouseTooltip()
 
 const filters = reactive<UserListFilters>({
   identity: 'MANAGER',
@@ -66,6 +68,16 @@ const dialogPermissionOptions = computed<PermissionOption[]>(() => {
   }
 
   return options.filter((option) => option.value <= ceiling)
+})
+
+const editingPermissions = computed<number[]>({
+  get: () =>
+    dialogPermissionOptions.value
+      .filter((option) => (editing.permission & option.value) === option.value)
+      .map((option) => option.value),
+  set: (values) => {
+    editing.permission = values.reduce((acc, val) => acc | val, 0)
+  },
 })
 const hasActiveFilters = computed(
   () =>
@@ -330,14 +342,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <RoutePageShell
-    eyebrow="Users"
-    title="权限调整"
-    subtitle="真实后端只接受单一权限值，因此 V2 使用单选权限模型，而不是继续累加勾选。"
-  >
+  <RoutePageShell title="权限调整" eyebrow="Permission Adjustment">
+    <template #actions>
+      <span class="header-meta">你的当前可管理上限：{{ nearMaxLabel }}</span>
+    </template>
     <section class="glass-panel page-card">
-      <el-alert :closable="false" type="info" :title="`你的当前可管理上限：${nearMaxLabel}`" />
-
       <el-form class="filters" label-position="top" @submit.prevent="submitFilters">
         <el-form-item label="用户名">
           <el-input v-model="filters.username" clearable />
@@ -406,14 +415,23 @@ onMounted(async () => {
       </div>
 
       <el-table v-else v-loading="loading" :data="pageResult?.list ?? []">
-        <el-table-column prop="nickname" label="昵称" min-width="140" />
+        <el-table-column label="昵称" min-width="140">
+          <template #default="scope">
+            <span
+              class="ellipsis-text"
+              @mouseenter="tooltip.show(scope.row.nickname, $event)"
+              @mousemove="tooltip.move($event)"
+              @mouseleave="tooltip.hide()"
+            >{{ scope.row.nickname }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="username" label="用户名" min-width="140" />
         <el-table-column label="身份" min-width="110">
           <template #default="scope">
             <el-tag :type="scope.row.identity === 'MANAGER' ? 'warning' : 'info'">{{ scope.row.identity }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="权限" min-width="180">
+        <el-table-column label="最高权限" min-width="180">
           <template #default="scope">{{ permissionLabel(scope.row) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="140" align="right">
@@ -439,6 +457,7 @@ onMounted(async () => {
     <el-dialog
       v-model="dialogVisible"
       width="520px"
+      align-center
       :title="`修改 ${editing.nickname} #${editing.username}`"
       :before-close="handleDialogBeforeClose"
     >
@@ -450,11 +469,11 @@ onMounted(async () => {
         </el-form-item>
 
         <el-form-item label="权限等级">
-          <el-radio-group v-model="editing.permission" class="permission-radios">
-            <el-radio v-for="option in dialogPermissionOptions" :key="option.value" :value="option.value">
+          <el-checkbox-group v-model="editingPermissions" class="permission-checkboxes">
+            <el-checkbox v-for="option in dialogPermissionOptions" :key="option.value" :value="option.value">
               {{ option.label }}
-            </el-radio>
-          </el-radio-group>
+            </el-checkbox>
+          </el-checkbox-group>
           <p class="dialog-tip">当前可操作上限：{{ nearMaxLabel }}。高于该上限的选项不会显示。</p>
         </el-form-item>
 
@@ -491,6 +510,16 @@ onMounted(async () => {
         </div>
       </el-form>
     </el-dialog>
+
+    <teleport to="body">
+      <div
+        v-show="tooltip.visible"
+        class="mouse-tooltip"
+        :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+      >
+        {{ tooltip.text }}
+      </div>
+    </teleport>
   </RoutePageShell>
 </template>
 
@@ -499,7 +528,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 1.25rem;
+  padding: 0.85rem 1.25rem;
 }
 
 .page-card--table {
@@ -595,8 +624,13 @@ onMounted(async () => {
 
 .filters {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 1rem;
+  align-items: end;
+}
+
+.filters :deep(.el-form-item) {
+  margin-bottom: 0;
 }
 
 .filters__actions,
@@ -605,6 +639,27 @@ onMounted(async () => {
   align-items: end;
   justify-content: flex-end;
   gap: 0.75rem;
+}
+
+.ellipsis-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mouse-tooltip {
+  position: fixed;
+  z-index: 9999;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(23, 33, 45, 0.92);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .pagination-row {
@@ -656,7 +711,7 @@ onMounted(async () => {
   gap: 0.75rem;
 }
 
-.permission-radios {
+.permission-checkboxes {
   display: grid;
   gap: 0.6rem;
 }

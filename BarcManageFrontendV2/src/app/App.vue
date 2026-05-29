@@ -23,11 +23,7 @@ watch(
 </script>
 
 <template>
-  <RouterView v-slot="{ Component, route: currentRoute }">
-    <Transition name="fade-slide" mode="out-in">
-      <component :is="Component" :key="currentRoute.fullPath" />
-    </Transition>
-  </RouterView>
+  <RouterView />
 
   <Transition name="fade-slide">
     <div v-if="shouldShowLoadingMask" class="app-loading-mask">

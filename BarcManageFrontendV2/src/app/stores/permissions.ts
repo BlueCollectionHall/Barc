@@ -78,7 +78,20 @@ export const usePermissionStore = defineStore('permission-store', () => {
       return '未设置'
     }
 
-    return optionsForIdentity(identity).find((option) => option.value === permission)?.label ?? `权限值 ${permission}`
+    const options = optionsForIdentity(identity)
+    const exact = options.find((option) => option.value === permission)
+    if (exact) {
+      return exact.label
+    }
+
+    const sorted = [...options].sort((a, b) => b.value - a.value)
+    for (const option of sorted) {
+      if ((permission & option.value) === option.value) {
+        return option.label
+      }
+    }
+
+    return `权限值 ${permission}`
   }
 
   function canAccessRoute(meta: { requiresManager?: boolean; minManagerPermission?: number }, user: UserArchive | null): boolean {

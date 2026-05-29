@@ -133,8 +133,8 @@ function findSelectByIndex(wrapper: ReturnType<typeof mount>, index: number) {
   return select
 }
 
-function findRadioInputs(wrapper: ReturnType<typeof mount>) {
-  return wrapper.findAll('input[type="radio"]')
+function findCheckboxInputs(wrapper: ReturnType<typeof mount>) {
+  return wrapper.findAll('input[type="checkbox"]')
 }
 
 describe('UsersPermissionsView', () => {
@@ -164,6 +164,10 @@ describe('UsersPermissionsView', () => {
       }
 
       if (identity === 'MANAGER' && permission === 16) {
+        return '副馆长'
+      }
+
+      if (identity === 'MANAGER' && permission === 24) {
         return '副馆长'
       }
 
@@ -230,18 +234,18 @@ describe('UsersPermissionsView', () => {
     await findButtonByText(wrapper, '修改').trigger('click')
     await flushPromises()
 
-    expect(findRadioInputs(wrapper)).toHaveLength(2)
+    expect(findCheckboxInputs(wrapper)).toHaveLength(2)
 
     const submitButton = findButtonByText(wrapper, '确认修改')
     expect((submitButton.element as HTMLButtonElement).disabled).toBe(true)
 
-    const radioInputs = findRadioInputs(wrapper)
-    const firstRadio = radioInputs[0]
-    expect(firstRadio).toBeDefined()
-    if (!firstRadio) {
-      throw new Error('Expected the first permission radio to exist')
+    const checkboxInputs = findCheckboxInputs(wrapper)
+    const firstCheckbox = checkboxInputs[0]
+    expect(firstCheckbox).toBeDefined()
+    if (!firstCheckbox) {
+      throw new Error('Expected the first permission checkbox to exist')
     }
-    await firstRadio.setValue(true)
+    await firstCheckbox.setValue(true)
     await flushPromises()
 
     expect((findButtonByText(wrapper, '确认修改').element as HTMLButtonElement).disabled).toBe(false)
@@ -256,18 +260,17 @@ describe('UsersPermissionsView', () => {
 
     expect(wrapper.find('.dialog-diff').text()).toContain('副馆长')
 
-    const radioInputs = findRadioInputs(wrapper)
-    const firstRadio = radioInputs[0]
-    expect(firstRadio).toBeDefined()
-    if (!firstRadio) {
-      throw new Error('Expected the first permission radio to exist')
+    const checkboxInputs = findCheckboxInputs(wrapper)
+    const firstCheckbox = checkboxInputs[0]
+    expect(firstCheckbox).toBeDefined()
+    if (!firstCheckbox) {
+      throw new Error('Expected the first permission checkbox to exist')
     }
-    await firstRadio.setValue(true)
+    await firstCheckbox.setValue(true)
     await flushPromises()
 
-    expect(wrapper.find('.dialog-diff').text()).toContain('权限下调')
+    expect(wrapper.find('.dialog-diff').text()).toContain('权限上调')
     expect(wrapper.find('.dialog-diff').text()).toContain('副馆长')
-    expect(wrapper.find('.dialog-diff').text()).toContain('三级管理员')
 
     findSelectByIndex(wrapper, 2).vm.$emit('update:modelValue', 'USER')
     await flushPromises()
@@ -285,13 +288,13 @@ describe('UsersPermissionsView', () => {
     await findButtonByText(wrapper, '修改').trigger('click')
     await flushPromises()
 
-    const radioInputs = findRadioInputs(wrapper)
-    const firstRadio = radioInputs[0]
-    expect(firstRadio).toBeDefined()
-    if (!firstRadio) {
-      throw new Error('Expected the first permission radio to exist')
+    const checkboxInputs = findCheckboxInputs(wrapper)
+    const firstCheckbox = checkboxInputs[0]
+    expect(firstCheckbox).toBeDefined()
+    if (!firstCheckbox) {
+      throw new Error('Expected the first permission checkbox to exist')
     }
-    await firstRadio.setValue(true)
+    await firstCheckbox.setValue(true)
     await flushPromises()
 
     await findFormByIndex(wrapper, 1).trigger('submit')
@@ -300,15 +303,14 @@ describe('UsersPermissionsView', () => {
     expect(changePermission).toHaveBeenCalledWith({
       uuid: 'manager-1',
       identity: 'MANAGER',
-      permission: 8,
+      permission: 24,
     })
     expect(showSuccess).toHaveBeenCalledWith('权限已同步')
     expect(bootstrapManagerContext).toHaveBeenCalledTimes(2)
     expect(queryUsersByPage).toHaveBeenCalledTimes(2)
     expect(wrapper.find('.applied-feedback').text()).toContain('已同步 Ops Admin #ops-admin 的权限调整')
-    expect(wrapper.find('.applied-feedback').text()).toContain('权限下调')
+    expect(wrapper.find('.applied-feedback').text()).toContain('权限上调')
     expect(wrapper.find('.applied-feedback').text()).toContain('副馆长')
-    expect(wrapper.find('.applied-feedback').text()).toContain('三级管理员')
   })
 
   it('asks for confirmation before closing a dirty permission dialog', async () => {
@@ -320,13 +322,13 @@ describe('UsersPermissionsView', () => {
     await findButtonByText(wrapper, '修改').trigger('click')
     await flushPromises()
 
-    const radioInputs = findRadioInputs(wrapper)
-    const firstRadio = radioInputs[0]
-    expect(firstRadio).toBeDefined()
-    if (!firstRadio) {
-      throw new Error('Expected the first permission radio to exist')
+    const checkboxInputs = findCheckboxInputs(wrapper)
+    const firstCheckbox = checkboxInputs[0]
+    expect(firstCheckbox).toBeDefined()
+    if (!firstCheckbox) {
+      throw new Error('Expected the first permission checkbox to exist')
     }
-    await firstRadio.setValue(true)
+    await firstCheckbox.setValue(true)
     await flushPromises()
 
     await findButtonByText(wrapper, '取消').trigger('click')

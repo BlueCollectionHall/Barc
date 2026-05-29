@@ -10,9 +10,16 @@ defineProps<{
   <section class="page-shell">
     <header class="page-shell__header glass-panel">
       <div>
-        <div v-if="eyebrow" class="page-shell__eyebrow">{{ eyebrow }}</div>
-        <h1 class="surface-heading">{{ title }}</h1>
-        <p v-if="subtitle" class="surface-subtitle">{{ subtitle }}</p>
+        <div class="page-shell__title-row">
+          <h1 class="surface-heading">{{ title }}</h1>
+          <div v-if="eyebrow" class="page-shell__eyebrow">
+            <span class="page-shell__divider" />
+            {{ eyebrow }}
+          </div>
+        </div>
+        <div v-if="subtitle || $slots.subtitle" class="surface-subtitle">
+          <slot name="subtitle">{{ subtitle }}</slot>
+        </div>
       </div>
       <div v-if="$slots.actions" class="page-shell__actions">
         <slot name="actions" />
@@ -35,18 +42,38 @@ defineProps<{
 
 .page-shell__header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1.25rem 1.4rem;
+  padding: 0.85rem 1.4rem;
+}
+
+.page-shell__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-shell__header .surface-heading {
+  font-size: clamp(1.15rem, 0.85rem + 1vw, 1.6rem);
 }
 
 .page-shell__eyebrow {
-  margin-bottom: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.15em;
   color: var(--barc-accent-strong);
-  font-size: 0.78rem;
-  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.page-shell__divider {
+  width: 2px;
+  height: 1.1em;
+  background-color: var(--barc-accent-strong);
+  border-radius: 1px;
 }
 
 .page-shell__actions {

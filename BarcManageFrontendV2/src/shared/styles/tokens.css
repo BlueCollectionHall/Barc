@@ -35,6 +35,7 @@
   --barc-space-6: 2rem;
   --barc-space-8: 3rem;
   --barc-header-height: 78px;
+  --barc-header-compact-height: 52px;
   --barc-sidebar-width: 280px;
 
   color: var(--barc-text);

@@ -2,8 +2,10 @@ package com.miaoyu.barc.user.service;
 
 import com.miaoyu.barc.email.utils.SendEmailUtils;
 import com.miaoyu.barc.response.*;
+import com.miaoyu.barc.user.enumeration.BanTypeEnum;
 import com.miaoyu.barc.user.mapper.BarcNaigosUuidMapper;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
+import com.miaoyu.barc.user.mapper.UserBanRecordMapper;
 import com.miaoyu.barc.user.mapper.UserBasicMapper;
 import com.miaoyu.barc.user.mapper.VerificationCodeMapper;
 import com.miaoyu.barc.user.model.*;
@@ -32,6 +34,8 @@ public class SignService {
     private BarcNaigosUuidMapper barcNaigosUuidMapper;
     @Autowired
     private UserArchiveMapper userArchiveMapper;
+    @Autowired
+    private UserBanRecordMapper userBanRecordMapper;
 
     public ResponseEntity<J> signInUserService(String type, String account, String password) {
         UserBasicModel userBasic;
@@ -53,12 +57,24 @@ public class SignService {
         if (s == null) {
             return ResponseEntity.ok(new SignR().signIn(false));
         }
-        if (s.equals(userBasic.getPassword())) {
-            String token = jwtService.jwtSigned(userBasic.getUuid());
-            return ResponseEntity.ok(new SuccessR().normal(token));
-        } else {
+        if (!s.equals(userBasic.getPassword())) {
             return ResponseEntity.ok(new ErrorR().normal("密码错误"));
         }
+        // 封号用户登录拦截
+        if (userBasic.getSafe_level() != null && userBasic.getSafe_level() < 0) {
+            String banStatus = BanTypeEnum.getStatusBySafeLevel(userBasic.getSafe_level());
+            // 临时封号显示解封时间
+            if (userBasic.getSafe_level() == BanTypeEnum.TEMPORARY_BAN.getSafeLevelValue()) {
+                UserBanRecordModel latestBan = userBanRecordMapper.selectLatestByUserId(userBasic.getUuid());
+                if (latestBan != null && latestBan.getBannedAt() != null && latestBan.getBanDurationDays() != null) {
+                    LocalDateTime unbanTime = latestBan.getBannedAt().plusDays(latestBan.getBanDurationDays());
+                    return ResponseEntity.ok(new ErrorR().normal("账号已被" + banStatus + "，解封时间：" + unbanTime.toString()));
+                }
+            }
+            return ResponseEntity.ok(new ErrorR().normal("账号已被" + banStatus + "，无法登录"));
+        }
+        String token = jwtService.jwtSigned(userBasic.getUuid());
+        return ResponseEntity.ok(new SuccessR().normal(token));
     }
     @Autowired
     private NaigosService naigosService;
