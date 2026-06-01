@@ -1,0 +1,54 @@
+:root {
+  --el-color-primary: var(--barc-accent);
+  --el-color-primary-light-3: #7aa1c1;
+  --el-color-primary-light-5: #9ab6cf;
+  --el-color-primary-light-7: #bfd0df;
+  --el-color-primary-light-8: #d3dde7;
+  --el-color-primary-light-9: #e8eef4;
+  --el-border-radius-base: 12px;
+  --el-box-shadow-light: var(--barc-shadow-sm);
+  --el-fill-color-blank: rgba(255, 255, 255, 0.92);
+}
+
+.el-card,
+.el-dialog,
+.el-drawer,
+.el-table,
+.el-form,
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-pagination.is-background .btn-next,
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .el-pager li,
+.el-alert {
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.el-card,
+.el-dialog,
+.el-drawer,
+.el-table,
+.el-alert {
+  box-shadow: var(--barc-shadow-sm);
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-table,
+.el-card,
+.el-alert {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.el-dialog,
+.el-drawer {
+  background: rgba(245, 249, 253, 0.92);
+  backdrop-filter: blur(18px);
+}
+
+.el-table {
+  --el-table-header-bg-color: rgba(235, 242, 248, 0.88);
+  --el-table-row-hover-bg-color: rgba(232, 239, 245, 0.7);
+}

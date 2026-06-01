@@ -296,3 +296,17 @@ CREATE TABLE IF NOT EXISTS notice (
     INDEX idx_created_at (created_at),
     INDEX idx_updated_at (updated_at)
 );
+CREATE TABLE IF NOT EXISTS work_operation_log (
+    id VARCHAR(36) PRIMARY KEY NOT NULL,
+    work_id VARCHAR(100) NOT NULL,
+    operator_uuid VARCHAR(32) NOT NULL,
+    operation_type VARCHAR(30) NOT NULL COMMENT '操作类型：BAN/OFF/DELETE/RESTORE/EDIT/CLAIM_APPROVE/CLAIM_REVOKE/CLAIM_ASSIGN/COMPLAINT_PROCESS',
+    detail TEXT NULL COMMENT '操作详情JSON',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_work_id (work_id),
+    INDEX idx_operator (operator_uuid),
+    INDEX idx_operation_type (operation_type),
+    INDEX idx_created_at (created_at),
+    FOREIGN KEY (work_id) REFERENCES work(id) ON DELETE CASCADE,
+    FOREIGN KEY (operator_uuid) REFERENCES user_basic(uuid) ON DELETE CASCADE
+);

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BARC Manage V2">
+  <defs>
+    <linearGradient id="barcGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5fbff" />
+      <stop offset="100%" stop-color="#b9ccdd" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#58708a" />
+  <rect x="7" y="7" width="50" height="50" rx="15" fill="url(#barcGradient)" opacity="0.9" />
+  <path d="M20 18h12c7.2 0 12 4.2 12 10.2 0 3.7-1.8 6.4-5.1 7.8 4.2 1.1 6.6 4.2 6.6 8.6 0 6.7-5.2 11.4-13 11.4H20V18zm8.2 7.2v7.3h4.4c2.2 0 3.7-1.4 3.7-3.6 0-2.3-1.5-3.7-3.7-3.7h-4.4zm0 14.1v8.5h5.1c2.5 0 4.2-1.6 4.2-4.1 0-2.7-1.7-4.4-4.2-4.4h-5.1z" fill="#466d90" />
+</svg>

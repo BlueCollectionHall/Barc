@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# 环境变量配置（仅 .env.example 入库作为模板）
+.env
+.env.*
+!.env.example
