@@ -30,6 +30,14 @@ export function hasMinimumManagerPermission(currentPermission: number | null | u
   return (currentPermission ?? 0) >= required
 }
 
+/** 位运算检查：判断权限值中是否包含指定位 */
+export function hasManagerPermissionBit(currentPermission: number | null | undefined, requiredBit: number): boolean {
+  if (requiredBit === undefined || currentPermission === null || currentPermission === undefined) {
+    return false
+  }
+  return (currentPermission & requiredBit) !== 0
+}
+
 export function getManagerPermissionLabel(permission: number | null | undefined): string {
   if (permission === null || permission === undefined) {
     return '未设置'
