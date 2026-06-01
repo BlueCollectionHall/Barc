@@ -89,6 +89,7 @@ function createManagerListItem(overrides: Partial<UserListItem> = {}): UserListI
     gender: null,
     identity: 'MANAGER',
     permission: 16,
+    safe_level: null,
     ...overrides,
   }
 }

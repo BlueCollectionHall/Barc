@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { ElMessageBox } from 'element-plus'
 
 import RoutePageShell from '@/app/components/RoutePageShell.vue'
 import { usePermissionStore } from '@/app/stores/permissions'
 import UserQuickCreateDrawer from '@/modules/users/components/UserQuickCreateDrawer.vue'
-import { queryUsersByPage } from '@/modules/users/api/users.service'
+import BanUserDialog from '@/modules/users/components/BanUserDialog.vue'
+import BanHistoryDrawer from '@/modules/users/components/BanHistoryDrawer.vue'
+import { queryUsersByPage, unbanUser } from '@/modules/users/api/users.service'
 import { getErrorMessage, type PageResult } from '@/shared/types/api'
 import type { UserIdentity, UserListFilters, UserListItem } from '@/shared/types/user'
-import { showError } from '@/shared/utils/message'
+import { SAFE_LEVEL_STATUS } from '@/shared/types/user'
+import { showError, showSuccess } from '@/shared/utils/message'
 import { useMouseTooltip } from '@/shared/utils/mouse-tooltip'
 
 interface CreateFeedback {
@@ -42,6 +46,11 @@ const createSubmitting = ref(false)
 const createDrawerVisible = ref(false)
 const pageResult = ref<PageResult<UserListItem> | null>(null)
 const createFeedback = ref<CreateFeedback | null>(null)
+
+// 封号相关状态
+const banDialogVisible = ref(false)
+const banHistoryVisible = ref(false)
+const selectedUser = ref<{ uuid: string; username: string } | null>(null)
 
 const permissionOptions = computed(() => permissionStore.optionsForIdentity((filters.identity ?? 'USER') as UserIdentity))
 const managerCount = computed(() => pageResult.value?.list.filter((item) => item.identity === 'MANAGER').length ?? 0)
@@ -131,6 +140,60 @@ function handlePageChange(page: number): void {
 
 function permissionLabel(item: UserListItem): string {
   return permissionStore.labelFor(item.identity, item.permission)
+}
+
+// 封号相关函数
+function getSafeLevelStatus(safeLevel: number | null): string {
+  if (safeLevel === null || safeLevel === undefined) return '正常'
+  if (safeLevel >= 0) return '正常'
+  return SAFE_LEVEL_STATUS[safeLevel] || '未知状态'
+}
+
+function getSafeLevelTagType(safeLevel: number | null): string {
+  if (safeLevel === null || safeLevel === undefined) return 'success'
+  if (safeLevel >= 0) return 'success'
+  if (safeLevel === -1) return 'warning'
+  return 'danger'
+}
+
+function isBanned(safeLevel: number | null): boolean {
+  return safeLevel !== null && safeLevel !== undefined && safeLevel < 0
+}
+
+function handleBanUser(user: UserListItem): void {
+  selectedUser.value = { uuid: user.uuid, username: user.username }
+  nextTick(() => {
+    banDialogVisible.value = true
+  })
+}
+
+function handleViewBanHistory(user: UserListItem): void {
+  selectedUser.value = { uuid: user.uuid, username: user.username }
+  nextTick(() => {
+    banHistoryVisible.value = true
+  })
+}
+
+async function handleUnbanUser(user: UserListItem): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `确定要解封用户 "${user.username}" 吗？`,
+      '确认解封',
+      { type: 'warning' },
+    )
+
+    await unbanUser({ userId: user.uuid, reason: '管理员手动解封' })
+    showSuccess('解封成功')
+    await loadUsers()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      showError(error.message || '解封失败')
+    }
+  }
+}
+
+function handleBanSuccess(): void {
+  void loadUsers()
 }
 
 function createFollowUpHints(payload: QuickCreateSubmittedPayload): string[] {
@@ -321,6 +384,33 @@ onMounted(async () => {
         <el-table-column label="年龄" width="90">
           <template #default="scope">{{ scope.row.age ?? '—' }}</template>
         </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="scope">
+            <el-tag :type="getSafeLevelTagType(scope.row.safe_level)" size="small">
+              {{ getSafeLevelStatus(scope.row.safe_level) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="scope">
+            <template v-if="isBanned(scope.row.safe_level)">
+              <el-button type="success" size="small" @click="handleUnbanUser(scope.row)">
+                解封
+              </el-button>
+              <el-button type="info" size="small" @click="handleViewBanHistory(scope.row)">
+                历史
+              </el-button>
+            </template>
+            <template v-else>
+              <el-button type="danger" size="small" @click="handleBanUser(scope.row)">
+                封号
+              </el-button>
+              <el-button type="info" size="small" @click="handleViewBanHistory(scope.row)">
+                历史
+              </el-button>
+            </template>
+          </template>
+        </el-table-column>
       </el-table>
 
       <div class="pagination-row">
@@ -340,6 +430,21 @@ onMounted(async () => {
       v-model="createDrawerVisible"
       v-model:loading="createSubmitting"
       @submitted="handleQuickCreateSubmitted"
+    />
+
+    <BanUserDialog
+      v-if="selectedUser"
+      v-model:visible="banDialogVisible"
+      :user-id="selectedUser.uuid"
+      :username="selectedUser.username"
+      @success="handleBanSuccess"
+    />
+
+    <BanHistoryDrawer
+      v-if="selectedUser"
+      v-model:visible="banHistoryVisible"
+      :user-id="selectedUser.uuid"
+      :username="selectedUser.username"
     />
 
     <teleport to="body">

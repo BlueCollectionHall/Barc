@@ -11,6 +11,7 @@ public class UserBasicModel {
     private Boolean email_verified;
     private String telephone;
     private Integer safe_level;
+    private Integer safe_level_before_ban;
     private LocalDateTime created_at;
     private LocalDateTime updated_at;
 
@@ -76,6 +77,14 @@ public class UserBasicModel {
 
     public void setSafe_level(Integer safe_level) {
         this.safe_level = safe_level;
+    }
+
+    public Integer getSafe_level_before_ban() {
+        return safe_level_before_ban;
+    }
+
+    public void setSafe_level_before_ban(Integer safe_level_before_ban) {
+        this.safe_level_before_ban = safe_level_before_ban;
     }
 
     public LocalDateTime getCreated_at() {

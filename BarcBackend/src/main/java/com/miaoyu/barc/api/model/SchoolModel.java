@@ -82,4 +82,9 @@ public class SchoolModel {
     public void setBg(String bg) {
         this.bg = bg;
     }
+
+    private java.time.LocalDateTime deletedAt;
+
+    public java.time.LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(java.time.LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
 }

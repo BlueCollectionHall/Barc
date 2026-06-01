@@ -9,7 +9,8 @@ public enum WorkStatusEnum {
     PUBLIC("公开"),
     PRIVATE("私有"),
     OFF("下架"),
-    BAN("封禁");
+    BAN("封禁"),
+    DELETED("已删除");
 
     private static final List<ValueLabelDto> CACHED_OPTIONS = Arrays.stream(WorkStatusEnum.values())
             .map(e -> new ValueLabelDto(e.name(), e.getName()))

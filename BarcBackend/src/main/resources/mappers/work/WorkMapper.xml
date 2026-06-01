@@ -192,4 +192,47 @@
         FROM work w
         <include refid="whereConditionOnCategory"/>
     </select>
+
+    <!-- ==================== 管理端查询 ==================== -->
+
+    <!-- 管理端分页查询作品（含所有状态） -->
+    <select id="selectByPageForManage" resultType="com.miaoyu.barc.api.work.model.WorkModel">
+        SELECT w.*
+        FROM work w
+        <where>
+            <if test="status != null and status != ''">
+                AND w.status = #{status, typeHandler=org.apache.ibatis.type.EnumTypeHandler}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (w.id LIKE CONCAT('%', #{keyword}, '%')
+                     OR w.title LIKE CONCAT('%', #{keyword}, '%')
+                     OR w.author_nickname LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        <choose>
+            <when test="sortField != null and sortField != ''">
+                ORDER BY w.${sortField} ${sortOrder}
+            </when>
+            <otherwise>
+                ORDER BY w.created_at DESC
+            </otherwise>
+        </choose>
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <!-- 管理端统计作品总数 -->
+    <select id="countByPageForManage" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM work w
+        <where>
+            <if test="status != null and status != ''">
+                AND w.status = #{status, typeHandler=org.apache.ibatis.type.EnumTypeHandler}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (w.id LIKE CONCAT('%', #{keyword}, '%')
+                     OR w.title LIKE CONCAT('%', #{keyword}, '%')
+                     OR w.author_nickname LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </select>
 </mapper>

@@ -1,14 +1,13 @@
 package com.miaoyu.barc.api.controller;
 
-import com.miaoyu.barc.annotation.ApiPath;
 import com.miaoyu.barc.annotation.IgnoreAuth;
+import com.miaoyu.barc.api.model.SchoolClubModel;
 import com.miaoyu.barc.api.service.ClubService;
 import com.miaoyu.barc.utils.J;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/club")
@@ -16,47 +15,47 @@ public class ClubController {
     @Autowired
     private ClubService clubService;
 
-    /**获取BA中全部的club实体
-     * @return List类型中包含BA中全部的club实体*/
     @IgnoreAuth
-    @GetMapping("/all")
-    public ResponseEntity<J> getBaAllClubControl() {
-        return clubService.getAllClubsService();
+    @GetMapping("/list")
+    public ResponseEntity<J> list(
+            @RequestParam(value = "school_id", required = false) String schoolId,
+            @RequestParam(value = "keyword", required = false, defaultValue = "") String keyword,
+            @RequestParam(value = "page", required = false, defaultValue = "1") int page,
+            @RequestParam(value = "size", required = false, defaultValue = "20") int size) {
+        return clubService.getClubsByPage(schoolId, keyword, page, size);
     }
 
-    /**根据school_id获取BA中全部符合条件的club实体
-     * @param schoolId school的id
-     * @return List类型中包含BA中符合school_id条件的全部club实体*/
     @IgnoreAuth
-    @GetMapping("/clubs_by_school")
-    public ResponseEntity<J> getBaClubsBySchoolControl(
-            @RequestParam("school_id") String schoolId
-    ) {
-        return clubService.getClubsBySchoolService(schoolId);
+    @GetMapping("/{id}")
+    public ResponseEntity<J> getById(@PathVariable("id") String id) {
+        return clubService.getClubByIdService(id);
     }
 
-    /**根据club_id获取符合条件的唯一club实体
-     * @param clubId club的id
-     * @return 符合条件的唯一club实体*/
-    @IgnoreAuth
-    @GetMapping("/only")
-    public ResponseEntity<J> getBaClubOnlyControl(
-            @RequestParam("club_id") String clubId
-    ) {
-        return clubService.getClubByIdService(clubId);
+    @PostMapping("")
+    public ResponseEntity<J> create(@RequestBody SchoolClubModel club, @RequestParam("school_id") String schoolId, HttpServletRequest request) {
+        String uuid = (String) request.getAttribute("uuid");
+        return clubService.createClub(uuid, club, schoolId);
     }
 
-    /**上传club参数
-     * @param token 管理者以上权限者的令牌
-     * @param upType 上传方式"upload"/"update"
-     * @param request club的实体
-     * @return 修改是否正确完成*/
-    @PostMapping("/up")
-    public Map<String, Object> upBaSchoolClubControl(
-            @RequestHeader("Authorization") String token,
-            @RequestParam("up_type") String upType,
-            @RequestBody J request
-    ) {
-        return null;
+    @PutMapping("/{id}")
+    public ResponseEntity<J> update(@PathVariable("id") String id, @RequestBody SchoolClubModel club, HttpServletRequest request) {
+        String uuid = (String) request.getAttribute("uuid");
+        // 从 request body 中读取 school 字段（前端发送 payload.school）
+        String schoolId = club.getSchool();
+        // 清除 club 对象中的 school 字段，避免影响后续逻辑
+        club.setSchool(null);
+        return clubService.updateClub(uuid, id, club, schoolId);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<J> delete(@PathVariable("id") String id, HttpServletRequest request) {
+        String uuid = (String) request.getAttribute("uuid");
+        return clubService.deleteClub(uuid, id);
+    }
+
+    @IgnoreAuth
+    @GetMapping("/check_id_available")
+    public ResponseEntity<J> checkIdAvailable(@RequestParam("id") String id) {
+        return clubService.checkIdAvailable(id);
     }
 }
