@@ -19,4 +19,19 @@ public interface UserBasicMapper {
     UserBasicModel selectByUsername(@Param("username") String username);
     @Select("SELECT * FROM user_basic WHERE email = #{email}")
     UserBasicModel selectByEmail(@Param("email") String email);
+
+    /**
+     * 更新用户safe_level
+     */
+    int updateSafeLevel(@Param("uuid") String uuid, @Param("safeLevel") Integer safeLevel);
+
+    /**
+     * 更新用户safe_level_before_ban
+     */
+    int updateSafeLevelBeforeBan(@Param("uuid") String uuid, @Param("safeLevelBeforeBan") Integer safeLevelBeforeBan);
+
+    /**
+     * 查询用户当前safe_level
+     */
+    Integer selectSafeLevelByUuid(@Param("uuid") String uuid);
 }

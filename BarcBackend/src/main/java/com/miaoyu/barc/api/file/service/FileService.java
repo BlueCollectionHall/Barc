@@ -16,10 +16,10 @@ public class FileService {
     @Autowired
     private CosService cosService;
 
-    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
+    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(targetPermission = PermissionConst.ADMINISTRATOR)})
     public ResponseEntity<J> uploadFileService(String uuid, MultipartFile file, String path, CosBucketConfigEnum clientName) {
         // 桶内文件夹路径为空 或 非法的根目录
-        if (path.isEmpty() || path.equals("/")) {
+        if (path == null || path.isEmpty() || path.equals("/")) {
             path = "/" + uuid + "/";
         }
         // 桶内文件夹路径格式检查
@@ -30,6 +30,10 @@ public class FileService {
         // 如果开头没有斜线
         if (!path.startsWith("/")) {
             path = "/" + path;
+        }
+        // 若未指定桶，默认使用 image 桶
+        if (clientName == null) {
+            clientName = CosBucketConfigEnum.image;
         }
         // 上传文件
         J j = cosService.uploadFile(file, path, clientName);

@@ -100,4 +100,9 @@ public class StudentModel {
     public void setBody_image(String body_image) {
         this.body_image = body_image;
     }
+
+    private java.time.LocalDateTime deletedAt;
+
+    public java.time.LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(java.time.LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
 }

@@ -3,7 +3,11 @@
     "allow": [
       "Bash(npm ls *)",
       "Bash(npm audit *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git reset *)",
+      "Bash(npx vue-tsc *)"
     ]
   }
 }
