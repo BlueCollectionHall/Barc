@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Map;
 
 public interface MessageBoardMapper {
     @Select("SELECT * FROM message_board")
@@ -19,4 +20,16 @@ public interface MessageBoardMapper {
     boolean insert(MessageBoardModel model);
     @Delete("DELETE FROM message_board WHERE id = #{messageId}")
     boolean delete(String messageId);
+
+    List<MessageBoardModel> selectAdminByPage(
+        @Param("offset") Integer offset,
+        @Param("pageSize") Integer pageSize,
+        @Param("condition") Map<String, Object> condition
+    );
+
+    Long countAdminByPage(@Param("condition") Map<String, Object> condition);
+
+    boolean updateById(@Param("id") String id, @Param("content") String content);
+
+    boolean batchDelete(@Param("ids") List<String> ids);
 }

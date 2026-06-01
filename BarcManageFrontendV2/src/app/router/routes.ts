@@ -18,6 +18,7 @@ const WorkDetailView = () => import('@/modules/works/views/WorkDetailView.vue')
 const ClaimsListView = () => import('@/modules/works/views/ClaimsListView.vue')
 const ComplaintsListView = () => import('@/modules/works/views/ComplaintsListView.vue')
 const OperationLogView = () => import('@/modules/works/views/OperationLogView.vue')
+const MessagesListView = () => import('@/modules/messages/views/MessagesListView.vue')
 
 export const adminChildren: RouteRecordRaw[] = [
   {
@@ -232,6 +233,23 @@ export const adminChildren: RouteRecordRaw[] = [
       menuGroupLabel: '内容管理',
       groupOrder: 50,
       menuOrder: 43,
+    },
+  },
+  {
+    path: 'messages/list',
+    name: 'messages-list',
+    component: MessagesListView,
+    meta: {
+      title: '留言管理',
+      subtitle: '查看、搜索、编辑和删除用户留言板内容。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.FIR_MAINTAINER,
+      menuLabel: '留言管理',
+      menuGroup: 'content',
+      menuGroupLabel: '内容管理',
+      groupOrder: 50,
+      menuOrder: 44,
     },
   },
   {
