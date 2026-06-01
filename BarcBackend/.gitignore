@@ -4,7 +4,7 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 #src/main/resources/mappers/
-application.yaml
+**/application.yaml
 
 ### STS ###
 .apt_generated

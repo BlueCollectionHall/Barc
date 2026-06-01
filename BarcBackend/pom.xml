@@ -134,6 +134,10 @@
             <artifactId>cos_api</artifactId>
             <version>5.6.89</version>
         </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

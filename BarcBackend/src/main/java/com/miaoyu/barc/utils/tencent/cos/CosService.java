@@ -33,6 +33,15 @@ public class CosService {
     @Autowired
     private CosConfig cosConfig;
 
+    private String resolveBucket(CosBucketConfigEnum clientName) {
+        return switch (clientName) {
+            case avatar -> cosConfig.getAvatar().getBucketName();
+            case image  -> cosConfig.getImage().getBucketName();
+            case test   -> cosConfig.getTest().getBucketName();
+            default     -> cosConfig.getBucketName();
+        };
+    }
+
     /**
      * 上传文件到COS
      * @param file 文件
@@ -56,19 +65,20 @@ public class CosService {
             meta.setContentLength(file.getSize());
             meta.setContentType(file.getContentType());
             PutObjectRequest putObjectRequest = new PutObjectRequest(
-                    cosConfig.getBucketName(),
+                    resolveBucket(clientName),
                     uniqueKeyFilename,
                     file.getInputStream(),
                     meta
             );
             cosClient.cosClient(clientName).putObject(putObjectRequest);
-            // 构建返回路径 （返回一个签名URL）
-//            String url = cosConfig.getBaseUrl() + uniqueKeyFilename;
-//            String url = this.generateSignedUrl(uniqueKeyFilename, new Date(System.currentTimeMillis() + 60 * 1000), null);
+            // 构建返回路径 （返回COS key，不是签名URL）
             return new J(0, "文件上传成功", uniqueKeyFilename);
         } catch (IOException e) {
             log.error("文件上传失败", e);
-            throw new RuntimeException("文件上传失败");
+            return new J(1, "文件上传失败: " + e.getMessage(), null);
+        } catch (Exception e) {
+            log.error("COS上传异常", e);
+            return new J(1, "COS上传异常: " + e.getMessage(), null);
         }
     }
 
@@ -82,7 +92,7 @@ public class CosService {
             return new J(1, "文件地址为空", "文件地址为空");
         }
         try {
-            cosClient.cosClient(clientName).deleteObject(cosConfig.getBucketName(), key);
+            cosClient.cosClient(clientName).deleteObject(resolveBucket(clientName), key);
             return new ChangeR().udu(true, 2);
         } catch (Exception e) {
             log.error("删除COS文件失败: {}", key, e);
@@ -97,10 +107,11 @@ public class CosService {
      */
     public void moveFile(String sourceKey, String targetKey, CosBucketConfigEnum clientName) {
         try {
+            String bucket = resolveBucket(clientName);
             // 复制文件
             CopyObjectRequest copyObjectRequest = new CopyObjectRequest(
-                    cosConfig.getBucketName(), sourceKey,
-                    cosConfig.getBucketName(), targetKey
+                    bucket, sourceKey,
+                    bucket, targetKey
             );
             cosClient.cosClient(clientName).copyObject(copyObjectRequest);
 
@@ -122,7 +133,7 @@ public class CosService {
     public String generateSignedUrl(String key, Date expiration, CosBucketConfigEnum clientName) {
         try {
             COSClient client = cosClient.cosClient(clientName);
-            GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(cosConfig.getBucketName(), key, HttpMethodName.GET);
+            GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(resolveBucket(clientName), key, HttpMethodName.GET);
             request.setExpiration(expiration);
             request.putCustomQueryParameter("response-content-disposition", "inline");
             URL url = client.generatePresignedUrl(request);

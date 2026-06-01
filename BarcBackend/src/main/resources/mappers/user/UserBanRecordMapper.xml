@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.miaoyu.barc.user.mapper.UserBanRecordMapper">
+    
+    <resultMap id="UserBanRecordMap" type="com.miaoyu.barc.user.model.UserBanRecordModel">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="banType" column="ban_type"/>
+        <result property="banReason" column="ban_reason"/>
+        <result property="banDurationDays" column="ban_duration_days"/>
+        <result property="bannedAt" column="banned_at"/>
+        <result property="unbannedAt" column="unbanned_at"/>
+        <result property="unbanReason" column="unban_reason"/>
+        <result property="operatorId" column="operator_id"/>
+        <result property="operatorType" column="operator_type"/>
+        <result property="safeLevelBeforeBan" column="safe_level_before_ban"/>
+        <result property="safeLevelAfterBan" column="safe_level_after_ban"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+    
+    <insert id="insert" parameterType="com.miaoyu.barc.user.model.UserBanRecordModel" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_ban_record (
+            user_id, ban_type, ban_reason, ban_duration_days,
+            banned_at, operator_id, operator_type,
+            safe_level_before_ban, safe_level_after_ban
+        ) VALUES (
+            #{userId}, #{banType}, #{banReason}, #{banDurationDays},
+            #{bannedAt}, #{operatorId}, #{operatorType},
+            #{safeLevelBeforeBan}, #{safeLevelAfterBan}
+        )
+    </insert>
+    
+    <select id="selectByUserId" resultMap="UserBanRecordMap">
+        SELECT * FROM user_ban_record
+        WHERE user_id = #{userId}
+        ORDER BY banned_at DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+    
+    <select id="countByUserId" resultType="long">
+        SELECT COUNT(*) FROM user_ban_record
+        WHERE user_id = #{userId}
+    </select>
+    
+    <select id="selectLatestByUserId" resultMap="UserBanRecordMap">
+        SELECT * FROM user_ban_record
+        WHERE user_id = #{userId}
+        ORDER BY banned_at DESC
+        LIMIT 1
+    </select>
+    
+    <select id="selectExpiredRecords" resultMap="UserBanRecordMap">
+        SELECT * FROM user_ban_record
+        WHERE ban_type = 1
+        AND unbanned_at IS NULL
+        AND DATE_ADD(banned_at, INTERVAL ban_duration_days DAY) &lt;= NOW()
+    </select>
+    
+    <update id="updateUnbannedAt">
+        UPDATE user_ban_record
+        SET unbanned_at = #{unbannedAt}, unban_reason = #{unbanReason}
+        WHERE id = #{id}
+    </update>
+    
+</mapper>

@@ -161,6 +161,7 @@ public class WorkService {
             case PRIVATE -> ResponseEntity.ok(new ErrorR().normal("私有作品无法访问"));
             case BAN -> ResponseEntity.ok(new ErrorR().normal("作品已被封禁"));
             case OFF -> ResponseEntity.ok(new ErrorR().normal("作品已被下架"));
+            case DELETED -> ResponseEntity.ok(new ErrorR().normal("作品已被删除"));
             default -> {
                 // 预签名work封面图URL
                 WorkCoverImageModel coverImageModel = workCoverImageMapper.selectByWorkId(workId);
@@ -299,7 +300,8 @@ public class WorkService {
         return ResponseEntity.ok(new ChangeR().udu(true, 2));
     }
 
-    private List<WorkModel> loopSignatureWorkCover(List<WorkModel> works) {
+    /** 批量签名作品封面图，供本包内复用 */
+    List<WorkModel> loopSignatureWorkCover(List<WorkModel> works) {
         // 1. 批量查询所有作品的封面图
         List<String> workIds = works.stream().map(WorkModel::getId).toList();
         List<WorkCoverImageModel> coverImages = workCoverImageMapper.selectByWorkIds(workIds);
