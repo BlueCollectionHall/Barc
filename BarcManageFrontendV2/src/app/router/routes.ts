@@ -13,6 +13,11 @@ const SchoolListView = () => import('@/modules/school-club-student/views/SchoolL
 const ClubListView = () => import('@/modules/school-club-student/views/ClubListView.vue')
 const StudentListView = () => import('@/modules/school-club-student/views/StudentListView.vue')
 const ForbiddenView = () => import('@/modules/system/views/ForbiddenView.vue')
+const WorksListView = () => import('@/modules/works/views/WorksListView.vue')
+const WorkDetailView = () => import('@/modules/works/views/WorkDetailView.vue')
+const ClaimsListView = () => import('@/modules/works/views/ClaimsListView.vue')
+const ComplaintsListView = () => import('@/modules/works/views/ComplaintsListView.vue')
+const OperationLogView = () => import('@/modules/works/views/OperationLogView.vue')
 
 export const adminChildren: RouteRecordRaw[] = [
   {
@@ -146,6 +151,87 @@ export const adminChildren: RouteRecordRaw[] = [
       requiresManager: true,
       minManagerPermission: 16,
       hiddenInMenu: true,
+    },
+  },
+  {
+    path: 'works/list',
+    name: 'works-list',
+    component: WorksListView,
+    meta: {
+      title: '作品管理',
+      subtitle: '管理全部作品，支持封禁、下架、删除、恢复和内容修改。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.SEC_MAINTAINER,
+      menuLabel: '作品管理',
+      menuGroup: 'content',
+      menuGroupLabel: '内容管理',
+      groupOrder: 50,
+      menuOrder: 40,
+    },
+  },
+  {
+    path: 'works/:workId/detail',
+    name: 'works-detail',
+    component: WorkDetailView,
+    meta: {
+      title: '作品详情',
+      subtitle: '查看作品详情，可执行封禁/下架/删除/恢复操作。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.SEC_MAINTAINER,
+      hiddenInMenu: true,
+    },
+  },
+  {
+    path: 'works/claims',
+    name: 'works-claims',
+    component: ClaimsListView,
+    meta: {
+      title: '认领管理',
+      subtitle: '审批认领申请、撤销认领、指派作者。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.SEC_MAINTAINER,
+      menuLabel: '认领管理',
+      menuGroup: 'content',
+      menuGroupLabel: '内容管理',
+      groupOrder: 50,
+      menuOrder: 41,
+    },
+  },
+  {
+    path: 'works/complaints',
+    name: 'works-complaints',
+    component: ComplaintsListView,
+    meta: {
+      title: '投诉处理',
+      subtitle: '查看和处理作品投诉，处理时可联动封禁/下架/删除。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.SEC_MAINTAINER,
+      menuLabel: '投诉处理',
+      menuGroup: 'content',
+      menuGroupLabel: '内容管理',
+      groupOrder: 50,
+      menuOrder: 42,
+    },
+  },
+  {
+    path: 'works/logs',
+    name: 'works-logs',
+    component: OperationLogView,
+    meta: {
+      title: '操作日志',
+      subtitle: '查看所有作品管理操作的审计日志。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.SEC_MAINTAINER,
+      menuLabel: '操作日志',
+      menuGroup: 'content',
+      menuGroupLabel: '内容管理',
+      groupOrder: 50,
+      menuOrder: 43,
     },
   },
   {

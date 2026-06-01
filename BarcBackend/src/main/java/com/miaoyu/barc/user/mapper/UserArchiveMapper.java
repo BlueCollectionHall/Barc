@@ -103,4 +103,11 @@ public interface UserArchiveMapper {
     @Update("UPDATE user_archive SET nickname = #{nickname}, avatar = #{avatar}, gender = #{gender}, birthday = #{birthday}, age = #{age}, permission = #{permission}, updated_at = #{updated_at} WHERE uuid = #{uuid}")
     boolean update(UserArchiveModel model);
 
+    /** 按关键词搜索用户（UUID/用户名/昵称，OR逻辑），限制返回条数 */
+    @Select("SELECT a.uuid, a.nickname, a.avatar, b.username FROM user_archive a LEFT JOIN user_basic b ON a.uuid = b.uuid " +
+            "WHERE a.uuid LIKE CONCAT('%', #{keyword}, '%') " +
+            "OR b.username LIKE CONCAT('%', #{keyword}, '%') " +
+            "OR a.nickname LIKE CONCAT('%', #{keyword}, '%') " +
+            "LIMIT 15")
+    List<UserInfoVo> searchByKeyword(@Param("keyword") String keyword);
 }

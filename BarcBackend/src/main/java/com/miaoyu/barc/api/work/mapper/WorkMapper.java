@@ -67,8 +67,29 @@ public interface WorkMapper {
             "(id, title, description, content, banner_image, cover_image, author, author_nickname, uploader, is_claim, status, student) VALUES " +
             "(#{id}, #{title}, #{description}, #{content}, #{banner_image}, #{cover_image}, #{author}, #{author_nickname}, #{uploader}, #{is_claim}, 'PUBLIC', #{student})")
     boolean insert(WorkModel workModel);
-    @Update("UPDATE work SET title = #{title}, description = #{description}, content = #{content}, banner_image = #{banner_image}, cover_image = #{cover_image}, author = #{author}, author_nickname = #{author_nickname}, uploader = #{uploader}, is_claim = #{is_claim}, student = #{student} WHERE id = #{id}")
+    @Update("UPDATE work SET title = #{title}, description = #{description}, content = #{content}, banner_image = #{banner_image}, cover_image = #{cover_image}, author = #{author}, author_nickname = #{author_nickname}, uploader = #{uploader}, is_claim = #{is_claim}, status = #{status}, student = #{student} WHERE id = #{id}")
     boolean update(WorkModel workModel);
     @Delete("DELETE FROM work WHERE id = #{id}")
     boolean delete(@Param("id") String id);
+
+    // ===== 管理端专用查询方法 =====
+
+    /** 管理端分页查询作品（含所有状态，含已删除） */
+    List<WorkModel> selectByPageForManage(
+            @Param("status") String status,
+            @Param("keyword") String keyword,
+            @Param("offset") int offset,
+            @Param("limit") int limit,
+            @Param("sortField") String sortField,
+            @Param("sortOrder") String sortOrder);
+
+    /** 管理端统计作品总数 */
+    Long countByPageForManage(
+            @Param("status") String status,
+            @Param("keyword") String keyword);
+
+    /** 管理端纯文字更新（不改封面/Banner/作者/收录者，图片在独立表中管理） */
+    @Update("UPDATE work SET title = #{title}, description = #{description}, content = #{content}, " +
+            "author_nickname = #{author_nickname}, is_claim = #{is_claim}, student = #{student} WHERE id = #{id}")
+    boolean updateText(WorkModel workModel);
 }
