@@ -302,6 +302,7 @@ public class WorkService {
 
     /** 批量签名作品封面图，供本包内复用 */
     List<WorkModel> loopSignatureWorkCover(List<WorkModel> works) {
+        if (works == null || works.isEmpty()) return works;
         // 1. 批量查询所有作品的封面图
         List<String> workIds = works.stream().map(WorkModel::getId).toList();
         List<WorkCoverImageModel> coverImages = workCoverImageMapper.selectByWorkIds(workIds);

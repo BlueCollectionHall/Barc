@@ -132,10 +132,10 @@ const fetchStudentsByKeyword = async () => {
     return;
   }
   try {
-    const response = await baseHttp("/api/student/students_by_keyword", {params: {keyword: studentKeyword.value}});
+    const response = await baseHttp("/api/student/list", {params: {keyword: studentKeyword.value}});
     const data: ResponseImpl = response.data;
     if (data.code === 0) {
-      studentList.value = data.data;
+      studentList.value = data.data.list;
     } else infoMessage(data.msg);
   } catch {
     errorMessage("网络错误！");

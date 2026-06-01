@@ -13,7 +13,7 @@ const club = ref<ClubImpl | null>(null);
 
 const fetchStudent = async (studentId: string) => {
   try {
-    const response = await baseHttp.get("/api/student/only", {params: {student_id: studentId}});
+    const response = await baseHttp.get(`/api/student/${studentId}`);
     const data: ResponseImpl = response.data;
     if (data.code === 0) {
       student.value = data.data;
@@ -21,7 +21,7 @@ const fetchStudent = async (studentId: string) => {
         errorMessage("赋值失败！");
         return;
       }
-      const responseSchool = await baseHttp.get("/api/school/only", {params: {school_id: student.value.school}})
+      const responseSchool = await baseHttp.get(`/api/school/${student.value.school}`)
       const dataSchool: ResponseImpl = responseSchool.data;
       if (dataSchool.code === 0) {
         school.value = dataSchool.data;
@@ -29,7 +29,7 @@ const fetchStudent = async (studentId: string) => {
           errorMessage("赋值失败！");
           return;
         }
-        const responseClub = await baseHttp.get("/api/club/only", {params: {club_id: student.value.club}});
+        const responseClub = await baseHttp.get(`/api/club/${student.value.club}`);
         const dataClub: ResponseImpl = responseClub.data;
         if (dataClub.code === 0) {
           club.value = dataClub.data;
