@@ -1,0 +1,66 @@
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.miaoyu.barc.comment.mapper.MessageBoardMapper">
+
+    <select id="selectAdminByPage" resultType="com.miaoyu.barc.comment.model.MessageBoardAdminVo">
+        SELECT m.id, m.author, m.content, m.created_at,
+               ub.username AS author_name,
+               ua.nickname AS author_nickname
+        FROM message_board m
+        LEFT JOIN user_basic ub ON m.author = ub.uuid
+        LEFT JOIN user_archive ua ON m.author = ua.uuid
+        <where>
+            <if test="condition.keyword != null and condition.keyword != ''">
+                AND (m.author LIKE CONCAT('%', #{condition.keyword}, '%')
+                     OR ub.username LIKE CONCAT('%', #{condition.keyword}, '%')
+                     OR ua.nickname LIKE CONCAT('%', #{condition.keyword}, '%'))
+            </if>
+            <if test="condition.content != null and condition.content != ''">
+                AND m.content LIKE CONCAT('%', #{condition.content}, '%')
+            </if>
+            <if test="condition.date_from != null and condition.date_from != ''">
+                AND m.created_at &gt;= #{condition.date_from}
+            </if>
+            <if test="condition.date_to != null and condition.date_to != ''">
+                AND m.created_at &lt;= #{condition.date_to}
+            </if>
+        </where>
+        ORDER BY m.created_at DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="countAdminByPage" resultType="long">
+        SELECT COUNT(*)
+        FROM message_board m
+        LEFT JOIN user_basic ub ON m.author = ub.uuid
+        LEFT JOIN user_archive ua ON m.author = ua.uuid
+        <where>
+            <if test="condition.keyword != null and condition.keyword != ''">
+                AND (m.author LIKE CONCAT('%', #{condition.keyword}, '%')
+                     OR ub.username LIKE CONCAT('%', #{condition.keyword}, '%')
+                     OR ua.nickname LIKE CONCAT('%', #{condition.keyword}, '%'))
+            </if>
+            <if test="condition.content != null and condition.content != ''">
+                AND m.content LIKE CONCAT('%', #{condition.content}, '%')
+            </if>
+            <if test="condition.date_from != null and condition.date_from != ''">
+                AND m.created_at &gt;= #{condition.date_from}
+            </if>
+            <if test="condition.date_to != null and condition.date_to != ''">
+                AND m.created_at &lt;= #{condition.date_to}
+            </if>
+        </where>
+    </select>
+
+    <update id="updateById">
+        UPDATE message_board SET content = #{content} WHERE id = #{id}
+    </update>
+
+    <delete id="batchDelete">
+        DELETE FROM message_board WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+</mapper>
