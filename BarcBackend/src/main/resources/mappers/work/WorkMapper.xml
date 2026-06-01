@@ -8,11 +8,28 @@
             w.status = #{status}
             <!-- 确保condition存在 -->
             <if test="condition != null">
-                <!-- 筛选keyword -->
+                <!-- 筛选keyword（标题、描述、学生名、学园名、部团名） -->
                 <if test="condition.keyword != null and condition.keyword != ''">
                     AND (
                         w.title LIKE CONCAT('%', #{condition.keyword}, '%')
                         OR w.description LIKE CONCAT('%', #{condition.keyword}, '%')
+                        OR w.student IN (
+                            SELECT s.id FROM student s
+                            WHERE s.cn_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                            OR s.jp_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                            OR s.kr_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                            OR s.en_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                        )
+                        OR w.student IN (
+                            SELECT s.id FROM student s
+                            INNER JOIN school sc ON s.school = sc.id
+                            WHERE sc.cn_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                        )
+                        OR w.student IN (
+                            SELECT s.id FROM student s
+                            INNER JOIN club c ON s.club = c.id
+                            WHERE c.cn_name LIKE CONCAT('%', #{condition.keyword}, '%')
+                        )
                     )
                 </if>
                 <!-- 筛选学生名 -->
