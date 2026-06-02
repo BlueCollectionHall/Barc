@@ -15,9 +15,11 @@ import {
   UserAddOutlined,
   EyeOutlined,
   HeartOutlined,
+  MessageOutlined,
   AlertOutlined,
   FlagOutlined,
 } from "@ant-design/icons-vue";
+import WorkCommentSection from "@/components/Work/WorkCommentSection.vue";
 import {useUserPinia} from "@/stores/UserPinia.ts";
 import {storeToRefs} from "pinia";
 import type {FeedBackImpl} from "@/interfaces/FeedbackImpl.ts";
@@ -168,6 +170,10 @@ const handleOk = async () => {
 
 // 作品认领相关的程序
 const claimOpen = ref<boolean>(false);
+
+// 评论区相关的程序
+const commentVisible = ref<boolean>(false);
+const commentCount = ref<number>(0);
 </script>
 
 <template>
@@ -209,6 +215,7 @@ const claimOpen = ref<boolean>(false);
         <div class="items">
           <div class="view_box item"><EyeOutlined class="icon"/>{{work.view_count}}</div>
           <div class="like_box item"><HeartOutlined />{{work.like_count}}</div>
+          <div class="comment_box item" @click="commentVisible = true"><MessageOutlined />{{commentCount}}</div>
           <div class="claim_box item" v-if="!work.is_claim" @click="claimOpen = true"><FlagOutlined />认领</div>
           <div class="feedback_box item" @click="open = true"><AlertOutlined />投诉反馈</div>
         </div>
@@ -223,6 +230,12 @@ const claimOpen = ref<boolean>(false);
     </div>
   </div>
   <div  v-else></div>
+  <WorkCommentSection
+    v-if="work"
+    :workId="work.id"
+    v-model:visible="commentVisible"
+    @commentCount="(count: number) => commentCount = count"
+  />
 </template>
 
 <style scoped>
@@ -290,6 +303,18 @@ const claimOpen = ref<boolean>(false);
     border: 1px solid #fda5bc;
     color: #fda5bc;
     background-color: #fda5bc00;
+  }
+  .comment_box:hover {
+    background-color: #384a8780;
+    color: #fff;
+    cursor: pointer;
+    border: 1px solid #384a87;
+  }
+  .comment_box {
+    border: 1px solid #384a87;
+    color: #384a87;
+    background-color: #384a8720;
+    cursor: pointer;
   }
   .feedback_box:hover {
     background-color: #fe4b7b80;

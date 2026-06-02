@@ -67,12 +67,12 @@ public class WorkCommentService {
         }
     }
 
-    @RequireSelfOrPermissionAnno(isHasElseUpper = true, identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.FIR_MAINTAINER)
+    @RequireSelfOrPermissionAnno(isHasElseUpper = false, identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.FIR_MAINTAINER)
     public ResponseEntity<J> deleteCommentService(String uuid, String authorUuid, String commentId) {
         return ResponseEntity.ok(new ChangeR().udu(workCommentMapper.delete(commentId), 2));
     }
 
-    @RequireSelfOrPermissionAnno(isHasElseUpper = true, identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.FIR_MAINTAINER)
+    @RequireSelfOrPermissionAnno(isHasElseUpper = false, identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.FIR_MAINTAINER)
     public ResponseEntity<J> deleteReplyService(String uuid, String authorUuid, String replyId) {
         WorkCommentReplyModel reply = workCommentReplyMapper.selectById(replyId);
         if (reply.getAuthor().equals(uuid) || PermissionConst.FIR_MAINTAINER <= userArchiveMapper.selectByUuid(uuid).getPermission()) {
