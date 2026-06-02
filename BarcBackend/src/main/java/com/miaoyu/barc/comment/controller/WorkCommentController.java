@@ -7,7 +7,10 @@ import com.miaoyu.barc.comment.mapper.WorkCommentReplyMapper;
 import com.miaoyu.barc.comment.model.WorkCommentModel;
 import com.miaoyu.barc.comment.model.WorkCommentReplyModel;
 import com.miaoyu.barc.comment.service.WorkCommentService;
+import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.utils.J;
+import java.util.HashMap;
+import java.util.Map;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +35,36 @@ public class WorkCommentController {
             @RequestParam("work_id") String workId
     ) {
         return workCommentService.getCommentsByWorkService(workId);
+    }
+
+    @IgnoreAuth
+    @GetMapping("/comment_by_id")
+    public ResponseEntity<J> getCommentByIdControl(
+            @RequestParam("comment_id") String commentId
+    ) {
+        // 先查主评论表
+        WorkCommentModel comment = workCommentMapper.selectById(commentId);
+        if (comment != null) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("id", comment.getId());
+            result.put("content", comment.getContent());
+            result.put("created_at", comment.getCreated_at());
+            result.put("work_id", comment.getWork_id());
+            result.put("type", "comment");
+            return ResponseEntity.ok(new ResourceR().resourceSuch(true, result));
+        }
+        // 再查回复表
+        WorkCommentReplyModel reply = workCommentReplyMapper.selectById(commentId);
+        if (reply != null) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("id", reply.getId());
+            result.put("content", reply.getContent());
+            result.put("created_at", reply.getCreated_at());
+            result.put("parent_id", reply.getParent_id());
+            result.put("type", "reply");
+            return ResponseEntity.ok(new ResourceR().resourceSuch(true, result));
+        }
+        return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
     }
 
     @PostMapping("/upload_comment")

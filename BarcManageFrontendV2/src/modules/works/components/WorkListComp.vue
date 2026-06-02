@@ -1,8 +1,8 @@
 <template>
   <div class="work-list">
-    <el-form :inline="true" :model="filterForm" class="filter-bar">
+    <el-form :inline="true" class="filter-bar">
       <el-form-item label="状态">
-        <el-select v-model="filterForm.status" placeholder="全部" clearable @change="handleFilter">
+        <el-select v-model="statusFilter" placeholder="全部" style="width: 130px" @change="handleFilter">
           <el-option label="全部" value="" />
           <el-option label="公开" value="PUBLIC" />
           <el-option label="私有" value="PRIVATE" />
@@ -12,9 +12,11 @@
         </el-select>
       </el-form-item>
       <el-form-item label="关键词">
-        <el-input v-model="filterForm.keyword" placeholder="搜索标题或作者" clearable @keyup.enter="handleFilter" style="width: 240px" />
+        <el-input v-model="keywordFilter" placeholder="搜索标题或作者" clearable @keyup.enter="handleFilter" style="width: 240px" />
       </el-form-item>
-      <el-form-item><el-button type="primary" @click="handleFilter">搜索</el-button></el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="handleFilter">搜索</el-button>
+      </el-form-item>
     </el-form>
 
     <el-table :data="workList" border stripe v-loading="loading" style="width: 100%">
@@ -58,12 +60,13 @@ const workList = ref<any[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const loading = ref(false)
-const filterForm = ref({ status: '', keyword: '' })
+const statusFilter = ref('')
+const keywordFilter = ref('')
 
 const fetchData = async () => {
   loading.value = true
   try {
-    const result = await getWorkListManage({ page_num: currentPage.value, page_size: 10, params: { status: filterForm.value.status || undefined, keyword: filterForm.value.keyword || undefined } })
+    const result = await getWorkListManage({ page_num: currentPage.value, page_size: 10, params: { status: statusFilter.value || undefined, keyword: keywordFilter.value || undefined } })
     workList.value = result.list ?? []
     total.value = result.total ?? 0
   } finally { loading.value = false }
@@ -74,6 +77,9 @@ onMounted(() => fetchData())
 </script>
 
 <style scoped>
+.filter-bar {
+  margin-bottom: 16px;
+}
 .cover-thumb {
   width: 80px;
   height: 45px;

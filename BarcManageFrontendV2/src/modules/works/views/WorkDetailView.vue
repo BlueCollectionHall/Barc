@@ -7,6 +7,11 @@
       <WorkDetailComp :workId="workId" @ban="act('BAN')" @off="act('OFF')" @restore="act('PUBLIC')" @delete="handleDelete" />
     </div>
 
+    <!-- 评论管理 -->
+    <el-card style="margin-top:24px" shadow="never">
+      <WorkCommentManage :workId="workId" />
+    </el-card>
+
     <!-- 状态操作备注弹窗 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="400px">
       <el-input v-model="remark" type="textarea" :rows="3" placeholder="操作备注（选填）" />
@@ -23,6 +28,7 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import WorkDetailComp from '../components/WorkDetailComp.vue'
+import WorkCommentManage from '../components/WorkCommentManage.vue'
 import { updateWorkStatus } from '../api/workManage'
 
 const route = useRoute()
