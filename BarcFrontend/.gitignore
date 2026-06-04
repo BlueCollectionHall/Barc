@@ -28,3 +28,8 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+# 环境变量配置（仅 .env.example 入库作为模板）
+.env
+.env.*
+!.env.example
