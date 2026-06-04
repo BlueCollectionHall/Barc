@@ -63,6 +63,10 @@ public interface WorkMapper {
 
     @Select("SELECT * FROM work WHERE id = #{work_id}")
     WorkModel selectById(@Param("work_id") String workId);
+    @Update("UPDATE work SET like_count = COALESCE(like_count, 0) + 1 WHERE id = #{work_id}")
+    int incrementLikeCount(@Param("work_id") String workId);
+    @Update("UPDATE work SET like_count = CASE WHEN like_count > 0 THEN like_count - 1 ELSE 0 END WHERE id = #{work_id}")
+    int decrementLikeCount(@Param("work_id") String workId);
     @Insert("INSERT INTO work " +
             "(id, title, description, content, banner_image, cover_image, author, author_nickname, uploader, is_claim, status, student) VALUES " +
             "(#{id}, #{title}, #{description}, #{content}, #{banner_image}, #{cover_image}, #{author}, #{author_nickname}, #{uploader}, #{is_claim}, 'PUBLIC', #{student})")

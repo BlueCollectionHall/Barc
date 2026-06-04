@@ -7,6 +7,7 @@ export interface WorkImpl {
   cover_image: string;
   view_count: number;
   like_count: number;
+  liked_by_current_user?: boolean;
   author: string;
   author_nickname: string | null;
   uploader: string | null;

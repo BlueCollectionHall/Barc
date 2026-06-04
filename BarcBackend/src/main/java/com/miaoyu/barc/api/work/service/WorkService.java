@@ -8,6 +8,7 @@ import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkCategoryMapper;
 import com.miaoyu.barc.api.work.mapper.WorkCoverImageMapper;
 import com.miaoyu.barc.api.work.mapper.WorkImageMapper;
+import com.miaoyu.barc.api.work.mapper.WorkLikeMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
 import com.miaoyu.barc.api.work.model.WorkCategoryModel;
 import com.miaoyu.barc.api.work.model.WorkCoverImageModel;
@@ -23,6 +24,7 @@ import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
 import com.miaoyu.barc.utils.GenerateUUID;
 import com.miaoyu.barc.utils.J;
+import com.miaoyu.barc.utils.JwtService;
 import com.miaoyu.barc.utils.dto.PageRequestDto;
 import com.miaoyu.barc.utils.dto.PageResultDto;
 import com.miaoyu.barc.utils.minio.MinioObjects;
@@ -36,6 +38,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -65,6 +68,10 @@ public class WorkService {
     private CosService cosService;
     @Autowired
     private WorkCategoryMapper workCategoryMapper;
+    @Autowired
+    private WorkLikeMapper workLikeMapper;
+    @Autowired
+    private JwtService jwtService;
 
     public ResponseEntity<J> getNewWorkService(int day, boolean isStudentList) {
         List<WorkEntity> works = workMapper.selectByDay(day, WorkStatusEnum.PUBLIC);
@@ -153,6 +160,10 @@ public class WorkService {
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, workMapper.selectByUsername(username, statusEnum)));
     }
     public ResponseEntity<J> getWorksByIdService(String workId) {
+        return getWorksByIdService(null, workId);
+    }
+
+    public ResponseEntity<J> getWorksByIdService(HttpServletRequest request, String workId) {
         WorkModel work = workMapper.selectById(workId);
         if (Objects.isNull(work)) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
@@ -165,11 +176,29 @@ public class WorkService {
             default -> {
                 // 预签名work封面图URL
                 WorkCoverImageModel coverImageModel = workCoverImageMapper.selectByWorkId(workId);
+                if (Objects.isNull(coverImageModel)) {
+                    yield ResponseEntity.ok(new ErrorR().normal("作品封面图不存在"));
+                }
                 String signedCoverImageUrl = cosService.generateSignedUrl(coverImageModel.getObject_key(), new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
                 work.setCover_image(signedCoverImageUrl);
+                work.setLiked_by_current_user(isLikedByCurrentUser(request, workId));
                 yield ResponseEntity.ok(new ResourceR().resourceSuch(true, work));
             }
         };
+    }
+
+    private boolean isLikedByCurrentUser(HttpServletRequest request, String workId) {
+        if (request == null) return false;
+        String token = request.getHeader("Authorization");
+        if (token == null || token.isBlank()) return false;
+        try {
+            J jwtResult = jwtService.jwtParser(token);
+            if (jwtResult == null || jwtResult.getCode() != 0 || jwtResult.getData() == null) return false;
+            return workLikeMapper.selectByWorkIdAndUserUuid(workId, jwtResult.getData().toString()) != null;
+        } catch (Exception e) {
+            log.debug("Optional work detail token parsing failed; treating request as anonymous.", e);
+            return false;
+        }
     }
     public ResponseEntity<J> getWorkByIdWithMeService(String uuid, String workId) {
         WorkModel work = workMapper.selectById(workId);

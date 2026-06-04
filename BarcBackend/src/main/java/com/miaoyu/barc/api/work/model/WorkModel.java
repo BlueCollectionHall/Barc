@@ -18,6 +18,7 @@ public class WorkModel {
     private String cover_image;
     private Integer view_count;
     private Integer like_count;
+    private Boolean liked_by_current_user;
     private String author;
     private String author_nickname;
     private String uploader;
