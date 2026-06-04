@@ -7,6 +7,7 @@ import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import type {UserArchiveImpl} from "@/interfaces/UserImpl.ts";
 import {timestampToCn} from "@/utils/TimeToCn.ts";
+import {toggleWorkLike} from "@/utils/workLikeApi.ts";
 import {
   ClockCircleOutlined,
   SyncOutlined,
@@ -14,6 +15,7 @@ import {
   UserOutlined,
   UserAddOutlined,
   EyeOutlined,
+  HeartFilled,
   HeartOutlined,
   MessageOutlined,
   AlertOutlined,
@@ -43,10 +45,14 @@ const viewItemList = ref<Array<viewItemImpl>>([
   {value: "image", label: "显示图集"},
 ]);
 const viewSelected = ref<string>("view");
+const likePending = ref<boolean>(false);
 
 
 const fetchWork = async (work_id: string) => {
-  await baseHttp.get("/api/work/only", {params: {work_id}})
+  const token: string | undefined = localStorage.token;
+  // 已登录时把原始 JWT 传给作品详情接口，后端据此返回当前用户是否点赞。
+  const config = token ? {params: {work_id}, headers: {Authorization: token}} : {params: {work_id}};
+  await baseHttp.get("/api/work/only", config)
     .then(res => {
       const data: ResponseImpl = res.data;
       if (data.code === 0) {
@@ -61,10 +67,37 @@ const fetchWork = async (work_id: string) => {
         }
       } else infoMessage(data.data);
     }).catch(e => {
-      console.error(e);
+      // Axios 错误对象可能包含 Authorization，请只记录脱敏后的错误信息。
+      console.error(e instanceof Error ? e.message : "fetchWork failed");
       errorMessage("网络异常");
     });
 
+}
+
+const handleToggleLike = async () => {
+  if (!work.value) return;
+  const token: string | undefined = localStorage.token;
+  if (!token) {
+    infoMessage("请先登录");
+    return;
+  }
+  // 请求未结束前直接拦截，防止重复点击造成多次切换。
+  if (likePending.value) return;
+  likePending.value = true;
+  try {
+    const data = await toggleWorkLike(work.value.id, token);
+    if (work.value) {
+      // 点赞状态和数量只使用后端响应，避免前端自行推算导致显示不一致。
+      work.value.liked_by_current_user = data.liked;
+      work.value.like_count = data.like_count;
+    }
+  } catch (e) {
+    // 避免把包含请求头的 Axios 错误对象直接输出到控制台。
+    console.error(e instanceof Error ? e.message : "toggleWorkLike failed");
+    errorMessage(e instanceof Error ? e.message : "网络异常");
+  } finally {
+    likePending.value = false;
+  }
 }
 
 const fetchWorkImages = async (work_id: string) => {
@@ -214,7 +247,10 @@ const commentCount = ref<number>(0);
         <hr style="width: 100%" />
         <div class="items">
           <div class="view_box item"><EyeOutlined class="icon"/>{{work.view_count}}</div>
-          <div class="like_box item"><HeartOutlined />{{work.like_count}}</div>
+          <div
+            :class="`like_box item${work.liked_by_current_user ? ' liked' : ''}${likePending ? ' pending' : ''}`"
+            @click="handleToggleLike"
+          ><HeartFilled v-if="work.liked_by_current_user" /><HeartOutlined v-else />{{work.like_count}}</div>
           <div class="comment_box item" @click="commentVisible = true"><MessageOutlined />{{commentCount}}</div>
           <div class="claim_box item" v-if="!work.is_claim" @click="claimOpen = true"><FlagOutlined />认领</div>
           <div class="feedback_box item" @click="open = true"><AlertOutlined />投诉反馈</div>
@@ -303,6 +339,14 @@ const commentCount = ref<number>(0);
     border: 1px solid #fda5bc;
     color: #fda5bc;
     background-color: #fda5bc00;
+  }
+  .like_box.liked {
+    color: #fff;
+    background-color: #fda5bc;
+  }
+  .like_box.pending {
+    opacity: .6;
+    pointer-events: none;
   }
   .comment_box:hover {
     background-color: #384a8780;

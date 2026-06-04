@@ -134,11 +134,12 @@ public class WorkController {
      * @return 唯一符合条件的work实体*/
     @IgnoreAuth
     @GetMapping("/only")
-    @SuchWorkAnno(selectType = "id", index = 0)
+    @SuchWorkAnno(selectType = "id", index = 1)
     public ResponseEntity<J> getWorkOnlyControl(
+            HttpServletRequest request,
             @RequestParam("work_id") String workId
     ) {
-        return workService.getWorksByIdService(workId);
+        return workService.getWorksByIdService(request, workId);
     }
     /**根据work_id和用户的登录信息强制获取work实体
      * @param workId work_id

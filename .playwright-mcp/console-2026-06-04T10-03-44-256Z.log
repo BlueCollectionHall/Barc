@@ -1,0 +1,5 @@
+[     470ms] [LOG] 未登录 @ http://127.0.0.1:5173/src/App.vue:26
+[   83103ms] [LOG] 未登录 @ http://127.0.0.1:5173/src/App.vue:26
+[   93109ms] AxiosError: timeout of 10000ms exceeded
+    at XMLHttpRequest.handleTimeout (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=7d11278d:1894:9)
+[   93126ms] [ERROR] timeout of 10000ms exceeded @ http://127.0.0.1:5173/src/components/Work/WorkDetailComp.vue:72
