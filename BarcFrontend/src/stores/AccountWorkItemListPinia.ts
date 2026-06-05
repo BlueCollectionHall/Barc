@@ -6,6 +6,7 @@ import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import {errorMessage, infoMessage} from "@/utils/MessageAlert.ts";
 import type {PageRequestImpl, PageResultImpl} from "@/interfaces/PageImpl.ts";
 import {useRoute, useRouter} from "vue-router";
+import {fetchLikedWorksByUsername} from "@/utils/accountLikeApi.ts";
 
 export const useAccountWorkItemPinia = defineStore('account_work_list', () => {
 
@@ -30,6 +31,10 @@ export const useAccountWorkItemPinia = defineStore('account_work_list', () => {
     if (fetchType === undefined) {
       fetchType = 'works';
     }
+    // 获取分页信息
+    const pageNum: string | undefined = route.query.page_num as string | undefined;
+    if (pageNum) pageRequest.value.page_num = Number(pageNum);
+    else pageRequest.value.page_num = 1;
     switch (fetchType) {
       case "works": {
         pageRequest.value.params = {author_username: username};
@@ -37,15 +42,20 @@ export const useAccountWorkItemPinia = defineStore('account_work_list', () => {
       } case "collections": {
         pageRequest.value.params = {uploader_username: username};
         break;
+      } case "likes": {
+        delete pageRequest.value.params;
+        try {
+          pageResult.value = await fetchLikedWorksByUsername(username, pageRequest.value);
+        } catch (error) {
+          console.error(error);
+          errorMessage(error instanceof Error ? error.message : "网络错误");
+        }
+        return;
       } default: {
         errorMessage("客户端处理分类选择时出现异常问题！反馈点：AccountWorkItemError->2");
         return;
       }
     }
-    // 获取分页信息
-    const pageNum: string | undefined = route.query.page_num as string | undefined;
-    if (pageNum) pageRequest.value.page_num = Number(pageNum);
-    else pageRequest.value.page_num = 1;
     console.log('当前pinia中分页信息：', pageRequest);
     // 获取作品列表
     await baseHttp.post("/api/work/works_by_page", pageRequest.value, {params: {status: 'PUBLIC'}})

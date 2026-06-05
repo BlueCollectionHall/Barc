@@ -1,44 +1,107 @@
+<script lang="ts">
+import {onMounted, ref, watch} from "vue";
+import type {LocationQuery, LocationQueryRaw, Router} from "vue-router";
+
+export interface ItemImpl {label: string; value: string; icon: string; color: string}
+
+export const accountItemList: Array<ItemImpl> = [
+  {label: "作品集", value: "works", icon: "HighlightOutlined", color: "#0EB350"},
+  {label: "收录集", value: "collections", icon: "ReadOutlined", color: "#40C5F1"},
+  {label: "喜欢", value: "likes", icon: "HeartOutlined", color: "#F85A54"},
+];
+
+interface AccountRouteLike {query: LocationQuery}
+interface AccountRouterLike {replace: Router["replace"]}
+
+const getSelectedAccountItemValue = (type: unknown): string => {
+  if (typeof type === "string" && accountItemList.some(item => item.value === type)) {
+    return type;
+  }
+  return "works";
+}
+
+const getRouteUsername = (username: unknown): string | null => {
+  if (typeof username === "string" && username.length > 0) return username;
+  return null;
+}
+
+const buildAccountItemQuery = (query: LocationQuery, target: string): LocationQueryRaw => {
+  const nextQuery: LocationQueryRaw = {...query, type: target};
+  delete nextQuery.page_num;
+  return nextQuery;
+}
+
+export const useAccountItemController = ({
+  route,
+  router,
+  fetchWorks,
+  reportError,
+}: {
+  route: AccountRouteLike;
+  router: AccountRouterLike;
+  fetchWorks: (username: string) => unknown;
+  reportError: (message: string) => unknown;
+}) => {
+  const selectedItem = ref<string>(getSelectedAccountItemValue(route.query.type));
+
+  const reportMissingUsername = () => reportError("页面缺少重要数据！");
+
+  const fetchCurrentRouteWorks = () => {
+    const username = getRouteUsername(route.query.username);
+    if (!username) {
+      reportMissingUsername();
+      return;
+    }
+    fetchWorks(username);
+  }
+
+  const changeSelect = (target: string) => {
+    selectedItem.value = target;
+    const username = getRouteUsername(route.query.username);
+    if (username) {
+      router.replace({query: buildAccountItemQuery(route.query, target)});
+    } else reportMissingUsername();
+  }
+
+  onMounted(() => {
+    selectedItem.value = getSelectedAccountItemValue(route.query.type);
+    const username = getRouteUsername(route.query.username);
+    if (!username) {
+      reportMissingUsername();
+      return;
+    }
+    router.replace({query: {...route.query, type: selectedItem.value}});
+    fetchWorks(username);
+  })
+
+  watch(() => route.query, () => {
+    selectedItem.value = getSelectedAccountItemValue(route.query.type);
+    fetchCurrentRouteWorks();
+  })
+
+  return {selectedItem, changeSelect};
+}
+</script>
+
 <script setup lang="ts">
 import {useAccountWorkItemPinia} from "@/stores/AccountWorkItemListPinia.ts";
-import {storeToRefs} from "pinia";
-const accountWorkItemPinia = useAccountWorkItemPinia();
-import {type LocationQuery, useRoute, useRouter} from "vue-router";
+import {useRoute, useRouter} from "vue-router";
 import {errorMessage} from "@/utils/MessageAlert.ts";
-import {onBeforeMount, onMounted, ref, watch} from "vue";
+
+const accountWorkItemPinia = useAccountWorkItemPinia();
 
 const route = useRoute();
 const router = useRouter();
 
-interface ItemImpl {label: string; value: string; icon: string; color: string}
-
-const itemList: Array<ItemImpl> = [
-  {label: "作品集", value: "works", icon: "HighlightOutlined", color: "#0EB350"},
-  {label: "收录集", value: "collections", icon: "ReadOutlined", color: "#40C5F1"},
-  // {label: "喜欢", value: "likes", icon: "HeartOutlined", color: "#F85A54"},
-];
+const itemList = accountItemList;
 
 // const {selectedItemValue} = storeToRefs(accountWorkItemPinia);
-const selectedItem = ref<string>('works');
-
-const changeSelect = (target: string) => {
-  selectedItem.value = target;
-  if (route.query.username) {
-    router.replace({query: {...route.query, type: target}});
-    delete route.query.page_num;
-    // accountWorkItemPinia.fetchWorks(route.query.username as string);
-  } else errorMessage("页面缺少重要数据！");
-}
-
-onMounted(() => {
-  router.replace({query: {...route.query, type: selectedItem.value}});
-  accountWorkItemPinia.fetchWorks(route.query.username as string);
-})
-
-watch(() => route.query, () => {
-  if (route.query.username) {
-    accountWorkItemPinia.fetchWorks(route.query.username as string);
-  }
-})
+const {selectedItem, changeSelect} = useAccountItemController({
+  route,
+  router,
+  fetchWorks: accountWorkItemPinia.fetchWorks,
+  reportError: errorMessage,
+});
 </script>
 
 <template>
