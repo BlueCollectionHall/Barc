@@ -10,6 +10,9 @@ import com.miaoyu.barc.response.ErrorR;
 import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.utils.GenerateUUID;
 import com.miaoyu.barc.utils.J;
+import com.miaoyu.barc.utils.dto.PageRequestDto;
+import com.miaoyu.barc.utils.dto.PageResultDto;
+import com.miaoyu.barc.utils.pojo.PageInitPojo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -27,6 +31,9 @@ public class WorkLikeService {
 
     @Autowired
     private WorkMapper workMapper;
+
+    @Autowired
+    private WorkService workService;
 
     @Transactional
     public ResponseEntity<J> toggleLike(String userUuid, WorkLikeToggleDto dto) {
@@ -91,6 +98,39 @@ public class WorkLikeService {
         WorkLikeModel currentLike = workLikeMapper.selectByWorkIdAndUserUuid(workId, userUuid);
         WorkModel latestWork = workMapper.selectById(workId);
         return likeResult(Objects.nonNull(currentLike), safeLikeCount(latestWork));
+    }
+
+    public ResponseEntity<J> listLikedWorksByUsername(String username, PageRequestDto dto) {
+        if (isBlank(username)) {
+            return ResponseEntity.ok(new ErrorR().normal("用户名不能为空"));
+        }
+
+        PageInitPojo pageInit = new PageInitPojo(Objects.isNull(dto) ? new PageRequestDto() : dto);
+        Integer pageNum = pageInit.getPageNum();
+        Integer pageSize = pageInit.getPageSize();
+        Integer offset = pageInit.getOffset();
+        String normalizedUsername = username.trim();
+
+        List<WorkModel> works = workLikeMapper.selectPublicLikedWorksByUsername(normalizedUsername, WorkStatusEnum.PUBLIC, offset, pageSize);
+        Long total = workLikeMapper.countPublicLikedWorksByUsername(normalizedUsername, WorkStatusEnum.PUBLIC);
+        long safeTotal = Objects.isNull(total) ? 0L : total;
+        List<WorkModel> signatureWorks = works == null || works.isEmpty()
+                ? List.of()
+                : workService.loopSignatureWorkCover(works);
+        int totalPage = (int) Math.ceil((double) safeTotal / pageSize);
+
+        return ResponseEntity.ok(
+                new ResourceR().resourceSuch(
+                        true,
+                        new PageResultDto<>(
+                                safeTotal,
+                                signatureWorks,
+                                pageNum,
+                                pageSize,
+                                totalPage == 0 ? 1 : totalPage
+                        )
+                )
+        );
     }
 
     private boolean isLikeable(WorkModel work) {
