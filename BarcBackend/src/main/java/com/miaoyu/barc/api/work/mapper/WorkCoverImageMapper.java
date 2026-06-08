@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -17,6 +18,9 @@ public interface WorkCoverImageMapper {
 
     @Insert("INSERT INTO work_cover_image (id, work_id, object_key) VALUES (#{id}, #{work_id}, #{object_key})")
     boolean insert(WorkCoverImageModel workCoverImageModel);
+
+    @Update("UPDATE work_cover_image SET object_key = #{object_key} WHERE id = #{id}")
+    boolean update(WorkCoverImageModel workCoverImageModel);
 
     @Delete("DELETE FROM work_cover_image WHERE work_id = #{work_id}")
     boolean deleteByWorkId(@Param("work_id") String workId);

@@ -138,11 +138,22 @@ public class WorkManageService {
         // 2. 签名内容图
         List<WorkImageModel> images = workImageMapper.selectByWorkId(workId);
         List<String> contentUrls = List.of();
+        List<WorkEditDetailDto.ContentImageDto> contentImages = List.of();
         if (!images.isEmpty()) {
-            List<String> keys = images.stream().sorted(Comparator.comparing(WorkImageModel::getSort))
-                    .map(WorkImageModel::getObject_key).toList();
+            List<WorkImageModel> sortedImages = images.stream().sorted(Comparator.comparing(WorkImageModel::getSort)).toList();
+            List<String> keys = sortedImages.stream().map(WorkImageModel::getObject_key).toList();
             contentUrls = cosService.generateBatchSignedUrl(keys,
                     new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
+            List<String> signedUrls = contentUrls;
+            contentImages = new java.util.ArrayList<>();
+            for (int i = 0; i < sortedImages.size(); i++) {
+                WorkImageModel image = sortedImages.get(i);
+                WorkEditDetailDto.ContentImageDto imageDto = new WorkEditDetailDto.ContentImageDto();
+                imageDto.setId(image.getId());
+                imageDto.setSort(image.getSort());
+                imageDto.setUrl(signedUrls.get(i));
+                contentImages.add(imageDto);
+            }
         }
 
         // 3. 收录者昵称
@@ -183,6 +194,7 @@ public class WorkManageService {
         dto.setWork(work);
         dto.setCover_image_url(coverUrl);
         dto.setContent_image_urls(contentUrls);
+        dto.setContent_images(contentImages);
         dto.setUploader_nickname(uploaderNickname);
         dto.setAuthor_display(authorDisplay);
         dto.setSchool_name(schoolName);

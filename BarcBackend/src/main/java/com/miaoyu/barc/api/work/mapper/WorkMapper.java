@@ -50,6 +50,11 @@ public interface WorkMapper {
     @Select("SELECT * FROM work WHERE author = #{uuid} AND status = #{status}")
     List<WorkEntity> selectByUuid(@Param("uuid") String uuid, @Param("status") WorkStatusEnum statusEnum);
 
+    List<WorkEntity> selectByUuidWithFilters(
+            @Param("uuid") String uuid,
+            @Param("status") WorkStatusEnum statusEnum,
+            @Param("condition") Map<String, Object> condition);
+
     @Select("SELECT w.* FROM work w JOIN user_basic ub ON w.author = ub.uuid WHERE ub.username = #{username} AND w.status = #{status}")
     List<WorkEntity> selectByUsername(@Param("username") String username, @Param("status") WorkStatusEnum statusEnum);
 
