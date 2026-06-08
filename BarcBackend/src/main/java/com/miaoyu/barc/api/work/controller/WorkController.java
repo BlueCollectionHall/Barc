@@ -15,6 +15,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/work")
 public class WorkController {
@@ -104,8 +107,15 @@ public class WorkController {
     /**根据已登录的用户UUID获取符合发布者条件的work实体
      * @return List类型中包含所有符合条件的work实体*/
     @GetMapping("/works_by_me")
-    public ResponseEntity<J> getWorksByMeControl(HttpServletRequest request, @RequestParam("status") WorkStatusEnum statusEnum) {
-        return workService.getWorksByMeService(request.getAttribute("uuid").toString(), statusEnum);
+    public ResponseEntity<J> getWorksByMeControl(
+            HttpServletRequest request,
+            @RequestParam("status") WorkStatusEnum statusEnum,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "school", required = false) String school,
+            @RequestParam(value = "club", required = false) String club,
+            @RequestParam(value = "student", required = false) String student
+    ) {
+        return workService.getWorksByMeService(request.getAttribute("uuid").toString(), statusEnum, buildOwnerListFilters(keyword, school, club, student));
     }
     /**根据已知UUID获取符合发布者条件的work实体
      * @param uuid uuid
@@ -114,9 +124,22 @@ public class WorkController {
     @GetMapping("/works_by_uuid")
     public ResponseEntity<J> getWorksByUuidControl(
             @RequestParam("status") WorkStatusEnum statusEnum,
-            @RequestParam("uuid") String uuid
+            @RequestParam("uuid") String uuid,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "school", required = false) String school,
+            @RequestParam(value = "club", required = false) String club,
+            @RequestParam(value = "student", required = false) String student
     ) {
-        return workService.getWorksByMeService(uuid, statusEnum);
+        return workService.getWorksByUuidService(uuid, statusEnum, buildOwnerListFilters(keyword, school, club, student));
+    }
+
+    private Map<String, Object> buildOwnerListFilters(String keyword, String school, String club, String student) {
+        Map<String, Object> filters = new HashMap<>();
+        filters.put("keyword", keyword);
+        filters.put("school", school);
+        filters.put("club", club);
+        filters.put("student", student);
+        return filters;
     }
     /**根据已知Username获取符合发布者条件的work实体
      * @return List类型中包含所有符合条件的work实体*/
@@ -151,6 +174,34 @@ public class WorkController {
             @RequestParam("work_id") String workId
     ) {
         return workService.getWorkByIdWithMeService(request.getAttribute("uuid").toString(), workId);
+    }
+
+    /** 作者侧编辑详情：返回签名图片和展示元数据，不影响管理端 edit-detail 合约 */
+    @GetMapping("/edit-detail")
+    public ResponseEntity<J> getOwnerWorkEditDetailControl(
+            HttpServletRequest request,
+            @RequestParam("work_id") String workId
+    ) {
+        return workService.getOwnerWorkEditDetail(request.getAttribute("uuid").toString(), workId);
+    }
+
+    /** 作者侧纯文字更新：图片走独立接口，避免误用 legacy 全量更新覆盖图片字段 */
+    @PutMapping("/edit-update")
+    public ResponseEntity<J> updateOwnerWorkContentControl(
+            HttpServletRequest request,
+            @RequestBody WorkModel requestModel
+    ) {
+        return workService.updateOwnerWorkContent(request.getAttribute("uuid").toString(), requestModel);
+    }
+
+    /** 作者侧封面替换：只更新 work_cover_image 表 */
+    @PutMapping(value = "/cover/replace", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<J> replaceOwnerWorkCoverControl(
+            HttpServletRequest request,
+            @RequestParam("work_id") String workId,
+            @RequestPart("cover_image") MultipartFile coverImage
+    ) {
+        return workService.replaceOwnerWorkCover(request.getAttribute("uuid").toString(), workId, coverImage);
     }
     /**上传作品
      * @return 上传是否成功*/

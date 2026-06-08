@@ -134,6 +134,13 @@
         FROM work w
         <include refid="whereConditions"/>
     </select>
+    <!-- 作者当前状态列表筛选：author_uuid由服务层强制写入，其他字段复用公共检索语义 -->
+    <select id="selectByUuidWithFilters" resultType="com.miaoyu.barc.api.work.model.entity.WorkEntity">
+        SELECT w.*
+        FROM work w
+        <include refid="whereConditions"/>
+        ORDER BY w.updated_at DESC
+    </select>
     <!-- 分类以及分页条件筛选片段SQL -->
     <sql id="whereConditionOnCategory">
         JOIN work_category wc

@@ -2,7 +2,11 @@ package com.miaoyu.barc.api.work.service;
 
 import com.miaoyu.barc.annotation.RequireSelfOrPermissionAnno;
 import com.miaoyu.barc.annotation.RequireUserAndPermissionAnno;
+import com.miaoyu.barc.api.mapper.ClubMapper;
+import com.miaoyu.barc.api.mapper.SchoolMapper;
 import com.miaoyu.barc.api.mapper.StudentMapper;
+import com.miaoyu.barc.api.model.SchoolClubModel;
+import com.miaoyu.barc.api.model.SchoolModel;
 import com.miaoyu.barc.api.model.StudentModel;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkCategoryMapper;
@@ -12,6 +16,7 @@ import com.miaoyu.barc.api.work.mapper.WorkLikeMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
 import com.miaoyu.barc.api.work.model.WorkCategoryModel;
 import com.miaoyu.barc.api.work.model.WorkCoverImageModel;
+import com.miaoyu.barc.api.work.model.WorkEditDetailDto;
 import com.miaoyu.barc.api.work.model.WorkImageModel;
 import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.api.work.model.entity.WorkEntity;
@@ -22,6 +27,7 @@ import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.response.UserR;
 import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
+import com.miaoyu.barc.user.model.UserArchiveModel;
 import com.miaoyu.barc.utils.GenerateUUID;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.JwtService;
@@ -58,6 +64,10 @@ public class WorkService {
     private UserArchiveMapper userArchiveMapper;
     @Autowired
     private StudentMapper studentMapper;
+    @Autowired
+    private SchoolMapper schoolMapper;
+    @Autowired
+    private ClubMapper clubMapper;
     @Autowired
     private MinioObjects minioObjects;
     @Autowired
@@ -151,10 +161,27 @@ public class WorkService {
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, workMapper.selectByStudentId(studentId, statusEnum)));
     }
     public ResponseEntity<J> getWorksByMeService(String uuid, WorkStatusEnum statusEnum) {
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workMapper.selectByUuid(uuid, statusEnum)));
+        List<WorkEntity> works = workMapper.selectByUuid(uuid, statusEnum);
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, loopSignatureWorkEntityCover(works)));
+    }
+    public ResponseEntity<J> getWorksByMeService(String uuid, WorkStatusEnum statusEnum, Map<String, Object> condition) {
+        List<WorkEntity> works = workMapper.selectByUuidWithFilters(uuid, statusEnum, buildOwnerListCondition(uuid, condition));
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, loopSignatureWorkEntityCover(works)));
     }
     public ResponseEntity<J> getWorksByUuidService(String uuid, WorkStatusEnum statusEnum) {
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workMapper.selectByUuid(uuid, statusEnum)));
+        List<WorkEntity> works = workMapper.selectByUuid(uuid, statusEnum);
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, loopSignatureWorkEntityCover(works)));
+    }
+    public ResponseEntity<J> getWorksByUuidService(String uuid, WorkStatusEnum statusEnum, Map<String, Object> condition) {
+        List<WorkEntity> works = workMapper.selectByUuidWithFilters(uuid, statusEnum, buildOwnerListCondition(uuid, condition));
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, loopSignatureWorkEntityCover(works)));
+    }
+
+    private Map<String, Object> buildOwnerListCondition(String uuid, Map<String, Object> condition) {
+        Map<String, Object> ownerCondition = condition == null ? new HashMap<>() : new HashMap<>(condition);
+        // 作者列表筛选必须先锁定作者UUID，再复用分页查询的标题/简介/学生/学园/部团匹配语义。
+        ownerCondition.put("author_uuid", uuid);
+        return ownerCondition;
     }
     public ResponseEntity<J> getWorksByUsernameService(String username, WorkStatusEnum statusEnum) {
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, workMapper.selectByUsername(username, statusEnum)));
@@ -210,6 +237,137 @@ public class WorkService {
         }
         return ResponseEntity.ok(new UserR().uuidMismatch());
     }
+
+    /** 获取作者侧编辑详情：复用管理端图片语义，但只能作品作者/收录者读取 */
+    public ResponseEntity<J> getOwnerWorkEditDetail(String uuid, String workId) {
+        WorkModel work = workMapper.selectById(workId);
+        if (Objects.isNull(work)) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        if (!isWorkOwner(uuid, work)) return ResponseEntity.ok(new UserR().uuidMismatch());
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, buildWorkEditDetailDto(work)));
+    }
+
+    /** 作者侧纯文字保存：图片由独立表维护，禁止回写 legacy work.cover_image 字段 */
+    @Transactional
+    public ResponseEntity<J> updateOwnerWorkContent(String uuid, WorkModel requestModel) {
+        WorkModel work = workMapper.selectById(requestModel.getId());
+        if (Objects.isNull(work)) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        if (!isWorkOwner(uuid, work)) return ResponseEntity.ok(new UserR().uuidMismatch());
+        if (!workMapper.updateText(requestModel)) return ResponseEntity.ok(new ChangeR().udu(false, 3));
+        return ResponseEntity.ok(new ChangeR().udu(true, 3));
+    }
+
+    /** 作者侧替换封面：只更新 work_cover_image 指针，不再把图片地址写回 work 表 */
+    @Transactional
+    public ResponseEntity<J> replaceOwnerWorkCover(String uuid, String workId, MultipartFile coverImage) {
+        WorkModel work = workMapper.selectById(workId);
+        if (Objects.isNull(work)) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        if (!isWorkOwner(uuid, work)) return ResponseEntity.ok(new UserR().uuidMismatch());
+
+        final String KEY = "/" + uuid + "/work_images/";
+        J uploadResult = cosService.uploadFile(coverImage, KEY, CosBucketConfigEnum.image);
+        if (uploadResult == null || uploadResult.getCode() != 0) {
+            return ResponseEntity.ok(new ErrorR().normal("上传封面图时出现异常：From Server!"));
+        }
+
+        String newObjectKey = uploadResult.getData().toString();
+        WorkCoverImageModel oldCover = workCoverImageMapper.selectByWorkId(workId);
+        boolean changed;
+        if (oldCover == null) {
+            WorkCoverImageModel cover = new WorkCoverImageModel();
+            cover.setId(new GenerateUUID().getUuid36l());
+            cover.setWork_id(workId);
+            cover.setObject_key(newObjectKey);
+            changed = workCoverImageMapper.insert(cover);
+        } else {
+            String oldObjectKey = oldCover.getObject_key();
+            oldCover.setObject_key(newObjectKey);
+            changed = workCoverImageMapper.update(oldCover);
+            if (changed) cosService.deleteFile(oldObjectKey, CosBucketConfigEnum.image);
+        }
+        if (!changed) {
+            cosService.deleteFile(newObjectKey, CosBucketConfigEnum.image);
+            return ResponseEntity.ok(new ChangeR().udu(false, 3));
+        }
+        return ResponseEntity.ok(new ChangeR().udu(true, 3));
+    }
+
+    private boolean isWorkOwner(String uuid, WorkModel work) {
+        return Objects.equals(work.getAuthor(), uuid) || Objects.equals(work.getUploader(), uuid);
+    }
+
+    private WorkEditDetailDto buildWorkEditDetailDto(WorkModel work) {
+        String workId = work.getId();
+        String coverUrl = "";
+        WorkCoverImageModel cover = workCoverImageMapper.selectByWorkId(workId);
+        if (cover != null) {
+            coverUrl = cosService.generateSignedUrl(cover.getObject_key(),
+                    new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
+        }
+
+        List<WorkImageModel> images = workImageMapper.selectByWorkId(workId);
+        List<String> contentUrls = List.of();
+        List<WorkEditDetailDto.ContentImageDto> contentImages = List.of();
+        if (!images.isEmpty()) {
+            // 按 sort 生成 key 列表，确保批量签名返回值与编辑页画廊顺序一致。
+            List<WorkImageModel> sortedImages = images.stream().sorted(Comparator.comparing(WorkImageModel::getSort)).toList();
+            List<String> keys = sortedImages.stream().map(WorkImageModel::getObject_key).toList();
+            contentUrls = cosService.generateBatchSignedUrl(keys,
+                    new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
+            List<String> signedUrls = contentUrls;
+            contentImages = new ArrayList<>();
+            for (int i = 0; i < sortedImages.size(); i++) {
+                WorkImageModel image = sortedImages.get(i);
+                WorkEditDetailDto.ContentImageDto dto = new WorkEditDetailDto.ContentImageDto();
+                dto.setId(image.getId());
+                dto.setSort(image.getSort());
+                dto.setUrl(signedUrls.get(i));
+                contentImages.add(dto);
+            }
+        }
+
+        String uploaderNickname = "";
+        if (work.getUploader() != null) {
+            UserArchiveModel uploader = userArchiveMapper.selectByUuid(work.getUploader());
+            if (uploader != null) uploaderNickname = uploader.getNickname();
+        }
+
+        String authorDisplay;
+        if (Boolean.TRUE.equals(work.getIs_claim())) {
+            UserArchiveModel author = userArchiveMapper.selectByUuid(work.getAuthor());
+            authorDisplay = author != null ? author.getNickname() : "未知用户";
+        } else {
+            authorDisplay = work.getAuthor_nickname() != null ? work.getAuthor_nickname() : "";
+        }
+
+        String schoolName = "", clubName = "", studentName = "";
+        if (work.getStudent() != null && !work.getStudent().isEmpty()) {
+            StudentModel student = studentMapper.selectById(work.getStudent());
+            if (student != null) {
+                studentName = student.getCn_name();
+                if (student.getSchool() != null) {
+                    SchoolModel school = schoolMapper.selectById(student.getSchool());
+                    if (school != null) schoolName = school.getCn_name();
+                }
+                if (student.getClub() != null) {
+                    SchoolClubModel club = clubMapper.selectById(student.getClub());
+                    if (club != null) clubName = club.getCn_name();
+                }
+            }
+        }
+
+        WorkEditDetailDto dto = new WorkEditDetailDto();
+        dto.setWork(work);
+        dto.setCover_image_url(coverUrl);
+        dto.setContent_image_urls(contentUrls);
+        dto.setContent_images(contentImages);
+        dto.setUploader_nickname(uploaderNickname);
+        dto.setAuthor_display(authorDisplay);
+        dto.setSchool_name(schoolName);
+        dto.setClub_name(clubName);
+        dto.setStudent_name(studentName);
+        return dto;
+    }
+
     @Transactional
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
     public ResponseEntity<J> uploadWorkService(String uuid, String categoryId, WorkModel requestModel, MultipartFile coverImage, MultipartFile[] files) {
@@ -361,6 +519,27 @@ public class WorkService {
             if (objectKey != null) {
                 model.setCover_image(objectKeyToSignedUrl.get(objectKey));
             }
+        }
+        return works;
+    }
+
+    /** 作者列表使用 WorkEntity，单独签名以避免改动 mapper 返回契约 */
+    private List<WorkEntity> loopSignatureWorkEntityCover(List<WorkEntity> works) {
+        if (works == null || works.isEmpty()) return works;
+        List<String> workIds = works.stream().map(WorkEntity::getId).toList();
+        List<WorkCoverImageModel> coverImages = workCoverImageMapper.selectByWorkIds(workIds);
+        Map<String, String> workIdToObjectKey = coverImages.stream()
+                .collect(Collectors.toMap(WorkCoverImageModel::getWork_id, WorkCoverImageModel::getObject_key));
+        List<String> objectKeys = new ArrayList<>(workIdToObjectKey.values());
+        List<String> signedUrls = cosService.generateBatchSignedUrl(objectKeys,
+                new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
+        Map<String, String> objectKeyToSignedUrl = new HashMap<>();
+        for (int i = 0; i < objectKeys.size(); i++) {
+            objectKeyToSignedUrl.put(objectKeys.get(i), signedUrls.get(i));
+        }
+        for (WorkEntity work : works) {
+            String objectKey = workIdToObjectKey.get(work.getId());
+            if (objectKey != null) work.setCover_image(objectKeyToSignedUrl.get(objectKey));
         }
         return works;
     }

@@ -35,7 +35,7 @@ public class WorkImageController {
             @RequestParam("work_id") String workId,
             MultipartFile file
     ) {
-        return null;
+        return workImageService.uploadWorkImageService(request.getAttribute("uuid").toString(), workId, file);
     }
     @DeleteMapping("/delete")
     public ResponseEntity<J> deleteWorkImageControl(
@@ -47,6 +47,12 @@ public class WorkImageController {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         }
         WorkModel work = workMapper.selectById(workImage.getWork_id());
-        return workImageService.deleteWorkImageService(request.getAttribute("uuid").toString(), work.getAuthor(), workImageId);
+        if (work == null) {
+            return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        }
+        String uuid = request.getAttribute("uuid").toString();
+        // 收录者也是作者侧编辑入口的合法操作者；传本人 UUID 可让现有 AOP 自校验通过，管理员仍走原 author 权限路径。
+        String ownerUuidForPermission = uuid.equals(work.getAuthor()) || uuid.equals(work.getUploader()) ? uuid : work.getAuthor();
+        return workImageService.deleteWorkImageService(uuid, ownerUuidForPermission, workImageId);
     }
 }

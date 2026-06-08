@@ -2,28 +2,38 @@ package com.miaoyu.barc.api.work.service;
 
 import com.miaoyu.barc.annotation.RequireSelfOrPermissionAnno;
 import com.miaoyu.barc.api.work.mapper.WorkImageMapper;
+import com.miaoyu.barc.api.work.mapper.WorkMapper;
 import com.miaoyu.barc.api.work.model.WorkImageModel;
+import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.permission.PermissionConst;
 import com.miaoyu.barc.response.ChangeR;
+import com.miaoyu.barc.response.ErrorR;
 import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
+import com.miaoyu.barc.response.UserR;
+import com.miaoyu.barc.utils.GenerateUUID;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.tencent.cos.CosBucketConfigEnum;
 import com.miaoyu.barc.utils.tencent.cos.CosService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class WorkImageService {
     @Autowired
     private WorkImageMapper workImageMapper;
+    @Autowired
+    private WorkMapper workMapper;
     @Autowired
     private CosService cosService;
 
@@ -54,9 +64,44 @@ public class WorkImageService {
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, urls));
     }
 
+    /** 作者侧追加内容图：只写 work_image，并按现有最大 sort 追加到末尾 */
+    @Transactional
+    public ResponseEntity<J> uploadWorkImageService(String uuid, String workId, MultipartFile file) {
+        WorkModel work = workMapper.selectById(workId);
+        if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        if (!Objects.equals(work.getAuthor(), uuid) && !Objects.equals(work.getUploader(), uuid)) {
+            return ResponseEntity.ok(new UserR().uuidMismatch());
+        }
+
+        final String KEY = "/" + uuid + "/work_images/";
+        J uploadResult = cosService.uploadFile(file, KEY, CosBucketConfigEnum.image);
+        if (uploadResult == null || uploadResult.getCode() != 0) {
+            return ResponseEntity.ok(new ErrorR().normal("上传作品图时出现异常：From Server!"));
+        }
+
+        List<WorkImageModel> images = workImageMapper.selectByWorkId(workId);
+        int nextSort = images.stream()
+                .map(WorkImageModel::getSort)
+                .filter(Objects::nonNull)
+                .max(Integer::compareTo)
+                .map(sort -> sort + 1)
+                .orElse(0);
+        WorkImageModel image = new WorkImageModel();
+        image.setId(new GenerateUUID().getUuid36l());
+        image.setWork_id(workId);
+        image.setSort(nextSort);
+        image.setObject_key(uploadResult.getData().toString());
+        if (!workImageMapper.insert(image)) {
+            cosService.deleteFile(image.getObject_key(), CosBucketConfigEnum.image);
+            return ResponseEntity.ok(new ChangeR().udu(false, 1));
+        }
+        return ResponseEntity.ok(new ChangeR().udu(true, 1));
+    }
+
     @RequireSelfOrPermissionAnno(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true)
     public ResponseEntity<J> deleteWorkImageService(String uuid, String authorUuid, String workImageId) {
         WorkImageModel workImage = workImageMapper.selectById(workImageId);
+        if (workImage == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         int sort = workImage.getSort();
         boolean delete = workImageMapper.delete(workImageId);
         if (delete) {

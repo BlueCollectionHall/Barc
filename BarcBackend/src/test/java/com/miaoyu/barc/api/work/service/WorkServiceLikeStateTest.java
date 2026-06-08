@@ -1,6 +1,11 @@
 package com.miaoyu.barc.api.work.service;
 
+import com.miaoyu.barc.api.mapper.ClubMapper;
+import com.miaoyu.barc.api.mapper.SchoolMapper;
 import com.miaoyu.barc.api.mapper.StudentMapper;
+import com.miaoyu.barc.api.model.SchoolClubModel;
+import com.miaoyu.barc.api.model.SchoolModel;
+import com.miaoyu.barc.api.model.StudentModel;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkCategoryMapper;
 import com.miaoyu.barc.api.work.mapper.WorkCoverImageMapper;
@@ -8,9 +13,13 @@ import com.miaoyu.barc.api.work.mapper.WorkImageMapper;
 import com.miaoyu.barc.api.work.mapper.WorkLikeMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
 import com.miaoyu.barc.api.work.model.WorkCoverImageModel;
+import com.miaoyu.barc.api.work.model.WorkEditDetailDto;
+import com.miaoyu.barc.api.work.model.WorkImageModel;
 import com.miaoyu.barc.api.work.model.WorkLikeModel;
 import com.miaoyu.barc.api.work.model.WorkModel;
+import com.miaoyu.barc.api.work.model.entity.WorkEntity;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
+import com.miaoyu.barc.user.model.UserArchiveModel;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.JwtService;
 import com.miaoyu.barc.utils.minio.MinioObjects;
@@ -27,6 +36,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.util.Date;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -47,6 +57,10 @@ class WorkServiceLikeStateTest {
     private UserArchiveMapper userArchiveMapper;
     @Mock
     private StudentMapper studentMapper;
+    @Mock
+    private SchoolMapper schoolMapper;
+    @Mock
+    private ClubMapper clubMapper;
     @Mock
     private MinioObjects minioObjects;
     @Mock
@@ -172,6 +186,124 @@ class WorkServiceLikeStateTest {
         verifyNoInteractions(jwtService, cosService, workLikeMapper);
     }
 
+    @Test
+    @DisplayName("作者作品列表返回签名后的封面URL")
+    void getWorksByMeService_ShouldSignCoverImageFromCoverTable() {
+        WorkEntity work = new WorkEntity();
+        work.setId("work-1");
+        work.setCover_image("legacy-raw-cover");
+        when(workMapper.selectByUuid("user-1", WorkStatusEnum.PUBLIC)).thenReturn(List.of(work));
+        when(workCoverImageMapper.selectByWorkIds(List.of("work-1"))).thenReturn(List.of(coverImage));
+        when(cosService.generateBatchSignedUrl(eq(List.of("covers/work-1.png")), any(Date.class), eq(CosBucketConfigEnum.image)))
+                .thenReturn(List.of("https://signed.example/cover.png"));
+
+        ResponseEntity<J> response = workService.getWorksByMeService("user-1", WorkStatusEnum.PUBLIC);
+
+        J body = response.getBody();
+        assertNotNull(body);
+        assertEquals(0, body.getCode());
+        List<?> data = (List<?>) body.getData();
+        WorkEntity signed = (WorkEntity) data.get(0);
+        assertEquals("https://signed.example/cover.png", signed.getCover_image());
+    }
+
+    @Test
+    @DisplayName("作品公开编辑详情仅作者可读取且复用管理端图片语义")
+    void getOwnerWorkEditDetail_ShouldReturnSignedImagesAndDisplayMetadata() {
+        WorkModel work = claimedWork("work-1", "user-1");
+        work.setUploader("uploader-1");
+        work.setStudent("student-1");
+        WorkImageModel first = image("image-1", 1, "content/1.png");
+        WorkImageModel zero = image("image-0", 0, "content/0.png");
+        UserArchiveModel author = archive("作者昵称");
+        UserArchiveModel uploader = archive("收录者昵称");
+        StudentModel student = student("学生名", "school-1", "club-1");
+        SchoolModel school = school("学园名");
+        SchoolClubModel club = club("部团名");
+        when(workMapper.selectById("work-1")).thenReturn(work);
+        when(workCoverImageMapper.selectByWorkId("work-1")).thenReturn(coverImage);
+        when(cosService.generateSignedUrl(eq("covers/work-1.png"), any(Date.class), eq(CosBucketConfigEnum.image)))
+                .thenReturn("https://signed.example/cover.png");
+        when(workImageMapper.selectByWorkId("work-1")).thenReturn(List.of(first, zero));
+        when(cosService.generateBatchSignedUrl(eq(List.of("content/0.png", "content/1.png")), any(Date.class), eq(CosBucketConfigEnum.image)))
+                .thenReturn(List.of("https://signed.example/0.png", "https://signed.example/1.png"));
+        when(userArchiveMapper.selectByUuid("uploader-1")).thenReturn(uploader);
+        when(userArchiveMapper.selectByUuid("user-1")).thenReturn(author);
+        when(studentMapper.selectById("student-1")).thenReturn(student);
+        when(schoolMapper.selectById("school-1")).thenReturn(school);
+        when(clubMapper.selectById("club-1")).thenReturn(club);
+
+        ResponseEntity<J> response = workService.getOwnerWorkEditDetail("user-1", "work-1");
+
+        J body = response.getBody();
+        assertNotNull(body);
+        assertEquals(0, body.getCode());
+        WorkEditDetailDto dto = (WorkEditDetailDto) body.getData();
+        assertEquals(work, dto.getWork());
+        assertEquals(null, dto.getWork().getCover_image());
+        assertEquals("https://signed.example/cover.png", dto.getCover_image_url());
+        assertEquals(List.of("https://signed.example/0.png", "https://signed.example/1.png"), dto.getContent_image_urls());
+        assertEquals("收录者昵称", dto.getUploader_nickname());
+        assertEquals("作者昵称", dto.getAuthor_display());
+        assertEquals("学园名", dto.getSchool_name());
+        assertEquals("部团名", dto.getClub_name());
+        assertEquals("学生名", dto.getStudent_name());
+    }
+
+    @Test
+    @DisplayName("作品公开编辑详情拒绝非作者或收录者读取")
+    void getOwnerWorkEditDetail_WhenNotOwner_ShouldReturnUuidMismatchWithoutSigning() {
+        when(workMapper.selectById("work-1")).thenReturn(claimedWork("work-1", "user-1"));
+
+        ResponseEntity<J> response = workService.getOwnerWorkEditDetail("other-user", "work-1");
+
+        J body = response.getBody();
+        assertNotNull(body);
+        assertEquals(1, body.getCode());
+        assertEquals("用户UUID信息不匹配：User UUID information mismatch", body.getData());
+        verifyNoInteractions(workCoverImageMapper, workImageMapper, cosService);
+    }
+
+    @Test
+    @DisplayName("作者公开纯文字保存走拆分后的updateText路径")
+    void updateOwnerWorkContent_ShouldUseTextOnlyMapper() {
+        WorkModel existing = claimedWork("work-1", "user-1");
+        WorkModel request = new WorkModel();
+        request.setId("work-1");
+        request.setTitle("新标题");
+        request.setCover_image("must-not-persist");
+        when(workMapper.selectById("work-1")).thenReturn(existing);
+        when(workMapper.updateText(request)).thenReturn(true);
+
+        ResponseEntity<J> response = workService.updateOwnerWorkContent("user-1", request);
+
+        J body = response.getBody();
+        assertNotNull(body);
+        assertEquals(0, body.getCode());
+        verify(workMapper).updateText(request);
+        verify(workMapper, never()).update(any(WorkModel.class));
+    }
+
+    @Test
+    @DisplayName("作者替换封面只更新work_cover_image指针并删除旧对象")
+    void replaceOwnerWorkCover_ShouldUpdateCoverTableOnly() {
+        WorkModel existing = claimedWork("work-1", "user-1");
+        when(workMapper.selectById("work-1")).thenReturn(existing);
+        when(workCoverImageMapper.selectByWorkId("work-1")).thenReturn(coverImage);
+        when(cosService.uploadFile(any(), eq("/user-1/work_images/"), eq(CosBucketConfigEnum.image)))
+                .thenReturn(new J(0, "文件上传成功", "covers/new.png"));
+        when(workCoverImageMapper.update(any(WorkCoverImageModel.class))).thenReturn(true);
+
+        ResponseEntity<J> response = workService.replaceOwnerWorkCover("user-1", "work-1", new org.springframework.mock.web.MockMultipartFile("cover_image", "new.png", "image/png", new byte[]{1}));
+
+        J body = response.getBody();
+        assertNotNull(body);
+        assertEquals(0, body.getCode());
+        verify(workCoverImageMapper).update(any(WorkCoverImageModel.class));
+        verify(cosService).deleteFile("covers/work-1.png", CosBucketConfigEnum.image);
+        verify(workMapper, never()).update(any(WorkModel.class));
+    }
+
     private WorkModel work(String workId, WorkStatusEnum status) {
         WorkModel work = new WorkModel();
         work.setId(workId);
@@ -179,6 +311,48 @@ class WorkServiceLikeStateTest {
         work.setStatus(status);
         work.setLike_count(3);
         return work;
+    }
+
+    private WorkModel claimedWork(String workId, String author) {
+        WorkModel work = work(workId, WorkStatusEnum.PUBLIC);
+        work.setAuthor(author);
+        work.setIs_claim(true);
+        return work;
+    }
+
+    private WorkImageModel image(String id, int sort, String objectKey) {
+        WorkImageModel image = new WorkImageModel();
+        image.setId(id);
+        image.setWork_id("work-1");
+        image.setSort(sort);
+        image.setObject_key(objectKey);
+        return image;
+    }
+
+    private UserArchiveModel archive(String nickname) {
+        UserArchiveModel archive = new UserArchiveModel();
+        archive.setNickname(nickname);
+        return archive;
+    }
+
+    private StudentModel student(String name, String schoolId, String clubId) {
+        StudentModel student = new StudentModel();
+        student.setCn_name(name);
+        student.setSchool(schoolId);
+        student.setClub(clubId);
+        return student;
+    }
+
+    private SchoolModel school(String name) {
+        SchoolModel school = new SchoolModel();
+        school.setCn_name(name);
+        return school;
+    }
+
+    private SchoolClubModel club(String name) {
+        SchoolClubModel club = new SchoolClubModel();
+        club.setCn_name(name);
+        return club;
     }
 
     private MockHttpServletRequest requestWithoutAuth() {
