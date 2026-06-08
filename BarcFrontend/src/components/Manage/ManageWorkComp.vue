@@ -14,20 +14,32 @@ import {useUserPinia} from "@/stores/UserPinia.ts";
 import {storeToRefs} from "pinia";
 import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
-import {errorMessage, infoMessage} from "@/utils/MessageAlert.ts";
+import {errorMessage, infoMessage, successMessage} from "@/utils/MessageAlert.ts";
 import {timestampToCn} from "@/utils/TimeToCn.ts";
 import {useRouter} from "vue-router";
 import {
   type ManageWorkFilterState,
   buildManageWorkFilterParams,
 } from "@/utils/manageWorkEditHelpers.ts";
+import {
+  buildWorkAppealFeedback,
+  getManageWorkSecondaryAction,
+  shouldShowWorkAppealEmailInput,
+  updateOwnerWorkVisibility,
+} from "@/utils/manageWorkStatusActions.ts";
 const userPinia = useUserPinia();
 const router = useRouter();
 
-const {userArchive} = storeToRefs(userPinia);
+const {userArchive, userBasic} = storeToRefs(userPinia);
 const workList = ref<Array<WorkImpl>>([]);
 const menuStatus = ref<string>("PUBLIC");
 const filterState = ref<ManageWorkFilterState>({type: "keyword", value: ""});
+const actionPendingWorkId = ref<string | null>(null);
+const appealOpen = ref<boolean>(false);
+const appealSubmitting = ref<boolean>(false);
+const appealWork = ref<WorkImpl | null>(null);
+const appealContent = ref<string>("");
+const appealEmail = ref<string>("");
 
 const fetchWorkList = async (status: string) => {
   menuStatus.value = status;
@@ -59,6 +71,68 @@ const editWork = (workId: string) => {
   router.push({name: "ManageWorkEdit", query: {work_id: workId}});
 }
 
+const openAppeal = (work: WorkImpl) => {
+  appealWork.value = work;
+  appealContent.value = "";
+  appealEmail.value = userBasic.value?.email || "";
+  appealOpen.value = true;
+}
+
+const handleSecondaryAction = async (work: WorkImpl) => {
+  const action = getManageWorkSecondaryAction(work.status);
+  if (!action) return;
+  if (action.kind === "appeal") {
+    openAppeal(work);
+    return;
+  }
+
+  const token: string | null = window.localStorage.getItem("token");
+  if (!token || !action.targetStatus) {
+    errorMessage("请先登录");
+    return;
+  }
+  actionPendingWorkId.value = work.id;
+  try {
+    await updateOwnerWorkVisibility(work.id, action.targetStatus, token);
+    successMessage(action.targetStatus === "PUBLIC" ? "作品已设为公开" : "作品已设为私有");
+    await fetchWorkList(menuStatus.value);
+  } catch (e) {
+    errorMessage(e instanceof Error ? e.message : "状态更新失败");
+  } finally {
+    actionPendingWorkId.value = null;
+  }
+}
+
+const submitAppeal = async () => {
+  if (!appealWork.value) return;
+  if (!appealContent.value.trim()) {
+    errorMessage("请填写申诉说明");
+    return;
+  }
+  appealSubmitting.value = true;
+  try {
+    const feedbackForm = buildWorkAppealFeedback({
+      workId: appealWork.value.id,
+      workTitle: appealWork.value.title,
+      content: appealContent.value,
+      author: userBasic.value?.uuid || userArchive.value?.uuid || null,
+      email: appealEmail.value.trim() || userBasic.value?.email || null,
+    });
+    const response = await baseHttp.post("/feedback/upload", feedbackForm);
+    const data: ResponseImpl = response.data;
+    if (data.code === 0) {
+      successMessage(data.data || "申诉已提交，等待管理员复核");
+      appealOpen.value = false;
+      appealWork.value = null;
+      appealContent.value = "";
+    } else infoMessage(data.msg);
+  } catch {
+    errorMessage("网络错误");
+  } finally {
+    appealSubmitting.value = false;
+  }
+}
+
 onMounted(async () => {
   const token: string | null = window.localStorage.getItem("token")
   if (token) {
@@ -71,6 +145,31 @@ onMounted(async () => {
 </script>
 
 <template>
+  <a-modal
+    v-model:open="appealOpen"
+    title="提交作品申诉"
+    ok-text="提交申诉"
+    cancel-text="先不提交"
+    :confirm-loading="appealSubmitting"
+    @ok="submitAppeal">
+    <div class="appeal_modal_body">
+      <div class="appeal_hint">
+        <AlertOutlined />
+        <span>这会作为作品申诉/投诉提交给管理员复核，不会直接恢复作品状态。</span>
+      </div>
+      <div class="appeal_work_title">作品：{{appealWork?.title || '未选择作品'}}</div>
+      <a-input
+        v-if="shouldShowWorkAppealEmailInput(userBasic)"
+        v-model:value="appealEmail"
+        type="email"
+        placeholder="联系邮箱（选填）" />
+      <a-textarea
+        v-model:value="appealContent"
+        placeholder="请说明申诉原因、已补充或修正的内容，以及希望管理员复核的重点～"
+        :rows="5"
+        :maxlength="600" />
+    </div>
+  </a-modal>
   <el-container class="manage_work_box">
     <el-aside class="side_box box">
       <el-menu :default-active="menuStatus" class="side_menu">
@@ -129,6 +228,17 @@ onMounted(async () => {
           </div>
           <div class="button_box">
             <el-button class="button" type="primary" @click="editWork(item.id)"><EditOutlined />编辑</el-button>
+            <el-button
+              v-if="getManageWorkSecondaryAction(item.status)"
+              class="button secondary_action_button"
+              :type="getManageWorkSecondaryAction(item.status)?.kind === 'appeal' ? 'warning' : ''"
+              :loading="actionPendingWorkId === item.id"
+              @click="handleSecondaryAction(item)">
+              <EyeInvisibleOutlined v-if="getManageWorkSecondaryAction(item.status)?.targetStatus === 'PRIVATE'" />
+              <EyeOutlined v-else-if="getManageWorkSecondaryAction(item.status)?.targetStatus === 'PUBLIC'" />
+              <AlertOutlined v-else />
+              {{getManageWorkSecondaryAction(item.status)?.label}}
+            </el-button>
           </div>
         </div>
         <div class="empty_box" v-if="workList.length === 0">
@@ -227,6 +337,11 @@ onMounted(async () => {
   flex-direction: row;
   align-items: center;
   justify-content: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+.secondary_action_button {
+  border-radius: .5rem;
 }
 .empty_box {
   display: flex;
@@ -239,5 +354,24 @@ onMounted(async () => {
   .empty_icon {
     width: 8rem;
   }
+}
+.appeal_modal_body {
+  display: flex;
+  flex-direction: column;
+  gap: .8rem;
+}
+.appeal_hint {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .8rem 1rem;
+  border-radius: .8rem;
+  color: #fe4b7b;
+  background-color: #fff5f8;
+  border: #ffd3de 1px solid;
+}
+.appeal_work_title {
+  color: #00AEEC;
+  font-weight: bold;
 }
 </style>

@@ -18,8 +18,8 @@ export interface ClaimRecord {
 }
 
 export interface ComplaintRecord {
-  id: string; work_id: string; reason_option: string
-  content: string; email: string; status: boolean
+  id: string; target_id: string; author: string
+  content: string; email: string; echo: string | null; type: 'WORK'; status: string
   created_at: string; updated_at: string
 }
 
@@ -83,11 +83,18 @@ export function getClaimHistory(workId: string): Promise<ClaimRecord[]> {
 }
 
 export function getComplaintsList(): Promise<ComplaintRecord[]> {
-  return http.get<ComplaintRecord[]>('/api/work/manage/complaints')
+  return http.get<ComplaintRecord[]>('/feedback/feedbacks_by_type', {
+    params: { type: 'WORK', is_manager: true },
+  })
 }
 
-export function processComplaint(complaintId: string, action: string, remark?: string): Promise<string> {
-  return http.post<string>('/api/work/manage/complaint/process', { complaint_id: complaintId, action, remark })
+export function processComplaint(feedbackId: string, status: string, echo?: string): Promise<string> {
+  return http.put<string>('/feedback/update', {
+    id: feedbackId,
+    type: 'WORK',
+    status,
+    echo,
+  })
 }
 
 export function getOperationLogs(payload: PageRequest): Promise<PageResult<OperationLogRecord>> {
