@@ -256,6 +256,25 @@ public class WorkService {
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
     }
 
+    /**
+     * 作者侧可见性切换只负责 PUBLIC/PRIVATE。BAN/OFF/DELETED/恢复必须走管理端审核路径，避免作者越权恢复处罚状态。
+     */
+    @Transactional
+    public ResponseEntity<J> updateOwnerWorkVisibility(String uuid, String workId, WorkStatusEnum requestedStatus) {
+        WorkModel work = workMapper.selectById(workId);
+        if (Objects.isNull(work)) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        if (!isWorkOwner(uuid, work)) return ResponseEntity.ok(new UserR().uuidMismatch());
+        if (requestedStatus != WorkStatusEnum.PUBLIC && requestedStatus != WorkStatusEnum.PRIVATE) {
+            return ResponseEntity.ok(new ErrorR().normal("作者只能切换公开或私有状态"));
+        }
+        if (work.getStatus() != WorkStatusEnum.PUBLIC && work.getStatus() != WorkStatusEnum.PRIVATE) {
+            return ResponseEntity.ok(new ErrorR().normal("作品处于管理状态，不能由作者切换公开/私有"));
+        }
+        work.setStatus(requestedStatus);
+        if (!workMapper.update(work)) return ResponseEntity.ok(new ChangeR().udu(false, 3));
+        return ResponseEntity.ok(new ChangeR().udu(true, 3));
+    }
+
     /** 作者侧替换封面：只更新 work_cover_image 指针，不再把图片地址写回 work 表 */
     @Transactional
     public ResponseEntity<J> replaceOwnerWorkCover(String uuid, String workId, MultipartFile coverImage) {

@@ -194,6 +194,20 @@ public class WorkController {
         return workService.updateOwnerWorkContent(request.getAttribute("uuid").toString(), requestModel);
     }
 
+    /**
+     * 作者侧公开/私有切换：仅允许 PUBLIC <-> PRIVATE，禁止复用管理端状态接口处理封禁/下架/删除。
+     */
+    @PutMapping("/visibility")
+    public ResponseEntity<J> updateOwnerWorkVisibilityControl(
+            HttpServletRequest request,
+            @RequestBody Map<String, String> body
+    ) {
+        return workService.updateOwnerWorkVisibility(
+                request.getAttribute("uuid").toString(),
+                body.get("work_id"),
+                WorkStatusEnum.valueOf(body.get("status")));
+    }
+
     /** 作者侧封面替换：只更新 work_cover_image 表 */
     @PutMapping(value = "/cover/replace", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<J> replaceOwnerWorkCoverControl(
