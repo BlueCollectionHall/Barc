@@ -1,6 +1,6 @@
 import { baseHttp } from "@/utils/https.ts";
 import type { ResponseImpl } from "@/interfaces/ResponseImpl.ts";
-import type { WorkCommentImpl, WorkCommentReplyImpl } from "@/interfaces/WorkImpl.ts";
+import type { WorkCommentImpl } from "@/interfaces/WorkImpl.ts";
 import type { FeedBackImpl } from "@/interfaces/FeedbackImpl.ts";
 
 /** 获取作品的所有评论和回复 */
@@ -12,6 +12,20 @@ export async function fetchCommentsByWork(workId: string): Promise<Array<WorkCom
     return res.data.data as Array<WorkCommentImpl>;
   }
   throw new Error(res.data.msg || "获取评论失败");
+}
+
+/** 获取作品评论总数（主评论数 + 所有回复数） */
+export async function fetchCommentCountByWork(workId: string): Promise<number> {
+  const res = await baseHttp.get<ResponseImpl>("/comment/work/count_by_work", {
+    params: { work_id: workId },
+  });
+  if (res.data.code !== 0) {
+    throw new Error(res.data.msg || "获取评论数失败");
+  }
+  if (typeof res.data.data !== "number") {
+    throw new Error("评论数响应格式异常");
+  }
+  return res.data.data;
 }
 
 /** 发布评论 */

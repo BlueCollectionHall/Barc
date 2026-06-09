@@ -38,6 +38,14 @@ public class WorkCommentController {
     }
 
     @IgnoreAuth
+    @GetMapping("/count_by_work")
+    public ResponseEntity<J> getCommentCountByWorkControl(
+            @RequestParam("work_id") String workId
+    ) {
+        return workCommentService.getCommentCountByWorkService(workId);
+    }
+
+    @IgnoreAuth
     @GetMapping("/comment_by_id")
     public ResponseEntity<J> getCommentByIdControl(
             @RequestParam("comment_id") String commentId
