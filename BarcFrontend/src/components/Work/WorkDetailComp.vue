@@ -25,6 +25,7 @@ import WorkCommentSection from "@/components/Work/WorkCommentSection.vue";
 import {useUserPinia} from "@/stores/UserPinia.ts";
 import {storeToRefs} from "pinia";
 import type {FeedBackImpl} from "@/interfaces/FeedbackImpl.ts";
+import {fetchCommentCountByWork} from "@/utils/commentApi.ts";
 
 const route = useRoute();
 const userPinia = useUserPinia();
@@ -46,6 +47,8 @@ const viewItemList = ref<Array<viewItemImpl>>([
 ]);
 const viewSelected = ref<string>("view");
 const likePending = ref<boolean>(false);
+const commentVisible = ref<boolean>(false);
+const commentCount = ref<number>(0);
 
 
 const fetchWork = async (work_id: string) => {
@@ -113,6 +116,21 @@ const fetchWorkImages = async (work_id: string) => {
     });
 }
 
+const fetchInitialCommentCount = async (work_id: string) => {
+  try {
+    // 初始详情页只请求轻量计数接口，避免未打开弹窗时拉取完整评论树。
+    commentCount.value = await fetchCommentCountByWork(work_id);
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : "fetchCommentCountByWork failed");
+    errorMessage("加载评论数失败");
+  }
+}
+
+const updateCommentCountFromModal = (count: number) => {
+  // 弹窗打开及评论/回复变更后仍沿用子组件 emit，避免破坏现有刷新路径。
+  commentCount.value = count;
+}
+
 const fetchWorkAuthor = async () => {
   if (!work.value) {
     errorMessage("未获取到作品信息");
@@ -152,6 +170,7 @@ onMounted(() => {
   const workId: string | undefined = queries.work_id as string | undefined;
   if (workId) {
     fetchWork(workId);
+    fetchInitialCommentCount(workId);
   } else errorMessage("作品ID未找到！");
 })
 
@@ -204,9 +223,6 @@ const handleOk = async () => {
 // 作品认领相关的程序
 const claimOpen = ref<boolean>(false);
 
-// 评论区相关的程序
-const commentVisible = ref<boolean>(false);
-const commentCount = ref<number>(0);
 </script>
 
 <template>
@@ -270,7 +286,7 @@ const commentCount = ref<number>(0);
     v-if="work"
     :workId="work.id"
     v-model:visible="commentVisible"
-    @commentCount="(count: number) => commentCount = count"
+    @commentCount="updateCommentCountFromModal"
   />
 </template>
 

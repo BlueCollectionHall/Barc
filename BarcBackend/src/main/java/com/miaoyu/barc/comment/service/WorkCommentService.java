@@ -43,6 +43,16 @@ public class WorkCommentService {
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, commentPojos));
     }
 
+    public ResponseEntity<J> getCommentCountByWorkService(String workId) {
+        List<WorkCommentModel> commentModels = workCommentMapper.selectByWorkId(workId);
+        int count = commentModels.size();
+        for (WorkCommentModel commentModel : commentModels) {
+            // 评论总数 = 主评论数 + 所有主评论下的回复数，回复不能被遗漏。
+            count += workCommentReplyMapper.selectByParentId(commentModel.getId()).size();
+        }
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, count));
+    }
+
     public ResponseEntity<J> uploadCommentAndReplyService(String type, String uuid, WorkCommentModel commentModel, WorkCommentReplyModel replyModel) {
         switch (type) {
             case "comment": {
