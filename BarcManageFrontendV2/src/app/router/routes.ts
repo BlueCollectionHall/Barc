@@ -20,6 +20,7 @@ const ComplaintsListView = () => import('@/modules/works/views/ComplaintsListVie
 const CommentComplaintsView = () => import('@/modules/works/views/CommentComplaintsView.vue')
 const OperationLogView = () => import('@/modules/works/views/OperationLogView.vue')
 const MessagesListView = () => import('@/modules/messages/views/MessagesListView.vue')
+const FeedbackManageListView = () => import('@/modules/feedback/views/FeedbackManageListView.vue')
 
 export const adminChildren: RouteRecordRaw[] = [
   {
@@ -70,6 +71,24 @@ export const adminChildren: RouteRecordRaw[] = [
       menuGroupLabel: '用户',
       groupOrder: 20,
       menuOrder: 20,
+    },
+  },
+  {
+    path: 'users/complaints',
+    name: 'users-complaints',
+    component: FeedbackManageListView,
+    meta: {
+      title: '用户投诉',
+      subtitle: '处理针对用户的投诉反馈，仅更新反馈状态和处理备注。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.THI_MAINTAINER,
+      menuLabel: '用户投诉',
+      menuGroup: 'users',
+      menuGroupLabel: '用户',
+      groupOrder: 20,
+      menuOrder: 30,
+      feedbackType: 'USER',
     },
   },
   {
@@ -268,6 +287,60 @@ export const adminChildren: RouteRecordRaw[] = [
       menuGroupLabel: '留言管理',
       groupOrder: 50,
       menuOrder: 10,
+    },
+  },
+  {
+    path: 'system/feedback-bug',
+    name: 'system-feedback-bug',
+    component: FeedbackManageListView,
+    meta: {
+      title: 'BUG反馈',
+      subtitle: '集中查看用户提交的 BUG 反馈，并更新处理状态。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.ADMINISTRATOR,
+      menuLabel: 'BUG反馈',
+      menuGroup: 'system',
+      menuGroupLabel: '系统',
+      groupOrder: 60,
+      menuOrder: 60,
+      feedbackType: 'BUG',
+    },
+  },
+  {
+    path: 'system/feedback-suggestion',
+    name: 'system-feedback-suggestion',
+    component: FeedbackManageListView,
+    meta: {
+      title: '意见反馈',
+      subtitle: '集中查看用户建议，并回写处理状态和备注。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.ADMINISTRATOR,
+      menuLabel: '意见反馈',
+      menuGroup: 'system',
+      menuGroupLabel: '系统',
+      groupOrder: 60,
+      menuOrder: 70,
+      feedbackType: 'SUGGESTION',
+    },
+  },
+  {
+    path: 'system/feedback-other',
+    name: 'system-feedback-other',
+    component: FeedbackManageListView,
+    meta: {
+      title: '其他反馈',
+      subtitle: '处理未归类的其他反馈，仅做状态与备注更新。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.ADMINISTRATOR,
+      menuLabel: '其他反馈',
+      menuGroup: 'system',
+      menuGroupLabel: '系统',
+      groupOrder: 60,
+      menuOrder: 80,
+      feedbackType: 'OTHER',
     },
   },
   {

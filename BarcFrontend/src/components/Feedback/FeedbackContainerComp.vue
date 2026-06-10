@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import {onMounted, ref, watch} from "vue";
+import {ref} from "vue";
 import type {FeedBackImpl} from "@/interfaces/FeedbackImpl.ts";
 import {useUserPinia} from "@/stores/UserPinia.ts";
 import {storeToRefs} from "pinia";
-import type {UserBasicImpl} from "@/interfaces/UserImpl.ts";
 import {errorMessage, infoMessage, successMessage} from "@/utils/MessageAlert.ts";
 import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
+import {normalizeFeedbackType, type FeedbackPayloadType} from "@/utils/feedbackType.ts";
 const userPinia = useUserPinia();
 
-interface ItemImpl {label: string; value: string; icon: string;}
+interface ItemImpl {label: string; value: FeedbackPayloadType; icon: string;}
 
 const items: Array<ItemImpl> = [
   {label: "BUG问题", value: "BUG", icon: "https://static.kivo.wiki/images/gallery/D1.%E6%B8%B8%E6%88%8F%E5%86%85%E7%B4%A0%E6%9D%90/%E5%8A%A0%E8%BD%BD%E8%BF%87%E5%9C%BA/Event_Photo_CollectionCG_817_03_Full.png"},
@@ -23,7 +23,14 @@ const feedbackForm = ref<FeedBackImpl>({
 const {userBasic} = storeToRefs(userPinia);
 const nowItem = ref<string>("OTHER");
 
+const selectFeedbackType = (value: string) => {
+  const type = normalizeFeedbackType(value);
+  nowItem.value = type;
+  feedbackForm.value.type = type;
+};
+
 const uploadFeedback = async () => {
+  feedbackForm.value.type = normalizeFeedbackType(nowItem.value);
   if (feedbackForm.value.content === "") {
     infoMessage("投诉内容不得为空！"); return;
   }
@@ -49,7 +56,7 @@ const uploadFeedback = async () => {
       <p>若您希望投诉反馈评论、留言、作品等客观主体的内容，请移步至其详情界面</p>
     </div>
     <div class="item_box">
-      <div :class="`item${nowItem === item.value? ' item_select': ''}`" v-for="item in items" :key="item.value" @click="nowItem = item.value">
+      <div :class="`item${nowItem === item.value? ' item_select': ''}`" v-for="item in items" :key="item.value" @click="selectFeedbackType(item.value)">
         <img class="icon" :src="item.icon" alt="icon"/>
         {{item.label}}
       </div>

@@ -42,6 +42,10 @@ public class FeedbackService {
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(isSuchElseRequire = false, identity = UserIdentityEnum.MANAGER)})
     public ResponseEntity<J> getFeedbacksByTypeWithManagerService(String managerUuid, FeedbackTypeEnum typeEnum) {
+        UserArchiveModel managerArchive = userArchiveMapper.selectByUuid(managerUuid);
+        if (!canManageFeedback(managerArchive, typeEnum)) {
+            return ResponseEntity.ok(new UserR().insufficientAccountPermission());
+        }
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, feedbackMapper.selectByType(typeEnum)));
     }
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
@@ -54,6 +58,10 @@ public class FeedbackService {
         FeedbackFormModel feedback = feedbackMapper.selectById(feedbackId);
         if (feedback == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        }
+        UserArchiveModel managerArchive = userArchiveMapper.selectByUuid(managerUuid);
+        if (!canManageFeedback(managerArchive, feedback.getType())) {
+            return ResponseEntity.ok(new UserR().insufficientAccountPermission());
         }
         if (feedback.getStatus() == FeedbackStatusEnum.PENDING) {
             feedback.setStatus(FeedbackStatusEnum.PROCESSING);
@@ -135,27 +143,15 @@ public class FeedbackService {
             @RequireUserAndPermissionAnno.Check(isSuchElseRequire = false, identity = UserIdentityEnum.MANAGER)
     })
     public ResponseEntity<J> updateFeedbackService(String managerUuid, FeedbackFormModel requestModel) {
+        FeedbackFormModel storedFeedback = feedbackMapper.selectById(requestModel.getId());
+        if (storedFeedback == null) {
+            return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        }
         UserArchiveModel managerArchive = userArchiveMapper.selectByUuid(managerUuid);
-        return switch (requestModel.getType()) {
-            case COMMENT, MESSAGE_BOARD -> {
-                if (comparePermission.has(managerArchive.getPermission(), PermissionConst.FIR_MAINTAINER) || comparePermission.compare(managerArchive.getPermission(), PermissionConst.ADMINISTRATOR)) yield updateFeedback(requestModel);
-                yield ResponseEntity.ok(new UserR().insufficientAccountPermission());
-            }
-            case WORK -> {
-                if (comparePermission.has(managerArchive.getPermission(), PermissionConst.SEC_MAINTAINER) || comparePermission.compare(managerArchive.getPermission(), PermissionConst.ADMINISTRATOR)) {
-                    yield updateFeedback(requestModel);
-                }
-                yield ResponseEntity.ok(new UserR().insufficientAccountPermission());
-            }
-            case USER -> {
-                if (comparePermission.has(managerArchive.getPermission(), PermissionConst.THI_MAINTAINER) || comparePermission.compare(managerArchive.getPermission(), PermissionConst.ADMINISTRATOR)) yield updateFeedback(requestModel);
-                yield ResponseEntity.ok(new UserR().insufficientAccountPermission());
-            }
-            case BUG, SUGGESTION, OTHER -> {
-                if (comparePermission.has(managerArchive.getPermission(), PermissionConst.ADMINISTRATOR) || comparePermission.compare(managerArchive.getPermission(), PermissionConst.ADMINISTRATOR)) yield updateFeedback(requestModel);
-                yield ResponseEntity.ok(new UserR().insufficientAccountPermission());
-            }
-        };
+        if (canManageFeedback(managerArchive, storedFeedback.getType())) {
+            return updateFeedback(requestModel);
+        }
+        return ResponseEntity.ok(new UserR().insufficientAccountPermission());
     }
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(isSuchElseRequire = false, identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.ADMINISTRATOR)})
     public ResponseEntity<J> deleteFeedbackService(String managerUuid, String feedbackId) {
@@ -182,6 +178,19 @@ public class FeedbackService {
             return ResponseEntity.ok(new SuccessR().normal("修改成功，但邮件未发送！"));
         }
         return ResponseEntity.ok(new ChangeR().udu(false, 3));
+    }
+
+    private boolean canManageFeedback(UserArchiveModel managerArchive, FeedbackTypeEnum typeEnum) {
+        if (managerArchive == null || managerArchive.getPermission() == null || typeEnum == null) {
+            return false;
+        }
+        int permission = managerArchive.getPermission();
+        return switch (typeEnum) {
+            case COMMENT, MESSAGE_BOARD -> comparePermission.has(permission, PermissionConst.FIR_MAINTAINER) || comparePermission.compare(permission, PermissionConst.ADMINISTRATOR);
+            case WORK -> comparePermission.has(permission, PermissionConst.SEC_MAINTAINER) || comparePermission.compare(permission, PermissionConst.ADMINISTRATOR);
+            case USER -> comparePermission.has(permission, PermissionConst.THI_MAINTAINER) || comparePermission.compare(permission, PermissionConst.ADMINISTRATOR);
+            case BUG, SUGGESTION, OTHER -> comparePermission.compare(permission, PermissionConst.ADMINISTRATOR);
+        };
     }
 
     private ResponseEntity<J> noResourceRejectFeedback(FeedbackFormModel model) {

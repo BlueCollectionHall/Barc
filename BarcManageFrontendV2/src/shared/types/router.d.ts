@@ -1,5 +1,7 @@
 import 'vue-router'
 
+import type { FeedbackType } from '@/modules/feedback/api/feedbackManage'
+
 declare module 'vue-router' {
   interface RouteMeta {
     title: string
@@ -13,6 +15,8 @@ declare module 'vue-router' {
     menuOrder?: number
     groupOrder?: number
     minManagerPermission?: number
+    minManagerPermissionBit?: number
+    feedbackType?: FeedbackType
   }
 }
 
