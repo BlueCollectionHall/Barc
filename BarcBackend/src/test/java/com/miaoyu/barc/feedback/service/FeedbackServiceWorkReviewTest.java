@@ -48,6 +48,7 @@ class FeedbackServiceWorkReviewTest {
         feedback.setType(FeedbackTypeEnum.WORK);
         feedback.setStatus(FeedbackStatusEnum.COMPLETED);
         feedback.setEcho("已处理作品投诉");
+        when(feedbackMapper.selectById("feedback-1")).thenReturn(feedback);
         when(userArchiveMapper.selectByUuid("manager-1")).thenReturn(manager);
         when(comparePermission.has(PermissionConst.SEC_MAINTAINER, PermissionConst.SEC_MAINTAINER)).thenReturn(true);
         when(feedbackMapper.update(feedback)).thenReturn(true);
