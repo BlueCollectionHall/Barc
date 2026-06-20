@@ -6,8 +6,9 @@ import {type LocationQuery, useRoute, useRouter} from "vue-router";
 import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import {errorMessage, infoMessage} from "@/utils/MessageAlert.ts";
-import {EyeOutlined, HeartOutlined, UserOutlined} from "@ant-design/icons-vue";
+import {HeartOutlined, MessageOutlined, UserOutlined} from "@ant-design/icons-vue";
 import type {UserArchiveImpl} from "@/interfaces/UserImpl.ts";
+import {loadWorkCommentCounts} from "@/utils/workCommentCountCache.ts";
 
 const router = useRouter();
 const route = useRoute();
@@ -16,6 +17,11 @@ const workItems = ref<Array<WorkImpl>>([]);
 const pageRequest = ref<PageRequestImpl>({page_num: 1, page_size: 24});
 const pageResult = ref<PageResultImpl<WorkImpl> | null>(null);
 const categoryId = ref<string | undefined>(undefined);
+const commentCounts = ref<Record<string, number>>({});
+
+const loadVisibleCommentCounts = async () => {
+  commentCounts.value = await loadWorkCommentCounts(workItems.value.map(item => item.id));
+}
 
 const fetchWorks = async () => {
   try {
@@ -30,6 +36,7 @@ const fetchWorks = async () => {
       pageResult.value = data.data;
       workItems.value = pageResult.value?.list || [];
       console.log(pageResult.value?.list);
+      await loadVisibleCommentCounts();
       await handleWorkListAuthorNickname();
     } else infoMessage(data.data);
   } catch (error) {
@@ -110,7 +117,7 @@ watch(() => route.query, () => {
       <div class="cover_box">
         <img class="cover_image" :src="item.cover_image" alt="cover"/>
         <div class="cover_z">
-          <EyeOutlined /> {{item.view_count}} &nbsp;&nbsp; <HeartOutlined /> {{item.like_count}}
+          <HeartOutlined /> {{item.like_count}} &nbsp;&nbsp; <MessageOutlined /> {{commentCounts[item.id] ?? 0}}
         </div>
       </div>
       <div class="title_nickname">

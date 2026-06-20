@@ -1,16 +1,21 @@
 <script setup lang="ts">
-import {EyeOutlined, HeartOutlined} from "@ant-design/icons-vue";
+import {HeartOutlined, MessageOutlined} from "@ant-design/icons-vue";
 import {useAccountWorkItemPinia} from "@/stores/AccountWorkItemListPinia.ts";
 import {storeToRefs} from "pinia";
-import {ref} from "vue";
-import type {PageRequestImpl} from "@/interfaces/PageImpl.ts";
+import {ref, watch} from "vue";
 import {useRoute, useRouter} from "vue-router";
+import {loadWorkCommentCounts} from "@/utils/workCommentCountCache.ts";
 
 const router = useRouter();
 const route = useRoute();
 const accountContentPinia = useAccountWorkItemPinia();
 
 const {pageResult, pageRequest} = storeToRefs(accountContentPinia);
+const commentCounts = ref<Record<string, number>>({});
+
+const loadVisibleCommentCounts = async () => {
+  commentCounts.value = await loadWorkCommentCounts(pageResult.value?.list.map(item => item.id) || []);
+}
 
 const handlePageChange = (pageNum: number) => {
   if (pageNum === 1) {
@@ -25,6 +30,10 @@ const handlePageChange = (pageNum: number) => {
 const itemClicked = (workId: string) => {
   router.push({name: "WorkDetail", query: {work_id: workId}});
 }
+
+watch(() => pageResult.value?.list, () => {
+  loadVisibleCommentCounts();
+}, {immediate: true})
 </script>
 
 <template>
@@ -33,7 +42,7 @@ const itemClicked = (workId: string) => {
       <div class="cover_box">
         <img class="cover_image" :src="item.cover_image" alt="cover"/>
         <div class="cover_z">
-          <EyeOutlined /> {{item.view_count}} &nbsp;&nbsp; <HeartOutlined /> {{item.like_count}}
+          <HeartOutlined /> {{item.like_count}} &nbsp;&nbsp; <MessageOutlined /> {{commentCounts[item.id] ?? 0}}
         </div>
       </div>
       {{item.title}}

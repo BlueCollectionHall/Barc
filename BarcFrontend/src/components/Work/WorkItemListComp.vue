@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {EyeOutlined, HeartOutlined, UserOutlined} from "@ant-design/icons-vue";
+import {HeartOutlined, MessageOutlined, UserOutlined} from "@ant-design/icons-vue";
 import {storeToRefs} from "pinia";
 import {useWorkItemListPinia} from "@/stores/WorkItemListPinia.ts";
 import {useRouter} from "vue-router";
@@ -7,13 +7,19 @@ import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import type {UserArchiveImpl} from "@/interfaces/UserImpl.ts";
 import {errorMessage} from "@/utils/MessageAlert.ts";
-import {watch} from "vue";
+import {ref, watch} from "vue";
+import {loadWorkCommentCounts} from "@/utils/workCommentCountCache.ts";
 
 const router = useRouter();
 
 const workItemListPinia = useWorkItemListPinia();
 
 const {workList} = storeToRefs(workItemListPinia);
+const commentCounts = ref<Record<string, number>>({});
+
+const loadVisibleCommentCounts = async () => {
+  commentCounts.value = await loadWorkCommentCounts(workList.value.map(item => item.id));
+}
 
 const handleWorkListAuthorNickname = async () => {
   if (workList.value.length === 0) return;
@@ -41,7 +47,8 @@ const itemClicked = (workId: string) => {
 
 watch(() => workList.value, () => {
   handleWorkListAuthorNickname();
-})
+  loadVisibleCommentCounts();
+}, {immediate: true})
 </script>
 
 <template>
@@ -50,7 +57,7 @@ watch(() => workList.value, () => {
       <div class="cover_box">
         <img class="cover_image" :src="item.cover_image" alt="cover"/>
         <div class="cover_z">
-          <EyeOutlined /> {{item.view_count}} &nbsp;&nbsp; <HeartOutlined /> {{item.like_count}}
+          <HeartOutlined /> {{item.like_count}} &nbsp;&nbsp; <MessageOutlined /> {{commentCounts[item.id] ?? 0}}
         </div>
       </div>
       <div class="title_nickname">

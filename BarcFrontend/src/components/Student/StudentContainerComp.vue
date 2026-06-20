@@ -5,8 +5,9 @@ import type {WorkImpl} from "@/interfaces/WorkImpl.ts";
 import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import {errorMessage, infoMessage} from "@/utils/MessageAlert.ts";
-import {EyeOutlined, HeartOutlined} from "@ant-design/icons-vue";
+import {HeartOutlined, MessageOutlined} from "@ant-design/icons-vue";
 import type {PageRequestImpl, PageResultImpl} from "@/interfaces/PageImpl.ts";
+import {loadWorkCommentCounts} from "@/utils/workCommentCountCache.ts";
 
 const route = useRoute();
 const router = useRouter();
@@ -14,6 +15,11 @@ const router = useRouter();
 const works = ref<Array<WorkImpl>>([]);
 const requestPage = ref<PageRequestImpl>({page_num: 1, page_size: 12});
 const resultPage = ref<PageResultImpl<WorkImpl> | null>(null);
+const commentCounts = ref<Record<string, number>>({});
+
+const loadVisibleCommentCounts = async () => {
+  commentCounts.value = await loadWorkCommentCounts(works.value.map(item => item.id));
+}
 
 const fetchWorks = async (student_id: string) => {
   requestPage.value.params = {student_id};
@@ -26,6 +32,7 @@ const fetchWorks = async (student_id: string) => {
     if (data.code === 0) {
       resultPage.value = data.data;
       works.value = resultPage.value?.list || [];
+      await loadVisibleCommentCounts();
     } else infoMessage(data.data);
   } catch (error) {
     console.error(error);
@@ -52,7 +59,7 @@ onMounted(async () => {
         <div class="cover_box">
           <img class="cover_image" :src="item.cover_image" alt="cover"/>
           <div class="cover_z">
-            <EyeOutlined /> {{item.view_count}} &nbsp;&nbsp; <HeartOutlined /> {{item.like_count}}
+            <HeartOutlined /> {{item.like_count}} &nbsp;&nbsp; <MessageOutlined /> {{commentCounts[item.id] ?? 0}}
           </div>
         </div>
         {{item.title}}
