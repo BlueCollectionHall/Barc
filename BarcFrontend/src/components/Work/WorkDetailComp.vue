@@ -16,6 +16,7 @@ import {
   UserAddOutlined,
   HeartFilled,
   HeartOutlined,
+  EyeOutlined,
   MessageOutlined,
   AlertOutlined,
   FlagOutlined,
@@ -261,6 +262,7 @@ const claimOpen = ref<boolean>(false);
         </div>
         <hr style="width: 100%" />
         <div class="items">
+          <div class="view_box item"><EyeOutlined class="icon"/>{{work.view_count}}</div>
           <div
             :class="`like_box item${work.liked_by_current_user ? ' liked' : ''}${likePending ? ' pending' : ''}`"
             @click="handleToggleLike"
@@ -338,6 +340,11 @@ const claimOpen = ref<boolean>(false);
     background-color: #384a8720;
     transition: .3s ease;
   }
+  .view_box, .view_box:hover {
+    border: 1px solid #3b8738;
+    color: #3b8738;
+    background-color: #3b873820;
+  }
   .like_box:hover {
     background-color: #fda5bc80;
     color: #fff;
@@ -383,7 +390,7 @@ const claimOpen = ref<boolean>(false);
     background-color: #fe4b7b00;
     transition: .3s ease;
   }
-  .like_box .icon {
+  .view_box .icon, .like_box .icon {
     font-size: 1.3rem;
     font-weight: bold;
   }
