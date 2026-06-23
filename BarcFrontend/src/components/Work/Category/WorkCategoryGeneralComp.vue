@@ -6,7 +6,7 @@ import {type LocationQuery, useRoute, useRouter} from "vue-router";
 import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import {errorMessage, infoMessage} from "@/utils/MessageAlert.ts";
-import {HeartOutlined, MessageOutlined, UserOutlined} from "@ant-design/icons-vue";
+import {EyeOutlined, HeartOutlined, MessageOutlined, UserOutlined} from "@ant-design/icons-vue";
 import type {UserArchiveImpl} from "@/interfaces/UserImpl.ts";
 import {loadWorkCommentCounts} from "@/utils/workCommentCountCache.ts";
 
@@ -117,7 +117,7 @@ watch(() => route.query, () => {
       <div class="cover_box">
         <img class="cover_image" :src="item.cover_image" alt="cover"/>
         <div class="cover_z">
-          <HeartOutlined /> {{item.like_count}} &nbsp;&nbsp; <MessageOutlined /> {{commentCounts[item.id] ?? 0}}
+          <EyeOutlined /> {{item.view_count}} &nbsp;&nbsp; <HeartOutlined /> {{item.like_count}} &nbsp;&nbsp; <MessageOutlined /> {{commentCounts[item.id] ?? 0}}
         </div>
       </div>
       <div class="title_nickname">

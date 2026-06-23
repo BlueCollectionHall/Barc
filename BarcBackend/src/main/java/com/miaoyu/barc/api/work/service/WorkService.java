@@ -82,6 +82,8 @@ public class WorkService {
     private WorkLikeMapper workLikeMapper;
     @Autowired
     private JwtService jwtService;
+    @Autowired
+    private WorkViewService workViewService;
 
     public ResponseEntity<J> getNewWorkService(int day, boolean isStudentList) {
         List<WorkEntity> works = workMapper.selectByDay(day, WorkStatusEnum.PUBLIC);
@@ -206,12 +208,17 @@ public class WorkService {
                 if (Objects.isNull(coverImageModel)) {
                     yield ResponseEntity.ok(new ErrorR().normal("作品封面图不存在"));
                 }
-                String signedCoverImageUrl = cosService.generateSignedUrl(coverImageModel.getObject_key(), new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
-                work.setCover_image(signedCoverImageUrl);
-                work.setLiked_by_current_user(isLikedByCurrentUser(request, workId));
-                yield ResponseEntity.ok(new ResourceR().resourceSuch(true, work));
-            }
-        };
+                 String signedCoverImageUrl = cosService.generateSignedUrl(coverImageModel.getObject_key(), new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
+                 work.setCover_image(signedCoverImageUrl);
+                 work.setLiked_by_current_user(isLikedByCurrentUser(request, workId));
+                 try {
+                     workViewService.recordViewIfNeeded(request, work);
+                 } catch (Exception e) {
+                     log.error("Unexpected work view recording failure for work_id={}", workId, e);
+                 }
+                 yield ResponseEntity.ok(new ResourceR().resourceSuch(true, work));
+             }
+         };
     }
 
     private boolean isLikedByCurrentUser(HttpServletRequest request, String workId) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {HeartOutlined, MessageOutlined} from "@ant-design/icons-vue";
+import {EyeOutlined, HeartOutlined, MessageOutlined} from "@ant-design/icons-vue";
 import {useAccountWorkItemPinia} from "@/stores/AccountWorkItemListPinia.ts";
 import {storeToRefs} from "pinia";
 import {ref, watch} from "vue";
@@ -42,7 +42,7 @@ watch(() => pageResult.value?.list, () => {
       <div class="cover_box">
         <img class="cover_image" :src="item.cover_image" alt="cover"/>
         <div class="cover_z">
-          <HeartOutlined /> {{item.like_count}} &nbsp;&nbsp; <MessageOutlined /> {{commentCounts[item.id] ?? 0}}
+          <EyeOutlined /> {{item.view_count}} &nbsp;&nbsp; <HeartOutlined /> {{item.like_count}} &nbsp;&nbsp; <MessageOutlined /> {{commentCounts[item.id] ?? 0}}
         </div>
       </div>
       {{item.title}}

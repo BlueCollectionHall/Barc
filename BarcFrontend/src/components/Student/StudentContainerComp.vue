@@ -5,7 +5,7 @@ import type {WorkImpl} from "@/interfaces/WorkImpl.ts";
 import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import {errorMessage, infoMessage} from "@/utils/MessageAlert.ts";
-import {HeartOutlined, MessageOutlined} from "@ant-design/icons-vue";
+import {EyeOutlined, HeartOutlined, MessageOutlined} from "@ant-design/icons-vue";
 import type {PageRequestImpl, PageResultImpl} from "@/interfaces/PageImpl.ts";
 import {loadWorkCommentCounts} from "@/utils/workCommentCountCache.ts";
 
@@ -59,7 +59,7 @@ onMounted(async () => {
         <div class="cover_box">
           <img class="cover_image" :src="item.cover_image" alt="cover"/>
           <div class="cover_z">
-            <HeartOutlined /> {{item.like_count}} &nbsp;&nbsp; <MessageOutlined /> {{commentCounts[item.id] ?? 0}}
+            <EyeOutlined /> {{item.view_count}} &nbsp;&nbsp; <HeartOutlined /> {{item.like_count}} &nbsp;&nbsp; <MessageOutlined /> {{commentCounts[item.id] ?? 0}}
           </div>
         </div>
         {{item.title}}

@@ -75,6 +75,8 @@ class WorkServiceLikeStateTest {
     private WorkLikeMapper workLikeMapper;
     @Mock
     private JwtService jwtService;
+    @Mock
+    private WorkViewService workViewService;
 
     @InjectMocks
     private WorkService workService;
