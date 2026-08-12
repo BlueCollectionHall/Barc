@@ -10,7 +10,8 @@
         <h1 class="title">{{ detail.work.title }}</h1>
         <div class="meta">
           <span>上传：{{ detail.work.created_at }}</span>
-          <span>更新：{{ detail.work.updated_at }}</span>
+          <span>内容更新：{{ getContentUpdatedAt(detail.work) }}</span>
+          <span>记录更新：{{ detail.work.updated_at }}</span>
         </div>
         <div class="author">
           <template v-if="detail.work.is_claim">
@@ -70,13 +71,18 @@ import { ref, onMounted } from 'vue'
 import { View } from '@element-plus/icons-vue'
 import { getWorkEditDetail } from '../api/workManage'
 import WorkStatusBadge from './WorkStatusBadge.vue'
-import type { WorkEditDetail } from '../api/workManage'
+import type { WorkEditDetail, WorkRecord } from '../api/workManage'
 
 const props = defineProps<{ workId: string }>()
 const emit = defineEmits<{ ban: []; off: []; restore: []; delete: [] }>()
 
 const detail = ref<WorkEditDetail | null>(null)
 const tab = ref<'content' | 'images'>('content')
+
+// 内容更新时间优先使用业务字段；旧数据未回填时退回创建时间，行更新时间仍由“记录更新”单独展示。
+function getContentUpdatedAt(work: WorkRecord): string {
+  return work.content_updated_at || work.created_at
+}
 
 onMounted(async () => {
   try { detail.value = await getWorkEditDetail(props.workId) } catch { /* */ }

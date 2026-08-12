@@ -8,7 +8,7 @@ export interface WorkRecord {
   view_count: number; like_count: number
   author: string; author_nickname: string; uploader: string
   is_claim: boolean; status: string; student: string
-  created_at: string; updated_at: string
+  created_at: string; content_updated_at?: string | null; updated_at: string
 }
 
 export interface ClaimRecord {

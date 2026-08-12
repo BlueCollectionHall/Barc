@@ -131,6 +131,11 @@ const updateCommentCountFromModal = (count: number) => {
   commentCount.value = count;
 }
 
+const getContentFreshnessTime = (currentWork: WorkImpl): Date => {
+  // 更新时间面向用户展示内容新鲜度；旧数据未返回 content_updated_at 时回退创建时间，避免浏览/点赞刷新造成误导。
+  return currentWork.content_updated_at ?? currentWork.created_at;
+}
+
 const fetchWorkAuthor = async () => {
   if (!work.value) {
     errorMessage("未获取到作品信息");
@@ -248,7 +253,7 @@ const claimOpen = ref<boolean>(false);
         <h1 class="title_text">{{work.title}}</h1>
         <div class="time">
           <span><ClockCircleOutlined />上传时间：{{timestampToCn(work.created_at)}}</span>
-          <span><SyncOutlined />更新时间：{{timestampToCn(work.updated_at)}}</span>
+          <span><SyncOutlined />更新时间：{{timestampToCn(getContentFreshnessTime(work))}}</span>
         </div>
         <div class="author_box">
           <div class="claim" v-if="work.is_claim">

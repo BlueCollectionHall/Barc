@@ -13,7 +13,8 @@ public interface WorkMapper {
     @Select("SELECT * FROM work WHERE status = #{status}")
     List<WorkEntity> selectAll(@Param("status") WorkStatusEnum statusEnum);
 
-    @Select("SELECT * FROM work WHERE updated_at >= DATE_SUB(now(), INTERVAL #{day} DAY) AND status = #{status}")
+    // 公开新鲜度按内容更新时间计算；历史空值回退到创建时间，避免浏览/点赞等行更新时间影响内容新鲜度。
+    @Select("SELECT * FROM work WHERE COALESCE(content_updated_at, created_at) >= DATE_SUB(now(), INTERVAL #{day} DAY) AND status = #{status}")
     List<WorkEntity> selectByDay(@Param("day") Integer day, @Param("status") WorkStatusEnum status);
 
     List<WorkModel> selectByPage(
@@ -75,10 +76,12 @@ public interface WorkMapper {
     @Update("UPDATE work SET like_count = CASE WHEN like_count > 0 THEN like_count - 1 ELSE 0 END WHERE id = #{work_id}")
     int decrementLikeCount(@Param("work_id") String workId);
     @Insert("INSERT INTO work " +
-            "(id, title, description, content, banner_image, cover_image, author, author_nickname, uploader, is_claim, status, student) VALUES " +
-            "(#{id}, #{title}, #{description}, #{content}, #{banner_image}, #{cover_image}, #{author}, #{author_nickname}, #{uploader}, #{is_claim}, 'PUBLIC', #{student})")
+            "(id, title, description, content, banner_image, cover_image, author, author_nickname, uploader, is_claim, status, student, created_at, updated_at, content_updated_at) VALUES " +
+            "(#{id}, #{title}, #{description}, #{content}, #{banner_image}, #{cover_image}, #{author}, #{author_nickname}, #{uploader}, #{is_claim}, 'PUBLIC', #{student}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
     boolean insert(WorkModel workModel);
-    @Update("UPDATE work SET title = #{title}, description = #{description}, content = #{content}, banner_image = #{banner_image}, cover_image = #{cover_image}, author = #{author}, author_nickname = #{author_nickname}, uploader = #{uploader}, is_claim = #{is_claim}, status = #{status}, student = #{student} WHERE id = #{id}")
+    // 通用更新兼容旧接口：只有正文类字段真实变化时刷新内容更新时间，状态/认领/封面类变更不刷新。
+    @Update("UPDATE work SET content_updated_at = CASE WHEN NOT (title <=> #{title} AND description <=> #{description} AND content <=> #{content} AND author_nickname <=> #{author_nickname} AND student <=> #{student}) THEN CURRENT_TIMESTAMP ELSE content_updated_at END, " +
+            "title = #{title}, description = #{description}, content = #{content}, banner_image = #{banner_image}, cover_image = #{cover_image}, author = #{author}, author_nickname = #{author_nickname}, uploader = #{uploader}, is_claim = #{is_claim}, status = #{status}, student = #{student} WHERE id = #{id}")
     boolean update(WorkModel workModel);
     @Delete("DELETE FROM work WHERE id = #{id}")
     boolean delete(@Param("id") String id);
@@ -99,8 +102,9 @@ public interface WorkMapper {
             @Param("status") String status,
             @Param("keyword") String keyword);
 
-    /** 管理端纯文字更新（不改封面/Banner/作者/收录者，图片在独立表中管理） */
+    /** 管理端纯文字更新（不改封面/Banner/作者/收录者，图片在独立表中管理），内容更新时间仅在文字内容变更时刷新。 */
     @Update("UPDATE work SET title = #{title}, description = #{description}, content = #{content}, " +
-            "author_nickname = #{author_nickname}, is_claim = #{is_claim}, student = #{student} WHERE id = #{id}")
+            "author_nickname = #{author_nickname}, is_claim = #{is_claim}, student = #{student}, " +
+            "content_updated_at = CURRENT_TIMESTAMP WHERE id = #{id}")
     boolean updateText(WorkModel workModel);
 }

@@ -1,0 +1,2 @@
+ALTER TABLE work
+ADD COLUMN content_updated_at TIMESTAMP NULL DEFAULT NULL AFTER updated_at;
