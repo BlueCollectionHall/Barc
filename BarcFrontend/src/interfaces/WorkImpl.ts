@@ -15,6 +15,7 @@ export interface WorkImpl {
   status: string;
   student: string;
   created_at: Date;
+  content_updated_at?: Date | null;
   updated_at: Date;
 }
 

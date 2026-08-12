@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS work(
     student VARCHAR(255) NOT NULL ,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
+    content_updated_at TIMESTAMP NULL DEFAULT NULL ,
     INDEX idx_creator (author),
     INDEX idx_status (status)
 );

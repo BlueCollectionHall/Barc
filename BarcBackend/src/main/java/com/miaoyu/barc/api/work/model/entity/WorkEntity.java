@@ -22,4 +22,5 @@ public class WorkEntity {
     private String student;
     private LocalDateTime created_at;
     private LocalDateTime updated_at;
+    private LocalDateTime content_updated_at;
 }

@@ -21,7 +21,7 @@ public interface WorkLikeMapper {
     int deleteByWorkIdAndUserUuid(@Param("work_id") String workId, @Param("user_uuid") String userUuid);
 
     @Select("SELECT w.id, w.title, w.cover_image, w.view_count, w.like_count, w.status, " +
-            "w.author, w.author_nickname, w.uploader, w.is_claim, w.student, w.created_at, w.updated_at " +
+            "w.author, w.author_nickname, w.uploader, w.is_claim, w.student, w.created_at, w.updated_at, w.content_updated_at " +
             "FROM work_like wl " +
             "JOIN work w ON wl.work_id = w.id " +
             "JOIN user_basic ub ON wl.user_uuid = ub.uuid " +

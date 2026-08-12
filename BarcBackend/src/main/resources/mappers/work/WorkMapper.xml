@@ -124,10 +124,12 @@
             w.is_claim,
             w.status,
             w.student,
-            w.updated_at
+            w.updated_at,
+            w.content_updated_at
         FROM work w
         <include refid="whereConditions"/>
-        ORDER BY w.updated_at DESC
+        <!-- 公开列表新鲜度按内容更新时间排序；历史空值回退到创建时间，避免浏览/点赞刷新排序。 -->
+        ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC
         LIMIT #{offset}, #{page_size}
     </select>
     <!-- 按条件查出总数 -->
@@ -141,7 +143,8 @@
         SELECT w.*
         FROM work w
         <include refid="whereConditions"/>
-        ORDER BY w.updated_at DESC
+        <!-- 作者列表沿用公开新鲜度口径；历史空值回退创建时间，避免非内容变更刷新排序。 -->
+        ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC
     </select>
     <!-- 分类以及分页条件筛选片段SQL -->
     <sql id="whereConditionOnCategory">
@@ -208,10 +211,12 @@
         w.is_claim,
         w.status,
         w.student,
-        w.updated_at
+        w.updated_at,
+        w.content_updated_at
         FROM work w
         <include refid="whereConditionOnCategory"/>
-        ORDER BY w.updated_at DESC
+        <!-- 分类公开列表新鲜度按内容更新时间排序；历史空值回退到创建时间，避免浏览/点赞刷新排序。 -->
+        ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC
         LIMIT #{offset}, #{page_size}
     </select>
     <!-- 按照分类以及分页和条件查出总数 -->

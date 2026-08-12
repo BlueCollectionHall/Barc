@@ -1,11 +1,8 @@
 package com.miaoyu.barc.api.work.model;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.time.LocalDateTime;
 
 @Setter
 @Getter
@@ -27,4 +24,5 @@ public class WorkModel {
     private String student;
     private String created_at;
     private String updated_at;
+    private String content_updated_at;
 }
