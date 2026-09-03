@@ -99,6 +99,19 @@ CREATE TABLE IF NOT EXISTS work(
     INDEX idx_creator (author),
     INDEX idx_status (status)
 );
+CREATE TABLE IF NOT EXISTS work_review(
+    work_id VARCHAR(100) PRIMARY KEY NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/APPROVED/REJECTED',
+    rejection_reason VARCHAR(500) NULL,
+    reviewer_uuid VARCHAR(32) NULL,
+    submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMP NULL DEFAULT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_work_review_status_submitted (status, submitted_at),
+    INDEX idx_work_review_reviewer (reviewer_uuid),
+    FOREIGN KEY (work_id) REFERENCES work(id) ON DELETE CASCADE,
+    FOREIGN KEY (reviewer_uuid) REFERENCES user_basic(uuid) ON DELETE SET NULL
+);
 CREATE TABLE IF NOT EXISTS work_category(
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     work_id VARCHAR(100) NOT NULL ,
@@ -329,7 +342,7 @@ CREATE TABLE IF NOT EXISTS work_operation_log (
     id VARCHAR(36) PRIMARY KEY NOT NULL,
     work_id VARCHAR(100) NOT NULL,
     operator_uuid VARCHAR(32) NOT NULL,
-    operation_type VARCHAR(30) NOT NULL COMMENT '操作类型：BAN/OFF/DELETE/RESTORE/EDIT/CLAIM_APPROVE/CLAIM_REVOKE/CLAIM_ASSIGN/COMPLAINT_PROCESS',
+    operation_type VARCHAR(30) NOT NULL COMMENT '操作类型：含 REVIEW_APPROVE/REVIEW_REJECT 等作品管理动作',
     detail TEXT NULL COMMENT '操作详情JSON',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_work_id (work_id),

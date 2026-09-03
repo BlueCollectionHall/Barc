@@ -21,7 +21,7 @@ class WorkMapperContentUpdatedAtSqlTest {
     void selectByDay_ShouldFilterByCoalescedContentUpdatedAt() throws NoSuchMethodException {
         String sql = normalizedSelectSql(WorkMapper.class.getMethod("selectByDay", Integer.class, com.miaoyu.barc.api.work.enumeration.WorkStatusEnum.class));
 
-        assertTrue(sql.contains("COALESCE(content_updated_at, created_at) >= DATE_SUB(now(), INTERVAL #{day} DAY)"),
+        assertTrue(sql.contains("COALESCE(w.content_updated_at, w.created_at) >= DATE_SUB(now(), INTERVAL #{day} DAY)"),
                 "selectByDay should filter by COALESCE(content_updated_at, created_at)");
     }
 

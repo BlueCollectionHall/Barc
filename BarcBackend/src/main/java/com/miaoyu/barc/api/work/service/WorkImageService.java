@@ -3,6 +3,8 @@ package com.miaoyu.barc.api.work.service;
 import com.miaoyu.barc.annotation.RequireSelfOrPermissionAnno;
 import com.miaoyu.barc.api.work.mapper.WorkImageMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
+import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
 import com.miaoyu.barc.api.work.model.WorkImageModel;
 import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.permission.PermissionConst;
@@ -36,8 +38,15 @@ public class WorkImageService {
     private WorkMapper workMapper;
     @Autowired
     private CosService cosService;
+    @Autowired
+    private WorkService workService;
 
     public ResponseEntity<J> getImagesByWorkService(String workId) {
+        WorkModel work = workMapper.selectById(workId);
+        if (work == null || work.getStatus() != WorkStatusEnum.PUBLIC
+                || work.getReview_status() != WorkReviewStatusEnum.APPROVED) {
+            return ResponseEntity.ok(new ErrorR().normal("作品不可访问"));
+        }
         List<WorkImageModel> images = workImageMapper.selectByWorkId(workId);
         
         // 1. 收集所有 object_key
@@ -95,9 +104,11 @@ public class WorkImageService {
             cosService.deleteFile(image.getObject_key(), CosBucketConfigEnum.image);
             return ResponseEntity.ok(new ChangeR().udu(false, 1));
         }
+        workService.submitForReview(workId);
         return ResponseEntity.ok(new ChangeR().udu(true, 1));
     }
 
+    @Transactional
     @RequireSelfOrPermissionAnno(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true)
     public ResponseEntity<J> deleteWorkImageService(String uuid, String authorUuid, String workImageId) {
         WorkImageModel workImage = workImageMapper.selectById(workImageId);
@@ -112,6 +123,7 @@ public class WorkImageService {
                     workImageMapper.update(workImageModel);
                 }
             }
+            workService.submitForReview(workImage.getWork_id());
             return ResponseEntity.ok(new ChangeR().udu(true, 2));
         }
         return ResponseEntity.ok(new ChangeR().udu(false, 2));

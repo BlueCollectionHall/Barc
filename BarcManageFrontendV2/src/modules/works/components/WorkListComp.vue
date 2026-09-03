@@ -28,8 +28,24 @@
         </template>
       </el-table-column>
       <el-table-column prop="title" label="标题" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="author_nickname" label="作者" width="120" />
+      <el-table-column label="作品作者" width="145">
+        <template #default="{ row }">
+          <div>{{ getWorkCreatorDisplay(row) }}</div>
+          <div class="author-source">{{ getWorkCreatorSourceLabel(row) }}</div>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="90"><template #default="{ row }"><WorkStatusBadge :status="row.status" /></template></el-table-column>
+      <el-table-column label="审核" width="100">
+        <template #default="{ row }">
+          <el-tag
+            v-if="row.review_status"
+            :type="row.review_status === 'APPROVED' ? 'success' : row.review_status === 'REJECTED' ? 'danger' : 'warning'"
+            size="small"
+          >
+            {{ row.review_status === 'APPROVED' ? '已通过' : row.review_status === 'REJECTED' ? '未通过' : '审核中' }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="created_at" label="创建时间" width="170" />
       <el-table-column label="操作" width="280" fixed="right">
         <template #default="{ row }">
@@ -54,6 +70,7 @@
 import { ref, onMounted } from 'vue'
 import { getWorkListManage } from '../api/workManage'
 import WorkStatusBadge from './WorkStatusBadge.vue'
+import { getWorkCreatorDisplay, getWorkCreatorSourceLabel } from '../utils/workAttribution'
 
 const emit = defineEmits<{ edit: [row: any]; ban: [row: any]; off: [row: any]; restore: [row: any]; delete: [row: any] }>()
 const workList = ref<any[]>([])
@@ -79,6 +96,10 @@ onMounted(() => fetchData())
 <style scoped>
 .filter-bar {
   margin-bottom: 16px;
+}
+.author-source {
+  color: var(--barc-text-soft);
+  font-size: 0.75rem;
 }
 .cover-thumb {
   width: 80px;

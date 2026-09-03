@@ -7,19 +7,19 @@ import com.miaoyu.barc.api.model.SchoolClubModel;
 import com.miaoyu.barc.api.model.SchoolModel;
 import com.miaoyu.barc.api.model.StudentModel;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkCategoryMapper;
 import com.miaoyu.barc.api.work.mapper.WorkCoverImageMapper;
 import com.miaoyu.barc.api.work.mapper.WorkImageMapper;
 import com.miaoyu.barc.api.work.mapper.WorkLikeMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
+import com.miaoyu.barc.api.work.mapper.WorkReviewMapper;
 import com.miaoyu.barc.api.work.model.WorkCoverImageModel;
 import com.miaoyu.barc.api.work.model.WorkEditDetailDto;
 import com.miaoyu.barc.api.work.model.WorkImageModel;
 import com.miaoyu.barc.api.work.model.WorkLikeModel;
 import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.api.work.model.entity.WorkEntity;
-import com.miaoyu.barc.user.mapper.UserArchiveMapper;
-import com.miaoyu.barc.user.model.UserArchiveModel;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.JwtService;
 import com.miaoyu.barc.utils.minio.MinioObjects;
@@ -41,8 +41,10 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -54,7 +56,7 @@ class WorkServiceLikeStateTest {
     @Mock
     private WorkMapper workMapper;
     @Mock
-    private UserArchiveMapper userArchiveMapper;
+    private WorkAttributionService workAttributionService;
     @Mock
     private StudentMapper studentMapper;
     @Mock
@@ -77,6 +79,8 @@ class WorkServiceLikeStateTest {
     private JwtService jwtService;
     @Mock
     private WorkViewService workViewService;
+    @Mock
+    private WorkReviewMapper workReviewMapper;
 
     @InjectMocks
     private WorkService workService;
@@ -194,7 +198,8 @@ class WorkServiceLikeStateTest {
         WorkEntity work = new WorkEntity();
         work.setId("work-1");
         work.setCover_image("legacy-raw-cover");
-        when(workMapper.selectByUuid("user-1", WorkStatusEnum.PUBLIC)).thenReturn(List.of(work));
+        when(workMapper.selectByUuidWithFilters(
+                eq("user-1"), eq(WorkStatusEnum.PUBLIC), isNull(), anyMap())).thenReturn(List.of(work));
         when(workCoverImageMapper.selectByWorkIds(List.of("work-1"))).thenReturn(List.of(coverImage));
         when(cosService.generateBatchSignedUrl(eq(List.of("covers/work-1.png")), any(Date.class), eq(CosBucketConfigEnum.image)))
                 .thenReturn(List.of("https://signed.example/cover.png"));
@@ -217,8 +222,6 @@ class WorkServiceLikeStateTest {
         work.setStudent("student-1");
         WorkImageModel first = image("image-1", 1, "content/1.png");
         WorkImageModel zero = image("image-0", 0, "content/0.png");
-        UserArchiveModel author = archive("作者昵称");
-        UserArchiveModel uploader = archive("收录者昵称");
         StudentModel student = student("学生名", "school-1", "club-1");
         SchoolModel school = school("学园名");
         SchoolClubModel club = club("部团名");
@@ -229,8 +232,8 @@ class WorkServiceLikeStateTest {
         when(workImageMapper.selectByWorkId("work-1")).thenReturn(List.of(first, zero));
         when(cosService.generateBatchSignedUrl(eq(List.of("content/0.png", "content/1.png")), any(Date.class), eq(CosBucketConfigEnum.image)))
                 .thenReturn(List.of("https://signed.example/0.png", "https://signed.example/1.png"));
-        when(userArchiveMapper.selectByUuid("uploader-1")).thenReturn(uploader);
-        when(userArchiveMapper.selectByUuid("user-1")).thenReturn(author);
+        when(workAttributionService.resolveUploaderNickname(work)).thenReturn("收录者昵称");
+        when(workAttributionService.resolvePlatformOwnerNickname(work)).thenReturn("作者昵称");
         when(studentMapper.selectById("student-1")).thenReturn(student);
         when(schoolMapper.selectById("school-1")).thenReturn(school);
         when(clubMapper.selectById("club-1")).thenReturn(club);
@@ -311,6 +314,7 @@ class WorkServiceLikeStateTest {
         work.setId(workId);
         work.setTitle("Test work");
         work.setStatus(status);
+        work.setReview_status(WorkReviewStatusEnum.APPROVED);
         work.setLike_count(3);
         return work;
     }
@@ -329,12 +333,6 @@ class WorkServiceLikeStateTest {
         image.setSort(sort);
         image.setObject_key(objectKey);
         return image;
-    }
-
-    private UserArchiveModel archive(String nickname) {
-        UserArchiveModel archive = new UserArchiveModel();
-        archive.setNickname(nickname);
-        return archive;
     }
 
     private StudentModel student(String name, String schoolId, String clubId) {

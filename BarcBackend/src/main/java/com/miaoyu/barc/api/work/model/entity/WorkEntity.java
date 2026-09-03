@@ -1,6 +1,7 @@
 package com.miaoyu.barc.api.work.model.entity;
 
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -23,4 +24,9 @@ public class WorkEntity {
     private LocalDateTime created_at;
     private LocalDateTime updated_at;
     private LocalDateTime content_updated_at;
+    private WorkReviewStatusEnum review_status;
+    private String review_reason;
+    private String reviewer_uuid;
+    private LocalDateTime review_submitted_at;
+    private LocalDateTime reviewed_at;
 }

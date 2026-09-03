@@ -7,6 +7,8 @@ export interface ManageWorkFilterState {
   value: string;
 }
 
+export type OwnerWorkListSection = "PUBLIC" | "PRIVATE" | "PENDING" | "REJECTED" | "OFF" | "BAN";
+
 export interface EditGalleryImage {
   id: string | null;
   previewUrl: string;
@@ -76,6 +78,26 @@ export const buildManageWorkFilterParams = (
   const value = filter.value.trim();
   if (!value) return params;
   params[filter.type] = value;
+  return params;
+};
+
+/**
+ * 个人中心内容管理查询参数。
+ * 审核中/未通过跨越公开与私有意图，因此只按 review_status 过滤；已通过的公开/私有分类同时锁定两个状态。
+ */
+export const buildOwnerWorkListParams = (
+  section: OwnerWorkListSection,
+  filter: ManageWorkFilterState,
+): Record<string, string> => {
+  const params: Record<string, string> = {};
+  if (section === "PENDING" || section === "REJECTED") {
+    params.review_status = section;
+  } else {
+    params.status = section;
+    if (section === "PUBLIC" || section === "PRIVATE") params.review_status = "APPROVED";
+  }
+  const value = filter.value.trim();
+  if (value) params[filter.type] = value;
   return params;
 };
 

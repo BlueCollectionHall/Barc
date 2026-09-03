@@ -300,7 +300,11 @@ const uploadWorkForm = async () => {
       data: formData,
     })
     const data: ResponseImpl = response.data;
-    successMessage(data.msg);
+    if (data.code === 0) {
+      successMessage("作品已提交，正在等待审核");
+    } else {
+      infoMessage(data.msg);
+    }
   } catch {
     errorMessage("网络错误！")
   }
@@ -383,6 +387,13 @@ const uploadWorkForm = async () => {
               <el-radio :value="true">自创</el-radio>
               <el-radio :value="false">收录</el-radio>
             </el-radio-group>
+          </el-form-item>
+          <el-form-item label="通过后展示：" required>
+            <el-radio-group v-model="workForm.status">
+              <el-radio value="PUBLIC">公开展示</el-radio>
+              <el-radio value="PRIVATE">保持私有</el-radio>
+            </el-radio-group>
+            <div class="review_hint">无论选择哪种方式，新作品都会先进入审核，审核通过后才按这里的设置生效。</div>
           </el-form-item>
           <el-form-item label="作品作者：" v-if="!workForm.is_claim" required>
             <el-input v-model="workForm.author_nickname" placeholder="请输入该作品的作者在其他主流平台的昵称"/>
@@ -502,6 +513,12 @@ const uploadWorkForm = async () => {
 .box {
   box-shadow: 0 0 0.1rem 0.1rem rgb(0 0 0 / 10%);
   padding: 1rem;
+}
+.review_hint {
+  width: 100%;
+  color: #787878;
+  font-size: .82rem;
+  line-height: 1.5;
 }
 .cover_image_box {
   position: relative;

@@ -4,12 +4,14 @@ import { baseHttp } from "@/utils/https.ts";
 import {
   buildWorkAppealFeedback,
   getManageWorkSecondaryAction,
+  resubmitRejectedWork,
   shouldShowWorkAppealEmailInput,
   updateOwnerWorkVisibility,
 } from "@/utils/manageWorkStatusActions.ts";
 
 vi.mock("@/utils/https.ts", () => ({
   baseHttp: {
+    post: vi.fn(),
     put: vi.fn(),
   },
 }));
@@ -96,5 +98,34 @@ describe("owner work visibility api", () => {
   it("rejects OFF/BAN self-restore attempts from owner buttons", async () => {
     await expect(updateOwnerWorkVisibility("work-1", "OFF", "raw.jwt.token")).rejects.toThrow("只允许切换公开/私有状态");
     expect(baseHttp.put).not.toHaveBeenCalled();
+  });
+});
+
+describe("rejected work resubmit api", () => {
+  beforeEach(() => {
+    vi.mocked(baseHttp.post).mockReset();
+  });
+
+  it("submits the rejected work through the owner-only review endpoint", async () => {
+    vi.mocked(baseHttp.post).mockResolvedValueOnce({
+      data: {code: 0, msg: "ok", data: "修改成功"},
+    });
+
+    await resubmitRejectedWork("work-1", "raw.jwt.token");
+
+    expect(baseHttp.post).toHaveBeenCalledWith(
+      "/api/work/review/resubmit",
+      {work_id: "work-1"},
+      {headers: {Authorization: "raw.jwt.token"}},
+    );
+  });
+
+  it("surfaces the backend state error when the work is no longer rejected", async () => {
+    vi.mocked(baseHttp.post).mockResolvedValueOnce({
+      data: {code: 1, msg: "失败：Error", data: "只有审核未通过的作品可以再次提审"},
+    });
+
+    await expect(resubmitRejectedWork("work-1", "raw.jwt.token"))
+      .rejects.toThrow("只有审核未通过的作品可以再次提审");
   });
 });

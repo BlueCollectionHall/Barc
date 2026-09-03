@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miaoyu.barc.annotation.IgnoreAuth;
 import com.miaoyu.barc.annotation.SuchWorkAnno;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.api.work.service.WorkService;
 import com.miaoyu.barc.utils.J;
@@ -109,13 +110,14 @@ public class WorkController {
     @GetMapping("/works_by_me")
     public ResponseEntity<J> getWorksByMeControl(
             HttpServletRequest request,
-            @RequestParam("status") WorkStatusEnum statusEnum,
+            @RequestParam(value = "status", required = false) WorkStatusEnum statusEnum,
+            @RequestParam(value = "review_status", required = false) WorkReviewStatusEnum reviewStatus,
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "school", required = false) String school,
             @RequestParam(value = "club", required = false) String club,
             @RequestParam(value = "student", required = false) String student
     ) {
-        return workService.getWorksByMeService(request.getAttribute("uuid").toString(), statusEnum, buildOwnerListFilters(keyword, school, club, student));
+        return workService.getWorksByMeService(request.getAttribute("uuid").toString(), statusEnum, reviewStatus, buildOwnerListFilters(keyword, school, club, student));
     }
     /**根据已知UUID获取符合发布者条件的work实体
      * @param uuid uuid
@@ -192,6 +194,17 @@ public class WorkController {
             @RequestBody WorkModel requestModel
     ) {
         return workService.updateOwnerWorkContent(request.getAttribute("uuid").toString(), requestModel);
+    }
+
+    /** 审核未通过的作品由作者修改完成后显式再次提审。 */
+    @PostMapping("/review/resubmit")
+    public ResponseEntity<J> resubmitRejectedWorkControl(
+            HttpServletRequest request,
+            @RequestBody Map<String, String> body
+    ) {
+        return workService.resubmitRejectedWork(
+                request.getAttribute("uuid").toString(),
+                body.get("work_id"));
     }
 
     /**

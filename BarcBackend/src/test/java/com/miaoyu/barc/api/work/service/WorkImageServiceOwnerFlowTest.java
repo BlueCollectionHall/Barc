@@ -35,6 +35,8 @@ class WorkImageServiceOwnerFlowTest {
     private WorkMapper workMapper;
     @Mock
     private CosService cosService;
+    @Mock
+    private WorkService workService;
 
     @InjectMocks
     private WorkImageService workImageService;
@@ -60,6 +62,7 @@ class WorkImageServiceOwnerFlowTest {
                 "work-1".equals(image.getWork_id())
                         && image.getSort() == 4
                         && "content/new.png".equals(image.getObject_key())));
+        verify(workService).submitForReview("work-1");
     }
 
     @Test

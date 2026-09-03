@@ -27,7 +27,21 @@
           <span class="stat"><el-icon><View /></el-icon> {{ detail.work.view_count }}</span>
           <span class="stat">❤ {{ detail.work.like_count }}</span>
           <WorkStatusBadge :status="detail.work.status" />
+          <el-tag
+            v-if="detail.work.review_status"
+            :type="detail.work.review_status === 'APPROVED' ? 'success' : detail.work.review_status === 'REJECTED' ? 'danger' : 'warning'"
+            size="small"
+          >
+            {{ reviewLabel(detail.work.review_status) }}
+          </el-tag>
         </div>
+        <el-alert
+          v-if="detail.work.review_status === 'REJECTED'"
+          :title="'审核未通过：' + (detail.work.review_reason || '未填写原因')"
+          type="error"
+          :closable="false"
+          show-icon
+        />
         <div class="chain">
           <el-tag v-if="detail.school_name" size="small" type="info">{{ detail.school_name }}</el-tag>
           <span v-if="detail.school_name && detail.club_name" style="color:#999">→</span>
@@ -82,6 +96,15 @@ const tab = ref<'content' | 'images'>('content')
 // 内容更新时间优先使用业务字段；旧数据未回填时退回创建时间，行更新时间仍由“记录更新”单独展示。
 function getContentUpdatedAt(work: WorkRecord): string {
   return work.content_updated_at || work.created_at
+}
+
+function reviewLabel(status: string): string {
+  const labels: Record<string, string> = {
+    PENDING: '审核中',
+    APPROVED: '审核通过',
+    REJECTED: '审核未通过',
+  }
+  return labels[status] || status
 }
 
 onMounted(async () => {

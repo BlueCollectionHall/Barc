@@ -69,3 +69,14 @@ export const updateOwnerWorkVisibility = async (
   const data: ResponseImpl = response.data;
   if (data.code !== 0) throw new Error(data.msg || "状态更新失败");
 };
+
+/** 审核未通过作品由所有者确认修改完成后显式再次提审。 */
+export const resubmitRejectedWork = async (workId: string, token: string): Promise<void> => {
+  const response = await baseHttp.post(
+    "/api/work/review/resubmit",
+    {work_id: workId},
+    {headers: {Authorization: token}},
+  );
+  const data: ResponseImpl = response.data;
+  if (data.code !== 0) throw new Error(data.data || data.msg || "再次提审失败");
+};

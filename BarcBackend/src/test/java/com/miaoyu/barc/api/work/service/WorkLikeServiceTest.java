@@ -1,6 +1,7 @@
 package com.miaoyu.barc.api.work.service;
 
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkLikeMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
 import com.miaoyu.barc.api.work.model.WorkLikeModel;
@@ -52,6 +53,7 @@ class WorkLikeServiceTest {
         work.setId("work-1");
         work.setLike_count(10);
         work.setStatus(WorkStatusEnum.PUBLIC);
+        work.setReview_status(WorkReviewStatusEnum.APPROVED);
 
         existingLike = new WorkLikeModel();
         existingLike.setId("like-1");

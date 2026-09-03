@@ -291,6 +291,7 @@ const saveAll = async () => {
     return;
   }
   saving.value = true;
+  const wasRejected = workForm.value.review_status === "REJECTED";
   try {
     // 保存顺序按接口边界拆开：文字 -> 封面 -> 旧图删除 -> 新图追加，失败时不继续误提交后续图片操作。
     if (dirtyState.value.text) await saveText();
@@ -298,7 +299,9 @@ const saveAll = async () => {
     if (dirtyState.value.galleryDeletions) await saveGalleryDeletions();
     if (dirtyState.value.galleryAdditions) await saveGalleryAdditions();
     await fetchEditDetail();
-    successMessage("作品修改已保存");
+    successMessage(wasRejected
+      ? "作品修改已保存，请返回“审核未通过”列表点击再次提审"
+      : "作品修改已保存，并已重新提交审核");
   } catch (e) {
     errorMessage(e instanceof Error ? e.message : "保存失败");
   } finally {
@@ -322,6 +325,9 @@ onMounted(async () => {
 
     <div v-if="loading" class="box loading_box">加载中…</div>
     <template v-else-if="workForm">
+      <div v-if="workForm.review_status === 'REJECTED'" class="rejected_edit_hint box">
+        当前作品审核未通过。你可以反复保存修改，确认完成后请返回“审核未通过”列表点击“再次提审”。
+      </div>
       <div class="cover_image_box">
         <QuestionCircleOutlined v-if="!hasDirty" class="cover_status_icon warning" />
         <CheckCircleOutlined v-else class="cover_status_icon success" />
@@ -461,6 +467,13 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.rejected_edit_hint {
+  margin-bottom: 1rem;
+  padding: .9rem 1.1rem;
+  color: #c73b62;
+  background: #fff5f8;
+  border: #ffd3de 1px solid;
+}
 .container {
   display: flex;
   flex-direction: column;

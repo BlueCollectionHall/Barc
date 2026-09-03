@@ -13,6 +13,11 @@ export interface WorkImpl {
   uploader: string | null;
   is_claim: boolean;
   status: string;
+  review_status?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  review_reason?: string | null;
+  reviewer_uuid?: string | null;
+  review_submitted_at?: Date | null;
+  reviewed_at?: Date | null;
   student: string;
   created_at: Date;
   content_updated_at?: Date | null;

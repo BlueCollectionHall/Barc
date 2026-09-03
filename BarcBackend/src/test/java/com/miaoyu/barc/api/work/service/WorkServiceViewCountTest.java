@@ -4,6 +4,7 @@ import com.miaoyu.barc.api.mapper.ClubMapper;
 import com.miaoyu.barc.api.mapper.SchoolMapper;
 import com.miaoyu.barc.api.mapper.StudentMapper;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkCategoryMapper;
 import com.miaoyu.barc.api.work.mapper.WorkCoverImageMapper;
 import com.miaoyu.barc.api.work.mapper.WorkImageMapper;
@@ -135,6 +136,7 @@ class WorkServiceViewCountTest {
         work.setId(workId);
         work.setTitle("Test work");
         work.setStatus(status);
+        work.setReview_status(WorkReviewStatusEnum.APPROVED);
         work.setLike_count(3);
         return work;
     }

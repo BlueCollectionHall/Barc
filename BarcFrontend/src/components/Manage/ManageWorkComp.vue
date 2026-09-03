@@ -2,11 +2,14 @@
 import {onMounted, ref} from "vue";
 import {
   AlertOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
   EditOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
   ExclamationCircleOutlined,
   HeartOutlined,
+  RedoOutlined,
   SearchOutlined,
 } from "@ant-design/icons-vue";
 import type {WorkImpl} from "@/interfaces/WorkImpl.ts";
@@ -19,11 +22,13 @@ import {timestampToCn} from "@/utils/TimeToCn.ts";
 import {useRouter} from "vue-router";
 import {
   type ManageWorkFilterState,
-  buildManageWorkFilterParams,
+  type OwnerWorkListSection,
+  buildOwnerWorkListParams,
 } from "@/utils/manageWorkEditHelpers.ts";
 import {
   buildWorkAppealFeedback,
   getManageWorkSecondaryAction,
+  resubmitRejectedWork,
   shouldShowWorkAppealEmailInput,
   updateOwnerWorkVisibility,
 } from "@/utils/manageWorkStatusActions.ts";
@@ -33,6 +38,14 @@ const router = useRouter();
 const {userArchive, userBasic} = storeToRefs(userPinia);
 const workList = ref<Array<WorkImpl>>([]);
 const menuStatus = ref<string>("PUBLIC");
+const sectionLabel = (section: string): string => ({
+  PUBLIC: "公开作品",
+  PRIVATE: "私有作品",
+  PENDING: "审核中",
+  REJECTED: "审核未通过",
+  OFF: "下架作品",
+  BAN: "封禁作品",
+}[section] || section);
 const filterState = ref<ManageWorkFilterState>({type: "keyword", value: ""});
 const actionPendingWorkId = ref<string | null>(null);
 const appealOpen = ref<boolean>(false);
@@ -45,8 +58,10 @@ const fetchWorkList = async (status: string) => {
   menuStatus.value = status;
   if (!userArchive.value?.uuid) return;
   try {
-    const response = await baseHttp("/api/work/works_by_uuid", {
-      params: buildManageWorkFilterParams(userArchive.value.uuid, status, filterState.value),
+    const params = buildOwnerWorkListParams(status as OwnerWorkListSection, filterState.value);
+    const response = await baseHttp("/api/work/works_by_me", {
+      params,
+      headers: {Authorization: window.localStorage.getItem("token") || ""},
     })
     const data: ResponseImpl = response.data;
     if (data.code === 0) {
@@ -98,6 +113,24 @@ const handleSecondaryAction = async (work: WorkImpl) => {
     await fetchWorkList(menuStatus.value);
   } catch (e) {
     errorMessage(e instanceof Error ? e.message : "状态更新失败");
+  } finally {
+    actionPendingWorkId.value = null;
+  }
+}
+
+const handleReviewResubmit = async (work: WorkImpl) => {
+  const token: string | null = window.localStorage.getItem("token");
+  if (!token) {
+    errorMessage("请先登录");
+    return;
+  }
+  actionPendingWorkId.value = work.id;
+  try {
+    await resubmitRejectedWork(work.id, token);
+    successMessage("已再次提交审核，请在“审核中”查看进度");
+    await fetchWorkList(menuStatus.value);
+  } catch (e) {
+    errorMessage(e instanceof Error ? e.message : "再次提审失败");
   } finally {
     actionPendingWorkId.value = null;
   }
@@ -181,6 +214,14 @@ onMounted(async () => {
           <el-icon><EyeInvisibleOutlined /></el-icon>
           <span>私有作品</span>
         </el-menu-item>
+        <el-menu-item index="PENDING" class="side_menu_item" @click="fetchWorkList('PENDING')">
+          <el-icon><ClockCircleOutlined /></el-icon>
+          <span>审核中</span>
+        </el-menu-item>
+        <el-menu-item index="REJECTED" class="side_menu_item" @click="fetchWorkList('REJECTED')">
+          <el-icon><CloseCircleOutlined /></el-icon>
+          <span>审核未通过</span>
+        </el-menu-item>
         <el-menu-item index="OFF" class="side_menu_item" @click="fetchWorkList('OFF')">
           <el-icon><ExclamationCircleOutlined /></el-icon>
           <span>下架作品</span>
@@ -193,7 +234,7 @@ onMounted(async () => {
     </el-aside>
     <el-main class="container box">
       <div class="search_bar">
-        <div class="search_hint">在“{{menuStatus}}”里找作品</div>
+        <div class="search_hint">在“{{sectionLabel(menuStatus)}}”里找作品</div>
         <el-select class="filter_select" v-model="filterState.type">
           <el-option label="关键词" value="keyword" />
           <el-option label="学园" value="school" />
@@ -213,10 +254,19 @@ onMounted(async () => {
         <div class="work_item" v-for="item in workList" :key="item.id">
           <div class="cover_image_box">
             <img class="cover_image" :src="item.cover_image" alt="cover_image"/>
+            <span
+              v-if="item.review_status && item.review_status !== 'APPROVED'"
+              class="review_badge"
+              :class="item.review_status.toLowerCase()">
+              {{item.review_status === 'PENDING' ? '审核中' : '审核未通过'}}
+            </span>
           </div>
           <div class="info">
             <span class="title">{{item.title}}</span>
             <span class="updated_at">{{timestampToCn(item.updated_at)}}</span>
+            <div v-if="item.review_status === 'REJECTED'" class="review_reason">
+              拒绝原因：{{item.review_reason || '管理员未填写原因'}}
+            </div>
             <div class="data_bar">
               <div class="view_count_box">
                 <EyeOutlined />&nbsp;{{item.view_count}}
@@ -228,6 +278,14 @@ onMounted(async () => {
           </div>
           <div class="button_box">
             <el-button class="button" type="primary" @click="editWork(item.id)"><EditOutlined />编辑</el-button>
+            <el-button
+              v-if="item.review_status === 'REJECTED'"
+              class="button"
+              type="primary"
+              :loading="actionPendingWorkId === item.id"
+              @click="handleReviewResubmit(item)">
+              <RedoOutlined />再次提审
+            </el-button>
             <el-button
               v-if="getManageWorkSecondaryAction(item.status)"
               class="button secondary_action_button"
@@ -303,13 +361,15 @@ onMounted(async () => {
 .work_item {
   padding: 2rem;
   display: grid;
-  grid-template-columns: 1fr 3fr 1fr;
+  grid-template-columns: 16rem minmax(0, 1fr) max-content;
+  column-gap: 1rem;
   border-bottom: #d1d1d1 1px solid;
 }
 .work_item:last-child {
   border-bottom: none;
 }
 .cover_image_box {
+  position: relative;
   overflow: hidden;
   width: calc(16 * 1rem);
   height: calc(9 * 1rem);
@@ -319,7 +379,36 @@ onMounted(async () => {
     border-radius: .5rem;
   }
 }
+.review_badge {
+  position: absolute;
+  top: .55rem;
+  right: .55rem;
+  padding: .28rem .7rem;
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 999px;
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 700;
+  box-shadow: 0 .3rem 1rem rgba(19, 46, 64, .18);
+  backdrop-filter: blur(8px);
+}
+.review_badge.pending {
+  background: rgba(0, 174, 236, .86);
+}
+.review_badge.rejected {
+  background: rgba(254, 75, 123, .9);
+}
+.review_reason {
+  max-width: 90%;
+  padding: .55rem .75rem;
+  border: 1px solid #ffd3de;
+  border-radius: .6rem;
+  color: #c73b62;
+  background: #fff5f8;
+  line-height: 1.45;
+}
 .info {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -336,12 +425,17 @@ onMounted(async () => {
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: .6rem;
-  flex-wrap: wrap;
+  justify-content: flex-end;
+  justify-self: end;
+  gap: .75rem;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
-.secondary_action_button {
-  border-radius: .5rem;
+.button_box > .button {
+  min-width: 6.5rem;
+  height: 2rem;
+  margin-left: 0;
+  border-radius: var(--el-border-radius-base);
 }
 .empty_box {
   display: flex;
