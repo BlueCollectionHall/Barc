@@ -24,8 +24,9 @@ public interface WorkLikeMapper {
             "w.author, w.author_nickname, w.uploader, w.is_claim, w.student, w.created_at, w.updated_at, w.content_updated_at " +
             "FROM work_like wl " +
             "JOIN work w ON wl.work_id = w.id " +
+            "JOIN work_review wr ON wr.work_id = w.id " +
             "JOIN user_basic ub ON wl.user_uuid = ub.uuid " +
-            "WHERE ub.username = #{username} AND w.status = #{status} " +
+            "WHERE ub.username = #{username} AND w.status = #{status} AND wr.status = 'APPROVED' " +
             "ORDER BY wl.created_at DESC " +
             "LIMIT #{offset}, #{page_size}")
     List<WorkModel> selectPublicLikedWorksByUsername(
@@ -36,8 +37,9 @@ public interface WorkLikeMapper {
 
     @Select("SELECT COUNT(*) FROM work_like wl " +
             "JOIN work w ON wl.work_id = w.id " +
+            "JOIN work_review wr ON wr.work_id = w.id " +
             "JOIN user_basic ub ON wl.user_uuid = ub.uuid " +
-            "WHERE ub.username = #{username} AND w.status = #{status}")
+            "WHERE ub.username = #{username} AND w.status = #{status} AND wr.status = 'APPROVED'")
     Long countPublicLikedWorksByUsername(
             @Param("username") String username,
             @Param("status") WorkStatusEnum status);

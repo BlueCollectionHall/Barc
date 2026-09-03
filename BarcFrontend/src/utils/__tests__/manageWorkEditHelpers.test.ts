@@ -3,6 +3,7 @@ import {describe, expect, it} from "vitest";
 import type {WorkImpl} from "@/interfaces/WorkImpl.ts";
 import {
   buildManageWorkFilterParams,
+  buildOwnerWorkListParams,
   createConfirmedCoverFile,
   createEditSnapshot,
   detectEditDirtyState,
@@ -42,6 +43,20 @@ describe("manage work filter params", () => {
       uuid: "uuid-1",
       status: "PRIVATE",
       school: "阿拜多斯",
+    });
+  });
+
+  it("builds a review-only query for pending works across visibility states", () => {
+    expect(buildOwnerWorkListParams("PENDING", {type: "keyword", value: "  白子  "})).toEqual({
+      review_status: "PENDING",
+      keyword: "白子",
+    });
+  });
+
+  it("locks approved visibility sections to both status dimensions", () => {
+    expect(buildOwnerWorkListParams("PRIVATE", {type: "school", value: ""})).toEqual({
+      status: "PRIVATE",
+      review_status: "APPROVED",
     });
   });
 });

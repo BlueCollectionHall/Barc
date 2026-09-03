@@ -4,6 +4,7 @@ import com.miaoyu.barc.api.mapper.ClubMapper;
 import com.miaoyu.barc.api.mapper.SchoolMapper;
 import com.miaoyu.barc.api.mapper.StudentMapper;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkCategoryMapper;
 import com.miaoyu.barc.api.work.mapper.WorkClaimMapper;
 import com.miaoyu.barc.api.work.mapper.WorkCoverImageMapper;
@@ -11,6 +12,7 @@ import com.miaoyu.barc.api.work.mapper.WorkImageMapper;
 import com.miaoyu.barc.api.work.mapper.WorkLikeMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
 import com.miaoyu.barc.api.work.mapper.WorkOperationLogMapper;
+import com.miaoyu.barc.api.work.mapper.WorkReviewMapper;
 import com.miaoyu.barc.api.work.model.WorkCoverImageModel;
 import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.email.utils.SendEmailUtils;
@@ -58,6 +60,7 @@ class WorkContentTimestampRoutingTest {
     @Mock private WorkLikeMapper workLikeMapper;
     @Mock private JwtService jwtService;
     @Mock private WorkViewService workViewService;
+    @Mock private WorkReviewMapper workReviewMapper;
 
     @Mock private WorkClaimMapper workClaimMapper;
     @Mock private WorkOperationLogMapper workOperationLogMapper;
@@ -168,6 +171,7 @@ class WorkContentTimestampRoutingTest {
         work.setAuthor("owner-1");
         work.setUploader("uploader-1");
         work.setStatus(status);
+        work.setReview_status(WorkReviewStatusEnum.APPROVED);
         return work;
     }
 

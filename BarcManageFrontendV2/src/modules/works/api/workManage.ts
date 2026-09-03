@@ -6,8 +6,13 @@ export interface WorkRecord {
   id: string; title: string; description: string
   content: string; banner_image: string; cover_image: string
   view_count: number; like_count: number
-  author: string; author_nickname: string; uploader: string
+  author: string; author_nickname: string | null; author_display?: string | null; uploader: string | null
   is_claim: boolean; status: string; student: string
+  review_status?: 'PENDING' | 'APPROVED' | 'REJECTED' | null
+  review_reason?: string | null
+  reviewer_uuid?: string | null
+  review_submitted_at?: string | null
+  reviewed_at?: string | null
   created_at: string; content_updated_at?: string | null; updated_at: string
 }
 
@@ -85,6 +90,27 @@ export function getClaimHistory(workId: string): Promise<ClaimRecord[]> {
 export function getComplaintsList(): Promise<ComplaintRecord[]> {
   return http.get<ComplaintRecord[]>('/feedback/feedbacks_by_type', {
     params: { type: 'WORK', is_manager: true },
+  })
+}
+
+export type WorkReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+/** 获取作品上传审核队列；后端使用 SEC_MAINTAINER 严格权限位鉴权。 */
+export function getWorkReviewList(
+  payload: PageRequest,
+  reviewStatus: WorkReviewStatus = 'PENDING',
+): Promise<PageResult<WorkRecord>> {
+  return http.post<PageResult<WorkRecord>>('/api/work/manage/reviews', payload, {
+    params: { review_status: reviewStatus },
+  })
+}
+
+/** 静默提交审核结论，拒绝时 reason 必填；该接口不会发送邮件。 */
+export function reviewWork(workId: string, approved: boolean, reason?: string): Promise<string> {
+  return http.post<string>('/api/work/manage/review', {
+    work_id: workId,
+    approved,
+    reason,
   })
 }
 

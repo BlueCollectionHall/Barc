@@ -100,4 +100,20 @@ describe('WorkDetailComp', () => {
     expect(wrapper.text()).toContain('上传：2026-06-01 10:00:00')
     expect(wrapper.text()).toContain('记录更新：2026-06-03 12:00:00')
   })
+
+  it('keeps temporary ownership, collector and external original author separate', async () => {
+    const detail = createDetail('2026-06-02 11:00:00')
+    detail.work.is_claim = false
+    detail.work.author = 'collection-assistant-uuid'
+    detail.work.author_nickname = 'guochouchou'
+    detail.author_display = '蔚蓝收录助手'
+    detail.uploader_nickname = '夜蛾笨蛋'
+
+    const wrapper = await mountDetail(detail)
+
+    expect(wrapper.text()).toContain('暂归属：蔚蓝收录助手')
+    expect(wrapper.text()).toContain('收录者：夜蛾笨蛋')
+    expect(wrapper.text()).toContain('原作者：guochouchou')
+    expect(wrapper.text()).not.toContain('暂归属：guochouchou')
+  })
 })

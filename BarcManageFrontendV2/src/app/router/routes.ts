@@ -14,6 +14,7 @@ const ClubListView = () => import('@/modules/school-club-student/views/ClubListV
 const StudentListView = () => import('@/modules/school-club-student/views/StudentListView.vue')
 const ForbiddenView = () => import('@/modules/system/views/ForbiddenView.vue')
 const WorksListView = () => import('@/modules/works/views/WorksListView.vue')
+const WorkReviewsView = () => import('@/modules/works/views/WorkReviewsView.vue')
 const WorkDetailView = () => import('@/modules/works/views/WorkDetailView.vue')
 const ClaimsListView = () => import('@/modules/works/views/ClaimsListView.vue')
 const ComplaintsListView = () => import('@/modules/works/views/ComplaintsListView.vue')
@@ -172,6 +173,23 @@ export const adminChildren: RouteRecordRaw[] = [
       requiresManager: true,
       minManagerPermission: 16,
       hiddenInMenu: true,
+    },
+  },
+  {
+    path: 'works/reviews',
+    name: 'works-reviews',
+    component: WorkReviewsView,
+    meta: {
+      title: '上传审核',
+      subtitle: '审核新上传和修改后的作品；处理结果静默记录，不发送电子邮件。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.SEC_MAINTAINER,
+      menuLabel: '上传审核',
+      menuGroup: 'works',
+      menuGroupLabel: '作品管理',
+      groupOrder: 40,
+      menuOrder: 5,
     },
   },
   {

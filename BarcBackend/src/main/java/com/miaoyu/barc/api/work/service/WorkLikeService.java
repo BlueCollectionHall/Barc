@@ -3,6 +3,7 @@ package com.miaoyu.barc.api.work.service;
 import com.miaoyu.barc.api.work.mapper.WorkLikeMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.model.WorkLikeModel;
 import com.miaoyu.barc.api.work.model.WorkLikeToggleDto;
 import com.miaoyu.barc.api.work.model.WorkModel;
@@ -134,7 +135,8 @@ public class WorkLikeService {
     }
 
     private boolean isLikeable(WorkModel work) {
-        return WorkStatusEnum.PUBLIC.equals(work.getStatus());
+        return WorkStatusEnum.PUBLIC.equals(work.getStatus())
+                && WorkReviewStatusEnum.APPROVED.equals(work.getReview_status());
     }
 
     private boolean isBlank(String value) {

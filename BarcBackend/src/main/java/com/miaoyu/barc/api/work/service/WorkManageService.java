@@ -10,11 +10,14 @@ import com.miaoyu.barc.api.model.SchoolClubModel;
 import com.miaoyu.barc.api.model.SchoolModel;
 import com.miaoyu.barc.api.model.StudentModel;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
+import com.miaoyu.barc.api.work.constant.WorkAttributionConst;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkClaimMapper;
 import com.miaoyu.barc.api.work.mapper.WorkCoverImageMapper;
 import com.miaoyu.barc.api.work.mapper.WorkImageMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
 import com.miaoyu.barc.api.work.mapper.WorkOperationLogMapper;
+import com.miaoyu.barc.api.work.mapper.WorkReviewMapper;
 import com.miaoyu.barc.api.work.model.WorkClaimListDto;
 import com.miaoyu.barc.api.work.model.WorkClaimModel;
 import com.miaoyu.barc.api.work.model.WorkCoverImageModel;
@@ -72,17 +75,19 @@ public class WorkManageService {
     public static final String OP_CLAIM_REVOKE = "CLAIM_REVOKE";
     public static final String OP_CLAIM_ASSIGN = "CLAIM_ASSIGN";
     public static final String OP_COMPLAINT_PROCESS = "COMPLAINT_PROCESS";
-
-    private static final String DEFAULT_AUTHOR_UUID = "707B0FBF6AAA35B788069B07AEFEA12B";
+    public static final String OP_REVIEW_APPROVE = "REVIEW_APPROVE";
+    public static final String OP_REVIEW_REJECT = "REVIEW_REJECT";
 
     @Autowired private WorkMapper workMapper;
     @Autowired private WorkClaimMapper workClaimMapper;
     @Autowired private WorkOperationLogMapper workOperationLogMapper;
+    @Autowired private WorkReviewMapper workReviewMapper;
     @Autowired private WorkFeedbackMapper workFeedbackMapper;
     @Autowired private UserBasicMapper userBasicMapper;
     @Autowired private UserArchiveMapper userArchiveMapper;
     @Autowired private SendEmailUtils sendEmailUtils;
     @Autowired private WorkService workService;
+    @Autowired private WorkAttributionService workAttributionService;
     @Autowired private WorkImageMapper workImageMapper;
     @Autowired private CosService cosService;
     @Autowired private WorkCoverImageMapper workCoverImageMapper;
@@ -121,6 +126,68 @@ public class WorkManageService {
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, work));
     }
 
+    // ==================== 上传审核 ====================
+
+    /**
+     * 获取上传审核队列。这里必须使用 SEC_MAINTAINER 权限位，不接受“数值更高”替代该位。
+     */
+    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
+            identity = UserIdentityEnum.MANAGER,
+            targetPermission = PermissionConst.SEC_MAINTAINER,
+            isHasElseUpper = true,
+            isSuchElseRequire = false)})
+    public ResponseEntity<J> getReviewList(String uuid, WorkReviewStatusEnum reviewStatus, PageRequestDto dto) {
+        PageInitPojo pageInit = new PageInitPojo(dto);
+        Map<String, Object> params = dto.getParams() != null ? dto.getParams() : new HashMap<>();
+        String keyword = params.get("keyword") != null ? params.get("keyword").toString().trim() : null;
+        WorkReviewStatusEnum safeStatus = reviewStatus == null ? WorkReviewStatusEnum.PENDING : reviewStatus;
+        List<WorkModel> works = workMapper.selectByPageForReview(
+                safeStatus, keyword, pageInit.getOffset(), pageInit.getPageSize());
+        Long total = workMapper.countByPageForReview(safeStatus, keyword);
+        if (!works.isEmpty()) workService.loopSignatureWorkCover(works);
+        int totalPage = (int) Math.ceil((double) total / pageInit.getPageSize());
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true,
+                new PageResultDto<>(total, works, pageInit.getPageNum(), pageInit.getPageSize(),
+                        totalPage == 0 ? 1 : totalPage)));
+    }
+
+    /**
+     * 静默记录审核结论：不调用邮件组件，仅更新审核记录并写入作品操作日志。
+     */
+    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
+            identity = UserIdentityEnum.MANAGER,
+            targetPermission = PermissionConst.SEC_MAINTAINER,
+            isHasElseUpper = true,
+            isSuchElseRequire = false)})
+    @Transactional
+    public ResponseEntity<J> reviewWork(String uuid, String workId, boolean approved, String reason) {
+        WorkModel work = workMapper.selectById(workId);
+        if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        if (work.getReview_status() != WorkReviewStatusEnum.PENDING) {
+            return ResponseEntity.ok(new ErrorR().normal("只能处理审核中的作品"));
+        }
+
+        String normalizedReason = reason == null ? "" : reason.trim();
+        if (!approved && normalizedReason.isEmpty()) {
+            return ResponseEntity.ok(new ErrorR().normal("拒绝作品时必须填写原因"));
+        }
+        if (normalizedReason.length() > 500) {
+            return ResponseEntity.ok(new ErrorR().normal("审核原因不能超过500字"));
+        }
+
+        WorkReviewStatusEnum result = approved
+                ? WorkReviewStatusEnum.APPROVED
+                : WorkReviewStatusEnum.REJECTED;
+        String storedReason = approved ? null : normalizedReason;
+        if (!workReviewMapper.review(workId, result, storedReason, uuid)) {
+            return ResponseEntity.ok(new ErrorR().normal("审核状态已变化，请刷新后重试"));
+        }
+
+        recordLog(workId, uuid, approved ? OP_REVIEW_APPROVE : OP_REVIEW_REJECT,
+                Map.of("result", result.name(), "reason", normalizedReason));
+        return ResponseEntity.ok(new ChangeR().udu(true, 3));
+    }
+
     /** 获取作品编辑详情（含封面/内容图签名、作者/收录者信息、学园/部团/学生名） */
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
     public ResponseEntity<J> getWorkEditDetail(String uuid, String workId) {
@@ -157,20 +224,11 @@ public class WorkManageService {
         }
 
         // 3. 收录者昵称
-        String uploaderNickname = "";
-        if (work.getUploader() != null) {
-            UserArchiveModel u = userArchiveMapper.selectByUuid(work.getUploader());
-            if (u != null) uploaderNickname = u.getNickname();
-        }
+        String uploaderNickname = workAttributionService.resolveUploaderNickname(work);
 
         // 4. 归属者显示
-        String authorDisplay;
-        if (Boolean.TRUE.equals(work.getIs_claim())) {
-            UserArchiveModel a = userArchiveMapper.selectByUuid(work.getAuthor());
-            authorDisplay = a != null ? a.getNickname() : "未知用户";
-        } else {
-            authorDisplay = work.getAuthor_nickname() != null ? work.getAuthor_nickname() : "";
-        }
+        // author 是平台内当前归属；author_nickname 只是站外原作者署名，不能用于“暂归属”。
+        String authorDisplay = workAttributionService.resolvePlatformOwnerNickname(work);
 
         // 5. 学园/部团/学生名
         String schoolName = "", clubName = "", studentName = "";
@@ -317,7 +375,7 @@ public class WorkManageService {
         if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         if (!work.getIs_claim()) return ResponseEntity.ok(new ErrorR().normal("该作品未被认领"));
         work.setIs_claim(false);
-        work.setAuthor(DEFAULT_AUTHOR_UUID);
+        work.setAuthor(WorkAttributionConst.COLLECTION_ASSISTANT_UUID);
         workMapper.update(work);
         recordLog(workId, uuid, OP_CLAIM_REVOKE, Map.of("remark", "管理员撤销认领"));
         return ResponseEntity.ok(new ChangeR().udu(true, 3));

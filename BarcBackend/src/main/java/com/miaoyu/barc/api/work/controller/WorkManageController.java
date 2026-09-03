@@ -1,6 +1,7 @@
 package com.miaoyu.barc.api.work.controller;
 
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.api.work.service.WorkManageService;
 import com.miaoyu.barc.response.ResourceR;
@@ -37,6 +38,25 @@ public class WorkManageController {
     @GetMapping("/detail")
     public ResponseEntity<J> getWorkDetailManage(HttpServletRequest r, @RequestParam("work_id") String workId) {
         return workManageService.getWorkDetailForManage(uuid(r), workId);
+    }
+
+    /** 上传审核列表，可在待审/通过/驳回之间切换回看。 */
+    @PostMapping("/reviews")
+    public ResponseEntity<J> getReviewList(
+            HttpServletRequest r,
+            @RequestParam(value = "review_status", defaultValue = "PENDING") WorkReviewStatusEnum reviewStatus,
+            @RequestBody PageRequestDto dto) {
+        return workManageService.getReviewList(uuid(r), reviewStatus, dto);
+    }
+
+    /** 静默审核作品；拒绝时 reason 必填，处理结果不会触发邮件。 */
+    @PostMapping("/review")
+    public ResponseEntity<J> reviewWork(HttpServletRequest r, @RequestBody Map<String, Object> body) {
+        return workManageService.reviewWork(
+                uuid(r),
+                body.get("work_id").toString(),
+                Boolean.parseBoolean(body.get("approved").toString()),
+                body.get("reason") != null ? body.get("reason").toString() : null);
     }
 
     /** 获取作品编辑详情（含封面/内容图签名URL、作者/收录者信息、学园/部团/学生名） */

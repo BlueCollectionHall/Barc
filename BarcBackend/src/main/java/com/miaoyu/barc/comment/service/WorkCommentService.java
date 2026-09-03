@@ -2,6 +2,10 @@ package com.miaoyu.barc.comment.service;
 
 import com.miaoyu.barc.annotation.RequireSelfOrPermissionAnno;
 import com.miaoyu.barc.comment.mapper.WorkCommentMapper;
+import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
+import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
+import com.miaoyu.barc.api.work.mapper.WorkMapper;
+import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.comment.mapper.WorkCommentReplyMapper;
 import com.miaoyu.barc.comment.model.WorkCommentModel;
 import com.miaoyu.barc.comment.model.WorkCommentReplyModel;
@@ -9,6 +13,7 @@ import com.miaoyu.barc.comment.pojo.WorkCommentPojo;
 import com.miaoyu.barc.permission.PermissionConst;
 import com.miaoyu.barc.response.ChangeR;
 import com.miaoyu.barc.response.ResourceR;
+import com.miaoyu.barc.response.ErrorR;
 import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
 import com.miaoyu.barc.utils.GenerateUUID;
@@ -29,6 +34,8 @@ public class WorkCommentService {
     private WorkCommentReplyMapper workCommentReplyMapper;
     @Autowired
     private UserArchiveMapper userArchiveMapper;
+    @Autowired
+    private WorkMapper workMapper;
 
     public ResponseEntity<J> getCommentsByWorkService(String workId) {
         List<WorkCommentModel> commentModels = workCommentMapper.selectByWorkId(workId);
@@ -56,6 +63,11 @@ public class WorkCommentService {
     public ResponseEntity<J> uploadCommentAndReplyService(String type, String uuid, WorkCommentModel commentModel, WorkCommentReplyModel replyModel) {
         switch (type) {
             case "comment": {
+                WorkModel work = workMapper.selectById(commentModel.getWork_id());
+                if (work == null || work.getStatus() != WorkStatusEnum.PUBLIC
+                        || work.getReview_status() != WorkReviewStatusEnum.APPROVED) {
+                    return ResponseEntity.ok(new ErrorR().normal("作品不可评论"));
+                }
                 commentModel.setAuthor(uuid);
                 commentModel.setId(new GenerateUUID().getUuid36l());
                 boolean insert = workCommentMapper.insert(commentModel);

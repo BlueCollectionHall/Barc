@@ -6,6 +6,8 @@
         <where>
             <!-- 必要筛选作品状态 -->
             w.status = #{status}
+            <!-- 公开查询必须在 SQL 层锁定审核通过，避免调用方通过参数绕过审核门禁。 -->
+            AND wr.status = 'APPROVED'
             <!-- 确保condition存在 -->
             <if test="condition != null">
                 <!-- 筛选keyword（标题、描述、学生名、学园名、部团名） -->
@@ -125,8 +127,14 @@
             w.status,
             w.student,
             w.updated_at,
-            w.content_updated_at
+            w.content_updated_at,
+            wr.status AS review_status,
+            wr.rejection_reason AS review_reason,
+            wr.reviewer_uuid,
+            wr.submitted_at AS review_submitted_at,
+            wr.reviewed_at
         FROM work w
+        JOIN work_review wr ON wr.work_id = w.id
         <include refid="whereConditions"/>
         <!-- 公开列表新鲜度按内容更新时间排序；历史空值回退到创建时间，避免浏览/点赞刷新排序。 -->
         ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC
@@ -136,24 +144,84 @@
     <select id="countByPage" resultType="long">
         SELECT COUNT(*)
         FROM work w
+        JOIN work_review wr ON wr.work_id = w.id
         <include refid="whereConditions"/>
     </select>
-    <!-- 作者当前状态列表筛选：author_uuid由服务层强制写入，其他字段复用公共检索语义 -->
+    <!-- 作者内容管理筛选：允许本人查看待审/驳回记录，但作者 UUID 仍由服务端强制传入。 -->
     <select id="selectByUuidWithFilters" resultType="com.miaoyu.barc.api.work.model.entity.WorkEntity">
-        SELECT w.*
+        SELECT
+            w.*,
+            wr.status AS review_status,
+            wr.rejection_reason AS review_reason,
+            wr.reviewer_uuid,
+            wr.submitted_at AS review_submitted_at,
+            wr.reviewed_at
         FROM work w
-        <include refid="whereConditions"/>
+        JOIN work_review wr ON wr.work_id = w.id
+        <where>
+            (w.author = #{uuid} OR w.uploader = #{uuid})
+            <if test="status != null">
+                AND w.status = #{status}
+            </if>
+            <if test="review_status != null">
+                AND wr.status = #{review_status}
+            </if>
+            <if test="condition != null">
+                <if test="condition.keyword != null and condition.keyword != ''">
+                    AND (w.title LIKE CONCAT('%', #{condition.keyword}, '%')
+                        OR w.description LIKE CONCAT('%', #{condition.keyword}, '%'))
+                </if>
+                <if test="condition.student != null and condition.student != ''">
+                    AND w.student IN (
+                        SELECT s.id FROM student s
+                        WHERE s.cn_name LIKE CONCAT('%', #{condition.student}, '%')
+                        OR s.jp_name LIKE CONCAT('%', #{condition.student}, '%')
+                        OR s.kr_name LIKE CONCAT('%', #{condition.student}, '%')
+                        OR s.en_name LIKE CONCAT('%', #{condition.student}, '%')
+                    )
+                </if>
+                <if test="condition.school != null and condition.school != ''">
+                    AND w.student IN (
+                        SELECT s.id FROM student s JOIN school sc ON s.school = sc.id
+                        WHERE sc.cn_name LIKE CONCAT('%', #{condition.school}, '%')
+                    )
+                </if>
+                <if test="condition.club != null and condition.club != ''">
+                    AND w.student IN (
+                        SELECT s.id FROM student s JOIN club c ON s.club = c.id
+                        WHERE c.cn_name LIKE CONCAT('%', #{condition.club}, '%')
+                    )
+                </if>
+            </if>
+        </where>
         <!-- 作者列表沿用公开新鲜度口径；历史空值回退创建时间，避免非内容变更刷新排序。 -->
+        ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC
+    </select>
+    <!-- 对外作者列表沿用公共审核门禁，并保留账户页的搜索能力。 -->
+    <select id="selectPublicByUuidWithFilters" resultType="com.miaoyu.barc.api.work.model.entity.WorkEntity">
+        SELECT
+            w.*,
+            wr.status AS review_status,
+            wr.rejection_reason AS review_reason,
+            wr.reviewer_uuid,
+            wr.submitted_at AS review_submitted_at,
+            wr.reviewed_at
+        FROM work w
+        JOIN work_review wr ON wr.work_id = w.id
+        <include refid="whereConditions"/>
         ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC
     </select>
     <!-- 分类以及分页条件筛选片段SQL -->
     <sql id="whereConditionOnCategory">
         JOIN work_category wc
         ON w.id = wc.work_id
+        JOIN work_review wr
+        ON wr.work_id = w.id
         <where>
             wc.category_id = #{category_id}
             <!-- 必要筛选作品状态 -->
             AND w.status = #{status}
+            AND wr.status = 'APPROVED'
             <if test="condition.keyword != null and condition.keyword != ''">
                 AND (
                     <!-- 筛选keyword -->
@@ -212,7 +280,12 @@
         w.status,
         w.student,
         w.updated_at,
-        w.content_updated_at
+        w.content_updated_at,
+        wr.status AS review_status,
+        wr.rejection_reason AS review_reason,
+        wr.reviewer_uuid,
+        wr.submitted_at AS review_submitted_at,
+        wr.reviewed_at
         FROM work w
         <include refid="whereConditionOnCategory"/>
         <!-- 分类公开列表新鲜度按内容更新时间排序；历史空值回退到创建时间，避免浏览/点赞刷新排序。 -->
@@ -230,8 +303,16 @@
 
     <!-- 管理端分页查询作品（含所有状态） -->
     <select id="selectByPageForManage" resultType="com.miaoyu.barc.api.work.model.WorkModel">
-        SELECT w.*
+        SELECT w.*,
+               wr.status AS review_status,
+               wr.rejection_reason AS review_reason,
+               wr.reviewer_uuid,
+               wr.submitted_at AS review_submitted_at,
+               wr.reviewed_at,
+               COALESCE(NULLIF(author_archive.nickname, ''), w.author) AS author_display
         FROM work w
+        LEFT JOIN work_review wr ON wr.work_id = w.id
+        LEFT JOIN user_archive author_archive ON author_archive.uuid = w.author
         <where>
             <if test="status != null and status != ''">
                 AND w.status = #{status}
@@ -239,7 +320,8 @@
             <if test="keyword != null and keyword != ''">
                 AND (w.id LIKE CONCAT('%', #{keyword}, '%')
                      OR w.title LIKE CONCAT('%', #{keyword}, '%')
-                     OR w.author_nickname LIKE CONCAT('%', #{keyword}, '%'))
+                     OR (w.is_claim = 1 AND author_archive.nickname LIKE CONCAT('%', #{keyword}, '%'))
+                     OR (w.is_claim = 0 AND w.author_nickname LIKE CONCAT('%', #{keyword}, '%')))
             </if>
         </where>
         <choose>
@@ -253,10 +335,52 @@
         LIMIT #{offset}, #{limit}
     </select>
 
+    <!-- 管理端上传审核队列；可按审核状态回看历史处理结果。 -->
+    <select id="selectByPageForReview" resultType="com.miaoyu.barc.api.work.model.WorkModel">
+        SELECT w.*,
+               wr.status AS review_status,
+               wr.rejection_reason AS review_reason,
+               wr.reviewer_uuid,
+               wr.submitted_at AS review_submitted_at,
+               wr.reviewed_at,
+               COALESCE(NULLIF(author_archive.nickname, ''), w.author) AS author_display
+        FROM work w
+        JOIN work_review wr ON wr.work_id = w.id
+        LEFT JOIN user_archive author_archive ON author_archive.uuid = w.author
+        <where>
+            wr.status = #{review_status}
+            <if test="keyword != null and keyword != ''">
+                AND (w.id LIKE CONCAT('%', #{keyword}, '%')
+                     OR w.title LIKE CONCAT('%', #{keyword}, '%')
+                     OR (w.is_claim = 1 AND author_archive.nickname LIKE CONCAT('%', #{keyword}, '%'))
+                     OR (w.is_claim = 0 AND w.author_nickname LIKE CONCAT('%', #{keyword}, '%')))
+            </if>
+        </where>
+        ORDER BY wr.submitted_at ASC, w.created_at ASC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByPageForReview" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM work w
+        JOIN work_review wr ON wr.work_id = w.id
+        LEFT JOIN user_archive author_archive ON author_archive.uuid = w.author
+        <where>
+            wr.status = #{review_status}
+            <if test="keyword != null and keyword != ''">
+                AND (w.id LIKE CONCAT('%', #{keyword}, '%')
+                     OR w.title LIKE CONCAT('%', #{keyword}, '%')
+                     OR (w.is_claim = 1 AND author_archive.nickname LIKE CONCAT('%', #{keyword}, '%'))
+                     OR (w.is_claim = 0 AND w.author_nickname LIKE CONCAT('%', #{keyword}, '%')))
+            </if>
+        </where>
+    </select>
+
     <!-- 管理端统计作品总数 -->
     <select id="countByPageForManage" resultType="java.lang.Long">
         SELECT COUNT(*)
         FROM work w
+        LEFT JOIN user_archive author_archive ON author_archive.uuid = w.author
         <where>
             <if test="status != null and status != ''">
                 AND w.status = #{status}
@@ -264,7 +388,8 @@
             <if test="keyword != null and keyword != ''">
                 AND (w.id LIKE CONCAT('%', #{keyword}, '%')
                      OR w.title LIKE CONCAT('%', #{keyword}, '%')
-                     OR w.author_nickname LIKE CONCAT('%', #{keyword}, '%'))
+                     OR (w.is_claim = 1 AND author_archive.nickname LIKE CONCAT('%', #{keyword}, '%'))
+                     OR (w.is_claim = 0 AND w.author_nickname LIKE CONCAT('%', #{keyword}, '%')))
             </if>
         </where>
     </select>
