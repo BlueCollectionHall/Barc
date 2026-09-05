@@ -500,7 +500,82 @@ fix(作品): 修复作品列表显示问题
 
 ---
 
-## 十八、附录
+## 十八、权限鉴权规范（宪法级定义）
+
+> 本章统一定义本项目的权限鉴权模式。所有 Agent 在实现、修改涉及权限控制的接口前，必须先阅读本章并确认目标功能所需的鉴权模式，避免误用。
+
+### 18.1 权限管理位置
+
+- 项目权限管理统一位于后端 `com.miaoyu.barc.permission` 包：
+  - `PermissionConst`：定义所有权限常量（各身份的权限位）。
+  - `ComparePermission`：提供两种鉴权方式的判定方法 `compare`（比大小）与 `has`（1匹配）。
+- AOP 鉴权实现位于 `com.miaoyu.barc.aspect` 包，通过注解驱动：
+  - `@RequireUserAndPermissionAnno`（切面 `RequireUserAndPermissionAspect`）：校验用户身份与权限。
+  - `@RequireSelfOrPermissionAnno`（切面 `RequireSelfOrPermissionAspect`）：校验用户为"本人"或具备权限。
+- 两种鉴权方式由注解字段 `isHasElseUpper` 切换，**本项目统一命名如下**：
+
+| `isHasElseUpper` | 鉴权模式名词 | 判定方法 | 代码位置 |
+|---|---|---|---|
+| `false`（默认） | **比大小** | `comparePermission.compare(your, target)` | `ComparePermission.compare()` |
+| `true` | **1匹配** | `comparePermission.has(your, target)` | `ComparePermission.has()` |
+
+**AOP 统一鉴权流程：**
+
+1. 通过 `uuidIndex` 从方法形参中取出被校验用户的 uuid，查询 `UserArchiveModel`；
+2. 校验身份匹配（`userArchive.getIdentity() == check.identity()`），身份不匹配直接拒绝；
+3. 身份匹配后，依据 `isHasElseUpper` 选择「比大小」或「1匹配」判定权限，不通过时返回 `insufficientAccountPermission`。
+
+**注解常用字段说明：**
+
+| 字段 | 含义 |
+|---|---|
+| `uuidIndex` | 需要校验的 uuid 实参在方法形参中的索引位置 |
+| `authorUuidIndex` | 作者 uuid 实参索引（仅 `@RequireSelfOrPermissionAnno`） |
+| `identity` | 要求匹配的身份（`UserIdentityEnum`） |
+| `targetPermission` | 目标权限常量（`PermissionConst` 中的值） |
+| `isSuchElseRequire` | `true`：仅校验用户存在性，不校验身份权限（直接放行）；`false`：执行完整身份+权限校验 |
+| `isHasElseUpper` | `true`：1匹配；`false`：比大小（默认） |
+
+### 18.2 鉴权模式名词定义
+
+**①「比大小」**
+
+- **定义**：将账号权限值与所需权限值按数值大小直接比较，**账号权限值 ≥ 所需权限值**（`your >= target`）即鉴权通过。
+- **适用场景**：权限严格按层级排列、数值越大权限越高的场景。例如 MANAGER 身份中 `ADMINISTRATOR`（16，副馆长）与 `ADVANCED_ADMINISTRATOR`（32，馆长）的判定。
+- **代码依据**：`ComparePermission.compare(int your, int target)` 返回 `your >= target`。
+
+**②「1匹配」**
+
+- **定义**：将账号权限值与所需权限值按二进制位比较，要求两者在**至少一个相同位上均为 1**（即按位与结果非 0，`(your & target) != 0`）即鉴权通过。
+- **适用场景**：账号权限可能同时持有多个权限位（按位或 `|` 组合，如 `FIR_MAINTAINER | SEC_MAINTAINER`）时，校验其是否持有"所需角色位中的任意一个"。例如管理端处理举报类接口。
+- **⚠️ 注意**：「1匹配」的判定是"至少存在一个公共位为 1"（`!= 0`），**不是**"账号权限完全包含所需权限"（后者的判定为 `(your & target) == target`）。新增或修改权限判定时必须确认所需语义，防止误判。
+- **代码依据**：`ComparePermission.has(int your, int target)` 返回 `(your & target) != 0`。
+
+### 18.3 权限常量说明
+
+`PermissionConst` 中的权限均为二进制单一位（2 的幂）：
+
+| 身份 | 常量 | 值 | 二进制 | 角色 |
+|------|------|----|--------|------|
+| USER | `USER` | 1 | 0000 0001 | 会员 |
+| USER | `UPPER` | 2 | 0000 0010 | 收录员 |
+| USER | `CREATOR` | 4 | 0000 0100 | 创作者 |
+| MANAGER | `DISCIPLINARY_COMMITTEE` | 1 | 0000 0001 | 风纪委员 |
+| MANAGER | `FIR_MAINTAINER` | 2 | 0000 0010 | 一级管理员 |
+| MANAGER | `SEC_MAINTAINER` | 4 | 0000 0100 | 二级管理员 |
+| MANAGER | `THI_MAINTAINER` | 8 | 0000 1000 | 三级管理员 |
+| MANAGER | `ADMINISTRATOR` | 16 | 0001 0000 | 副馆长 |
+| MANAGER | `ADVANCED_ADMINISTRATOR` | 32 | 0010 0000 | 馆长 |
+
+### 18.4 使用示例（取自项目现有代码）
+
+- **比大小示例**：`UserBanController` 的封号 / 解封 / 查询接口使用 `isHasElseUpper = false` 且 `targetPermission = PermissionConst.ADMINISTRATOR`，即要求操作者权限 ≥ 副馆长。
+- **1匹配示例**：`UserManageService` 使用 `isHasElseUpper = true` 且 `targetPermission = PermissionConst.THI_MAINTAINER`；`WorkManageService` 大量接口使用 `isHasElseUpper = true` 且 `targetPermission = PermissionConst.SEC_MAINTAINER`，即要求账号持有对应角色位。
+- **组合判定示例**：`FeedbackService` 在代码内组合两种方式，如 `comparePermission.has(permission, PermissionConst.FIR_MAINTAINER) || comparePermission.compare(permission, PermissionConst.ADMINISTRATOR)`：持有对应角色位（1匹配）或权限达到副馆长及以上（比大小）即可处理该类举报。
+
+---
+
+## 十九、附录
 
 ### 相关文档
 
@@ -510,6 +585,6 @@ fix(作品): 修复作品列表显示问题
 
 ---
 
-**最后更新：** 2026-05-28
+**最后更新：** 2026-09-05
 
 **维护者：** 项目团队
