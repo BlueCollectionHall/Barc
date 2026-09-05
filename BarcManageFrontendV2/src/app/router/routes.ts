@@ -22,6 +22,7 @@ const CommentComplaintsView = () => import('@/modules/works/views/CommentComplai
 const OperationLogView = () => import('@/modules/works/views/OperationLogView.vue')
 const MessagesListView = () => import('@/modules/messages/views/MessagesListView.vue')
 const FeedbackManageListView = () => import('@/modules/feedback/views/FeedbackManageListView.vue')
+const BackgroundsListView = () => import('@/modules/backgrounds/views/BackgroundsListView.vue')
 
 export const adminChildren: RouteRecordRaw[] = [
   {
@@ -359,6 +360,23 @@ export const adminChildren: RouteRecordRaw[] = [
       groupOrder: 60,
       menuOrder: 80,
       feedbackType: 'OTHER',
+    },
+  },
+  {
+    path: 'system/backgrounds',
+    name: 'system-backgrounds',
+    component: BackgroundsListView,
+    meta: {
+      title: '背景图设置',
+      subtitle: '管理各页面展示的背景图，支持多图、排序与启用。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.ADVANCED_ADMINISTRATOR,
+      menuLabel: '背景图设置',
+      menuGroup: 'sysmanage',
+      menuGroupLabel: '系统管理',
+      groupOrder: 70,
+      menuOrder: 10,
     },
   },
   {

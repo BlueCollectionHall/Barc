@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import "@/style/Background.css";
-import {onMounted, ref} from "vue";
+import { onMounted, ref } from "vue";
+import { fetchModuleBackgrounds } from "@/utils/backgroundApi.ts";
 
 interface ImageNameImpl {
   day: Array<string>;
@@ -16,13 +17,14 @@ const imagesName: ImageNameImpl = {
 
 const newYearImagesName: Array<string> = ['newyear_1.jpg', 'newyear_2.jpg'];
 
+const baseUrl: string = "https://file.naigos.cn:52011/barctemp/"
+
 const imageName = ref<string | null>(null);
 const bg_box = ref<HTMLDivElement | null>(null);
 
-const selectImage = () => {
+const fallbackSelect = () => {
   const date: Date = new Date();
   const hour: number = date.getHours();
-  const baseUrl: string = "https://file.naigos.cn:52011/barctemp/"
   if (hour < 6) {
     imageName.value = baseUrl + imagesName.night[Math.floor(Math.random() * imagesName.night.length)];
   } else if (hour < 17) {
@@ -36,10 +38,15 @@ const selectImage = () => {
   if (11 <= date.getMonth() || date.getMonth() <= 1) {
     imageName.value = baseUrl + newYearImagesName[Math.floor(Math.random() * newYearImagesName.length)];
   }
-  console.log(imageName.value);
 }
-onMounted(() => {
-  selectImage();
+
+onMounted(async () => {
+  const list = await fetchModuleBackgrounds("home");
+  if (list.length > 0) {
+    imageName.value = list[Math.floor(Math.random() * list.length)];
+  } else {
+    fallbackSelect();
+  }
   if (bg_box.value && imageName.value) {
     bg_box.value.style.backgroundImage = `url("${imageName.value}")`;
   }
@@ -48,7 +55,6 @@ onMounted(() => {
 
 <template>
   <div ref="bg_box" class="bg_box">
-<!--    <img class="bgi" v-if="imageName" :src="imageName" alt="bg">-->
   </div>
 </template>
 

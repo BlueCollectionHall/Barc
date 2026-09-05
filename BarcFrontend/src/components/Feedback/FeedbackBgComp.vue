@@ -1,11 +1,21 @@
 <script setup lang="ts">
 import "@/style/Background.css";
+import { computed, onMounted, ref } from "vue";
+import { fetchModuleBackgrounds } from "@/utils/backgroundApi.ts";
+
+const bgUrl = ref<string>("");
+const bgStyle = computed(() => bgUrl.value ? { backgroundImage: `url("${bgUrl.value}")` } : undefined);
+
+onMounted(async () => {
+  const list = await fetchModuleBackgrounds("feedback");
+  if (list.length > 0) {
+    bgUrl.value = list[Math.floor(Math.random() * list.length)];
+  }
+});
 </script>
 
 <template>
-  <div class="bg_box">
-<!--    <img class="bgi" src="https://static.kivo.wiki/images/gallery/13/BG_ReceptionRoom.png" alt="bg"/>-->
-  </div>
+  <div class="bg_box" :style="bgStyle"></div>
 </template>
 
 <style scoped>

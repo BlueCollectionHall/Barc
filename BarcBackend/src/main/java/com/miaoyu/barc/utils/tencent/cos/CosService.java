@@ -83,6 +83,38 @@ public class CosService {
     }
 
     /**
+     * 上传文件到COS，文件完整 objectKey 由调用方指定（不做二次重命名）
+     * 用于那些需要自定义命名规则的场景（如背景图：UUID第一段-到秒时间戳.扩展名）
+     * @param file 文件
+     * @param objectKey 完整对象键（包括文件本身）
+     * @return 上传结果，data 为 objectKey
+     */
+    public J uploadFileWithKey(MultipartFile file, String objectKey, CosBucketConfigEnum clientName) {
+        if (objectKey == null || objectKey.isEmpty()) {
+            return new J(1, "文件路径为空", null);
+        }
+        try {
+            ObjectMetadata meta = new ObjectMetadata();
+            meta.setContentLength(file.getSize());
+            meta.setContentType(file.getContentType());
+            PutObjectRequest putObjectRequest = new PutObjectRequest(
+                    resolveBucket(clientName),
+                    objectKey,
+                    file.getInputStream(),
+                    meta
+            );
+            cosClient.cosClient(clientName).putObject(putObjectRequest);
+            return new J(0, "文件上传成功", objectKey);
+        } catch (IOException e) {
+            log.error("文件上传失败", e);
+            return new J(1, "文件上传失败: " + e.getMessage(), null);
+        } catch (Exception e) {
+            log.error("COS上传异常", e);
+            return new J(1, "COS上传异常: " + e.getMessage(), null);
+        }
+    }
+
+    /**
      * 删除COS文件
      * @param key 文件完整路径（包括文件本身）
      * @return 删除信息
