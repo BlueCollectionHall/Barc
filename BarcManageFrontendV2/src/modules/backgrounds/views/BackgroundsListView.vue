@@ -4,11 +4,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import RoutePageShell from '@/app/components/RoutePageShell.vue'
 import {
+  BACKGROUND_FESTIVAL_OPTIONS,
+  BACKGROUND_TIME_PERIOD_OPTIONS,
   deleteBackground,
   fetchBackgroundList,
   fetchBackgroundModules,
   reorderBackground,
   setBackgroundEnabled,
+  updateBackgroundScene,
   uploadBackground,
   type BackgroundImageRecord,
   type BackgroundModuleOption,
@@ -100,6 +103,16 @@ async function persistEnabled(row: BackgroundImageRecord): Promise<void> {
   }
 }
 
+/** 保存单张背景图的场景标签（时段 + 节日） */
+async function persistScene(row: BackgroundImageRecord): Promise<void> {
+  try {
+    await updateBackgroundScene(row.id, row.time_period, row.festival)
+    showSuccess('背景图场景已更新')
+  } catch (error) {
+    showError(getErrorMessage(error))
+  }
+}
+
 async function moveItem(index: number, direction: -1 | 1): Promise<void> {
   const target = index + direction
   if (target < 0 || target >= list.value.length) return
@@ -179,6 +192,32 @@ onMounted(async () => {
           </template>
         </el-table-column>
 
+        <el-table-column label="时段" width="120">
+          <template #default="{ row }">
+            <el-select v-model="row.time_period" size="small" class="scene-select" @change="persistScene(row)">
+              <el-option
+                v-for="opt in BACKGROUND_TIME_PERIOD_OPTIONS"
+                :key="String(opt.value)"
+                :value="opt.value"
+                :label="opt.label"
+              />
+            </el-select>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="节日" width="110">
+          <template #default="{ row }">
+            <el-select v-model="row.festival" size="small" class="scene-select" @change="persistScene(row)">
+              <el-option
+                v-for="opt in BACKGROUND_FESTIVAL_OPTIONS"
+                :key="String(opt.value)"
+                :value="opt.value"
+                :label="opt.label"
+              />
+            </el-select>
+          </template>
+        </el-table-column>
+
         <el-table-column label="排序" width="150">
           <template #default="{ row, $index }">
             <span class="order-no">{{ $index + 1 }}</span>
@@ -208,6 +247,10 @@ onMounted(async () => {
 <style scoped>
 .module-select {
   width: 160px;
+}
+
+.scene-select {
+  width: 100%;
 }
 
 .panel {

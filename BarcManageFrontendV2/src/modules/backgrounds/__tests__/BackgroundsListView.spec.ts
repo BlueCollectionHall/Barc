@@ -10,6 +10,7 @@ const {
   uploadBackground,
   reorderBackground,
   setBackgroundEnabled,
+  updateBackgroundScene,
   deleteBackground,
   showError,
   showSuccess,
@@ -20,6 +21,7 @@ const {
   uploadBackground: vi.fn(),
   reorderBackground: vi.fn(),
   setBackgroundEnabled: vi.fn(),
+  updateBackgroundScene: vi.fn(),
   deleteBackground: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -32,7 +34,18 @@ vi.mock('@/modules/backgrounds/api/backgrounds.service', () => ({
   uploadBackground,
   reorderBackground,
   setBackgroundEnabled,
+  updateBackgroundScene,
   deleteBackground,
+  BACKGROUND_TIME_PERIOD_OPTIONS: [
+    { value: null, label: '任意时段' },
+    { value: 'day', label: '白天' },
+    { value: 'eventing', label: '傍晚' },
+    { value: 'night', label: '夜晚' },
+  ],
+  BACKGROUND_FESTIVAL_OPTIONS: [
+    { value: null, label: '无' },
+    { value: 'newyear', label: '新年' },
+  ],
 }))
 
 vi.mock('@/shared/utils/message', () => ({
@@ -67,6 +80,8 @@ function createRecord(id: string, filename: string, enabled = true): BackgroundI
     filename,
     sort_order: 1,
     enabled,
+    time_period: null,
+    festival: null,
     created_by: null,
     created_at: null,
     updated_at: null,
@@ -97,6 +112,7 @@ describe('BackgroundsListView', () => {
     deleteBackground.mockResolvedValue(null)
     reorderBackground.mockResolvedValue(null)
     setBackgroundEnabled.mockResolvedValue(createRecord('bg-1', 'a.jpg', false))
+    updateBackgroundScene.mockResolvedValue(createRecord('bg-1', 'a.jpg', true))
     uploadBackground.mockResolvedValue(createRecord('bg-3', 'c.jpg', true))
     confirm.mockResolvedValue(undefined)
   })
@@ -159,5 +175,22 @@ describe('BackgroundsListView', () => {
 
     expect(setBackgroundEnabled).toHaveBeenCalledWith('bg-1', false)
     expect(showSuccess).toHaveBeenCalledWith('背景图已停用')
+  })
+
+  it('persists the scene select change', async () => {
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+
+    // 第 0 个 select 是模块下拉；第 1 个是首行（bg-1）的「时段」select
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    const timeSelect = selects[1]
+    expect(timeSelect).toBeDefined()
+    await timeSelect!.vm.$emit('update:modelValue', 'day')
+    await timeSelect!.vm.$emit('change', 'day')
+    await flushPromises()
+
+    expect(updateBackgroundScene).toHaveBeenCalledWith('bg-1', 'day', null)
+    expect(showSuccess).toHaveBeenCalledWith('背景图场景已更新')
   })
 })

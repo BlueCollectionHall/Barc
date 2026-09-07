@@ -31,14 +31,17 @@ public class BackgroundController {
         return backgroundImageService.modulesService(request.getAttribute("uuid").toString());
     }
 
-    /** 管理端：上传背景图（1匹配鉴权，1MB 限制） */
+    /** 管理端：上传背景图（1匹配鉴权，1MB 限制），可选携带时段/节日标签 */
     @PostMapping("/upload")
     public ResponseEntity<J> uploadControl(
             HttpServletRequest request,
             @RequestParam("file") MultipartFile file,
-            @RequestParam("module") String module
+            @RequestParam("module") String module,
+            @RequestParam(value = "time_period", required = false) String timePeriod,
+            @RequestParam(value = "festival", required = false) String festival
     ) {
-        return backgroundImageService.uploadService(request.getAttribute("uuid").toString(), file, module);
+        return backgroundImageService.uploadService(
+                request.getAttribute("uuid").toString(), file, module, timePeriod, festival);
     }
 
     /** 管理端：某模块背景图列表（1匹配鉴权） */
@@ -68,6 +71,19 @@ public class BackgroundController {
     ) {
         return backgroundImageService.setEnabledService(
                 request.getAttribute("uuid").toString(), id, Boolean.TRUE.equals(enabled));
+    }
+
+    /** 管理端：更新背景图场景标签（时段 + 节日）（1匹配鉴权） */
+    @PutMapping("/{id}/scene")
+    public ResponseEntity<J> sceneControl(
+            HttpServletRequest request,
+            @PathVariable String id,
+            @RequestBody BackgroundImageService.SceneItem item
+    ) {
+        return backgroundImageService.updateSceneService(
+                request.getAttribute("uuid").toString(), id,
+                item != null ? item.getTime_period() : null,
+                item != null ? item.getFestival() : null);
     }
 
     /** 管理端：删除背景图（1匹配鉴权） */

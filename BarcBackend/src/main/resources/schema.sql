@@ -359,6 +359,8 @@ CREATE TABLE IF NOT EXISTS background_image (
     filename VARCHAR(255) NULL ,
     sort_order INT NOT NULL DEFAULT 0 ,
     enabled TINYINT(1) NOT NULL DEFAULT 1 ,
+    time_period VARCHAR(16) NULL ,
+    festival VARCHAR(32) NULL ,
     created_by VARCHAR(32) NULL ,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,

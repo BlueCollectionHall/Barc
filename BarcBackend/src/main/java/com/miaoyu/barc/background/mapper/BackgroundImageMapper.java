@@ -12,8 +12,8 @@ import java.util.List;
 @Mapper
 public interface BackgroundImageMapper {
 
-    @Insert("INSERT INTO background_image(id, module, object_key, filename, sort_order, enabled, created_by) " +
-            "VALUES(#{id}, #{module}, #{object_key}, #{filename}, #{sort_order}, #{enabled}, #{created_by})")
+    @Insert("INSERT INTO background_image(id, module, object_key, filename, sort_order, enabled, created_by, time_period, festival) " +
+            "VALUES(#{id}, #{module}, #{object_key}, #{filename}, #{sort_order}, #{enabled}, #{created_by}, #{time_period}, #{festival})")
     int insert(BackgroundImageModel model);
 
     @Select("SELECT * FROM background_image WHERE deleted_at IS NULL AND module = #{module} " +
@@ -40,6 +40,10 @@ public interface BackgroundImageMapper {
     @Update("UPDATE background_image SET enabled = #{enabled}, updated_at = CURRENT_TIMESTAMP " +
             "WHERE id = #{id} AND deleted_at IS NULL")
     int updateEnabled(@Param("id") String id, @Param("enabled") boolean enabled);
+
+    @Update("UPDATE background_image SET time_period = #{timePeriod}, festival = #{festival}, updated_at = CURRENT_TIMESTAMP " +
+            "WHERE id = #{id} AND deleted_at IS NULL")
+    int updateScene(@Param("id") String id, @Param("timePeriod") String timePeriod, @Param("festival") String festival);
 
     @Update("UPDATE background_image SET deleted_at = CURRENT_TIMESTAMP WHERE id = #{id} AND deleted_at IS NULL")
     int softDelete(String id);
