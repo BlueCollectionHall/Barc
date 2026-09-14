@@ -72,8 +72,14 @@
 
     <!-- 图集 -->
     <div v-else-if="detail.content_image_urls?.length" class="gallery">
+      <!-- preview-teleported：把放大预览层挂到 body。
+           本组件会被放进「认领管理 → 作品预览」的 el-dialog 中，而全局样式
+           element-plus.css 给 .el-dialog 加了 backdrop-filter，会创建 CSS 包含块，
+           导致 position:fixed 的预览层被限制在弹窗尺寸内（预览只显示一小块）。
+           teleport 到 body 后即可恢复全屏预览。 -->
       <el-image v-for="(u,i) in detail.content_image_urls" :key="i" :src="u"
-        style="width:200px" fit="contain" :preview-src-list="detail.content_image_urls" :initial-index="i" />
+        style="width:200px" fit="contain" :preview-src-list="detail.content_image_urls" :initial-index="i"
+        preview-teleported />
     </div>
     <div v-else style="color:#999;padding:20px">暂无图集</div>
   </div>
