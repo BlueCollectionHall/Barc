@@ -15,6 +15,7 @@ import {
   uploadBackground,
   type BackgroundImageRecord,
   type BackgroundModuleOption,
+  type BackgroundSceneOption,
 } from '@/modules/backgrounds/api/backgrounds.service'
 import { getErrorMessage } from '@/shared/types/api'
 import { showError, showSuccess } from '@/shared/utils/message'
@@ -35,6 +36,83 @@ const moduleLabel = computed(
 const sceneEnabled = computed(
   () => modules.value.find((item) => item.value === module.value)?.sceneEnabled ?? false,
 )
+
+// ============ 时段 / 节日筛选（仅启用场景化的模块显示） ============
+
+/**
+ * 筛选哨兵值：表示「不过滤」。
+ * 必须与真实的标签 null（无时段 / 无节日）区分开，否则无法筛"未标注"的图。
+ */
+const FILTER_ALL = '__all__'
+
+/**
+ * 时段筛选选项：全部时段 / 白天 / 傍晚 / 夜晚 / 未标注时段(null)。
+ * 复用表格下拉的选项常量，仅把 null 的中文名改为「未标注（任意）」，
+ * 以免与新增的「全部时段」混淆。
+ */
+const TIME_PERIOD_FILTER_OPTIONS: BackgroundSceneOption[] = [
+  { value: FILTER_ALL, label: '全部时段' },
+  ...BACKGROUND_TIME_PERIOD_OPTIONS.map((opt) => ({
+    value: opt.value,
+    label: opt.value === null ? '未标注（任意）' : opt.label,
+  })),
+]
+
+/** 节日筛选选项：全部节日 / 新年 / 未标注节日(null) */
+const FESTIVAL_FILTER_OPTIONS: BackgroundSceneOption[] = [
+  { value: FILTER_ALL, label: '全部节日' },
+  ...BACKGROUND_FESTIVAL_OPTIONS.map((opt) => ({
+    value: opt.value,
+    label: opt.value === null ? '未标注（无节日）' : opt.label,
+  })),
+]
+
+/** 当前筛选的时段条件：FILTER_ALL = 不过滤；null = 只看未标注时段的图 */
+const filterTimePeriod = ref<string | null>(FILTER_ALL)
+/** 当前筛选的节日条件：FILTER_ALL = 不过滤；null = 只看未标注节日的图 */
+const filterFestival = ref<string | null>(FILTER_ALL)
+
+/** 是否存在生效的筛选条件（未启用场景化的模块永远为 false，不参与筛选） */
+const filterActive = computed(
+  () =>
+    sceneEnabled.value &&
+    (filterTimePeriod.value !== FILTER_ALL || filterFestival.value !== FILTER_ALL),
+)
+
+/**
+ * 按「时段 + 节日」筛选后的列表（仅用于展示，不改变原始数据顺序）。
+ * 两个条件取交集；条件为 FILTER_ALL 时该维度不过滤；
+ * 条件为 null 时精确匹配「未标注」的图（兼容无时段 / 无节日的筛选诉求）。
+ */
+const filteredList = computed(() => {
+  if (!filterActive.value) {
+    return list.value
+  }
+  return list.value.filter((row) => {
+    const timeMatched =
+      filterTimePeriod.value === FILTER_ALL || row.time_period === filterTimePeriod.value
+    const festivalMatched =
+      filterFestival.value === FILTER_ALL || row.festival === filterFestival.value
+    return timeMatched && festivalMatched
+  })
+})
+
+/** 某行在完整列表中的真实序号（筛选后依然显示原始位置，便于对照排序） */
+function orderNo(row: BackgroundImageRecord): number {
+  return list.value.findIndex((item) => item.id === row.id) + 1
+}
+
+/** 清空筛选条件，恢复显示全部 */
+function resetFilter(): void {
+  filterTimePeriod.value = FILTER_ALL
+  filterFestival.value = FILTER_ALL
+}
+
+/** 切换模块：先清空筛选再加载，避免带着上个模块的条件导致看不到图 */
+async function handleModuleChange(): Promise<void> {
+  resetFilter()
+  await loadList()
+}
 
 async function loadModules(): Promise<void> {
   try {
@@ -159,7 +237,7 @@ onMounted(async () => {
 <template>
   <RoutePageShell title="背景图设置" eyebrow="Background Images">
     <template #actions>
-      <el-select v-model="module" class="module-select" @change="loadList">
+      <el-select v-model="module" class="module-select" @change="handleModuleChange">
         <el-option
           v-for="item in modules"
           :key="item.value"
@@ -178,6 +256,50 @@ onMounted(async () => {
       </el-upload>
     </template>
 
+    <!-- 时段 / 节日筛选：仅对启用场景化的模块（如首页）展示，未启用的模块完全不显示 -->
+    <section
+      v-if="sceneEnabled"
+      class="glass-panel filter-panel"
+      data-test="scene-filter"
+    >
+      <div class="filter-field">
+        <span class="filter-field__label">时段</span>
+        <el-select
+          v-model="filterTimePeriod"
+          size="small"
+          class="filter-field__select"
+          data-test="filter-time-period"
+        >
+          <el-option
+            v-for="opt in TIME_PERIOD_FILTER_OPTIONS"
+            :key="String(opt.value)"
+            :value="opt.value"
+            :label="opt.label"
+          />
+        </el-select>
+      </div>
+      <div class="filter-field">
+        <span class="filter-field__label">节日</span>
+        <el-select
+          v-model="filterFestival"
+          size="small"
+          class="filter-field__select"
+          data-test="filter-festival"
+        >
+          <el-option
+            v-for="opt in FESTIVAL_FILTER_OPTIONS"
+            :key="String(opt.value)"
+            :value="opt.value"
+            :label="opt.label"
+          />
+        </el-select>
+      </div>
+      <el-button size="small" :disabled="!filterActive" @click="resetFilter">重置筛选</el-button>
+      <span class="filter-summary" data-test="filter-summary">
+        命中 {{ filteredList.length }} / 共 {{ list.length }} 张
+      </span>
+    </section>
+
     <section class="glass-panel panel" v-loading="loading">
       <el-alert
         v-if="!sceneEnabled"
@@ -187,7 +309,11 @@ onMounted(async () => {
         show-icon
         title="该模块按启用顺序随机轮播，暂不支持时段/节日"
       />
-      <el-table :data="list" row-key="id" empty-text="当前模块还没有背景图">
+      <el-table
+        :data="filteredList"
+        row-key="id"
+        :empty-text="filterActive ? '没有符合当前筛选条件的背景图' : '当前模块还没有背景图'"
+      >
         <el-table-column label="预览" width="180">
           <template #default="{ row }">
             <el-image
@@ -207,7 +333,13 @@ onMounted(async () => {
 
         <el-table-column v-if="sceneEnabled" label="时段" width="120">
           <template #default="{ row }">
-            <el-select v-model="row.time_period" size="small" class="scene-select" @change="persistScene(row)">
+            <el-select
+              v-model="row.time_period"
+              size="small"
+              class="scene-select"
+              data-test="row-time-period"
+              @change="persistScene(row)"
+            >
               <el-option
                 v-for="opt in BACKGROUND_TIME_PERIOD_OPTIONS"
                 :key="String(opt.value)"
@@ -220,7 +352,13 @@ onMounted(async () => {
 
         <el-table-column v-if="sceneEnabled" label="节日" width="110">
           <template #default="{ row }">
-            <el-select v-model="row.festival" size="small" class="scene-select" @change="persistScene(row)">
+            <el-select
+              v-model="row.festival"
+              size="small"
+              class="scene-select"
+              data-test="row-festival"
+              @change="persistScene(row)"
+            >
               <el-option
                 v-for="opt in BACKGROUND_FESTIVAL_OPTIONS"
                 :key="String(opt.value)"
@@ -233,10 +371,24 @@ onMounted(async () => {
 
         <el-table-column label="排序" width="150">
           <template #default="{ row, $index }">
-            <span class="order-no">{{ $index + 1 }}</span>
+            <!-- 筛选状态下显示行在完整列表中的真实序号，避免与实际顺序脱节 -->
+            <span class="order-no">{{ orderNo(row) }}</span>
             <el-button-group>
-              <el-button size="small" :disabled="$index === 0" @click="moveItem($index, -1)">上移</el-button>
-              <el-button size="small" :disabled="$index === list.length - 1" @click="moveItem($index, 1)">下移</el-button>
+              <!-- 筛选生效时行索引不等于真实顺序，禁用排序以免错位 -->
+              <el-button
+                size="small"
+                :disabled="filterActive || $index === 0"
+                @click="moveItem($index, -1)"
+              >
+                上移
+              </el-button>
+              <el-button
+                size="small"
+                :disabled="filterActive || $index === list.length - 1"
+                @click="moveItem($index, 1)"
+              >
+                下移
+              </el-button>
             </el-button-group>
           </template>
         </el-table-column>
@@ -272,6 +424,38 @@ onMounted(async () => {
 
 .scene-hint {
   margin-bottom: 0.75rem;
+}
+
+/* 时段 / 节日筛选栏 */
+.filter-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.filter-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filter-field__label {
+  color: var(--barc-text-soft);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.filter-field__select {
+  width: 160px;
+}
+
+.filter-summary {
+  margin-left: auto;
+  color: var(--barc-text-soft);
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .preview {

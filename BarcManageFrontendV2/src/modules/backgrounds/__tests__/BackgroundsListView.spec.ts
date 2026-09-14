@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import type { VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import BackgroundsListView from '@/modules/backgrounds/views/BackgroundsListView.vue'
@@ -72,7 +73,12 @@ vi.mock('element-plus', async () => {
   }
 })
 
-function createRecord(id: string, filename: string, enabled = true): BackgroundImageRecord {
+function createRecord(
+  id: string,
+  filename: string,
+  enabled = true,
+  scene: { time_period?: string | null; festival?: string | null } = {},
+): BackgroundImageRecord {
   return {
     id,
     module: 'home',
@@ -80,8 +86,8 @@ function createRecord(id: string, filename: string, enabled = true): BackgroundI
     filename,
     sort_order: 1,
     enabled,
-    time_period: null,
-    festival: null,
+    time_period: scene.time_period ?? null,
+    festival: scene.festival ?? null,
     created_by: null,
     created_at: null,
     updated_at: null,
@@ -97,6 +103,28 @@ function findButton(wrapper: ReturnType<typeof mount>, label: string, index = 0)
     throw new Error(`Unable to find button: ${label}#${index}`)
   }
   return button
+}
+
+/** 把模块下拉切到「首页」（启用场景化的模块）并等待列表重载 */
+async function switchToHome(wrapper: ReturnType<typeof mount>) {
+  const moduleSelect = wrapper.findAllComponents({ name: 'ElSelect' })[0]
+  await moduleSelect!.vm.$emit('update:modelValue', 'home')
+  await moduleSelect!.vm.$emit('change', 'home')
+  await flushPromises()
+}
+
+/**
+ * 按 data-test 取单个下拉组件实例。
+ * findComponent 传 CSS 选择器时返回 WrapperLike（类型上没有 vm），
+ * 这里统一断言成 VueWrapper，便于在测试中 emit 组件事件。
+ */
+function findSelect(wrapper: ReturnType<typeof mount>, testId: string): VueWrapper {
+  return wrapper.findComponent(`[data-test="${testId}"]`) as unknown as VueWrapper
+}
+
+/** 按 data-test 取多个下拉组件实例（返回类型同上，统一为 VueWrapper 数组） */
+function findAllSelects(wrapper: ReturnType<typeof mount>, testId: string): VueWrapper[] {
+  return wrapper.findAllComponents(`[data-test="${testId}"]`) as unknown as VueWrapper[]
 }
 
 describe('BackgroundsListView', () => {
@@ -199,9 +227,8 @@ describe('BackgroundsListView', () => {
     await moduleSelect!.vm.$emit('change', 'home')
     await flushPromises()
 
-    // 第 0 个 select 是模块下拉；第 1 个是首行（bg-1）的「时段」select
-    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
-    const timeSelect = selects[1]
+    // 取首行的「时段」下拉（用 data-test 定位，避免与筛选栏的下拉混淆）
+    const timeSelect = findAllSelects(wrapper, 'row-time-period')[0]
     expect(timeSelect).toBeDefined()
     await timeSelect!.vm.$emit('update:modelValue', 'day')
     await timeSelect!.vm.$emit('change', 'day')
@@ -209,5 +236,110 @@ describe('BackgroundsListView', () => {
 
     expect(updateBackgroundScene).toHaveBeenCalledWith('bg-1', 'day', null)
     expect(showSuccess).toHaveBeenCalledWith('背景图场景已更新')
+  })
+
+  it('shows the scene filter only for a scene-enabled module', async () => {
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+
+    // 默认 sign（纯随机模块）→ 不渲染筛选栏
+    expect(wrapper.find('[data-test="scene-filter"]').exists()).toBe(false)
+
+    await switchToHome(wrapper)
+
+    // 首页（启用场景化）→ 出现筛选栏
+    expect(wrapper.find('[data-test="scene-filter"]').exists()).toBe(true)
+  })
+
+  it('filters rows by time period and can narrow down to untagged rows', async () => {
+    fetchBackgroundList.mockResolvedValue([
+      createRecord('bg-day', 'day.jpg', true, { time_period: 'day' }),
+      createRecord('bg-night', 'night.jpg', true, { time_period: 'night' }),
+      createRecord('bg-any', 'any.jpg', true, { time_period: null }),
+    ])
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+    await switchToHome(wrapper)
+
+    const timeSelect = findSelect(wrapper, 'filter-time-period')
+
+    // 选「白天」→ 只剩 day.jpg
+    await timeSelect.vm.$emit('update:modelValue', 'day')
+    await flushPromises()
+    expect(wrapper.text()).toContain('day.jpg')
+    expect(wrapper.text()).not.toContain('night.jpg')
+    expect(wrapper.text()).not.toContain('any.jpg')
+
+    // 选「未标注（任意）」（null）→ 只剩未标注时段的图（兼容无时段）
+    await timeSelect.vm.$emit('update:modelValue', null)
+    await flushPromises()
+    expect(wrapper.text()).toContain('any.jpg')
+    expect(wrapper.text()).not.toContain('day.jpg')
+    expect(wrapper.text()).not.toContain('night.jpg')
+  })
+
+  it('filters rows by festival and can narrow down to untagged rows', async () => {
+    fetchBackgroundList.mockResolvedValue([
+      createRecord('bg-ny', 'ny.jpg', true, { festival: 'newyear' }),
+      createRecord('bg-plain', 'plain.jpg', true, { festival: null }),
+    ])
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+    await switchToHome(wrapper)
+
+    const festivalSelect = findSelect(wrapper, 'filter-festival')
+
+    await festivalSelect.vm.$emit('update:modelValue', 'newyear')
+    await flushPromises()
+    expect(wrapper.text()).toContain('ny.jpg')
+    expect(wrapper.text()).not.toContain('plain.jpg')
+
+    // 选「未标注（无节日）」（null）→ 兼容无节日的筛选
+    await festivalSelect.vm.$emit('update:modelValue', null)
+    await flushPromises()
+    expect(wrapper.text()).toContain('plain.jpg')
+    expect(wrapper.text()).not.toContain('ny.jpg')
+  })
+
+  it('combines both filters and reports how many images match', async () => {
+    fetchBackgroundList.mockResolvedValue([
+      createRecord('bg-1', 'day-newyear.jpg', true, { time_period: 'day', festival: 'newyear' }),
+      createRecord('bg-2', 'night-newyear.jpg', true, { time_period: 'night', festival: 'newyear' }),
+    ])
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+    await switchToHome(wrapper)
+
+    await findSelect(wrapper, 'filter-time-period').vm.$emit('update:modelValue', 'day')
+    await findSelect(wrapper, 'filter-festival').vm.$emit('update:modelValue', 'newyear')
+    await flushPromises()
+
+    const summary = wrapper.find('[data-test="filter-summary"]').text()
+    expect(summary).toContain('命中 1')
+    expect(summary).toContain('共 2 张')
+    expect(wrapper.text()).toContain('day-newyear.jpg')
+    expect(wrapper.text()).not.toContain('night-newyear.jpg')
+  })
+
+  it('disables reordering while a filter is active', async () => {
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+    await switchToHome(wrapper)
+
+    await findSelect(wrapper, 'filter-time-period').vm.$emit('update:modelValue', null)
+    await flushPromises()
+
+    const moveButtons = wrapper
+      .findAll('button')
+      .filter((candidate) => candidate.text() === '上移' || candidate.text() === '下移')
+    expect(moveButtons.length).toBeGreaterThan(0)
+    expect(
+      moveButtons.every((candidate) => candidate.attributes('disabled') !== undefined),
+    ).toBe(true)
   })
 })
