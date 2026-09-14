@@ -5,12 +5,42 @@ import { baseHttp } from "@/utils/https.ts";
 export interface BackgroundItem {
   url: string;
   time_period: string | null;
+  /** 绑定的节日 ID，null 表示无节日通用图 */
   festival: string | null;
+}
+
+/**
+ * 节日（来自管理端「系统管理 → 节日管理」）
+ *
+ * 日期区间统一为「某月某日 → 某月某日」：不论管理端用「月份式」还是「日期式」录入，
+ * 后端持久化的都是月日对；start_month > end_month 表示该区间跨年环绕（如新年 12-01 → 02-28）。
+ */
+export interface FestivalItem {
+  id: string;
+  name: string;
+  start_month: number;
+  start_day: number;
+  end_month: number;
+  end_day: number;
+  /** 统一索引：月份 * 32 + 日，与后端保持一致，便于比较排序 */
+  start_index: number;
+  end_index: number;
 }
 
 type BackgroundMap = Record<string, BackgroundItem[]>;
 
 let cache: BackgroundMap | null = null;
+let festivalCache: FestivalItem[] | null = null;
+
+/**
+ * 月日统一索引：月份 * 32 + 日
+ *
+ * 与后端 MonthDayRangeUtils.toIndex 保持一致：每月按 32 进位，
+ * 保证不同月份的索引绝不会相撞，便于用整数直接比较。
+ */
+function monthDayIndex(month: number, day: number): number {
+  return month * 32 + day;
+}
 
 /** 拉取所有「启用」的背景图（按模块分组，每项已解析为 COS 签名 URL 并携带场景标签），带缓存 */
 export async function fetchBackgrounds(): Promise<BackgroundMap> {
@@ -28,6 +58,30 @@ export async function fetchBackgrounds(): Promise<BackgroundMap> {
     // 网络异常时兜底为空，组件回退到写死图片
   }
   return {};
+}
+
+/**
+ * 拉取「启用中」的节日列表（公开接口，无需登录），带缓存。
+ *
+ * 节日由馆长在管理端维护，用户端不再写死「11 月 - 次年 2 月视为新年」，
+ * 而是按这份数据动态判定当前时间属于哪个节日。
+ * 网络异常时返回空数组，此时判定结果恒为无节日，背景图退化为通用图逻辑。
+ */
+export async function fetchFestivals(): Promise<FestivalItem[]> {
+  if (festivalCache) {
+    return festivalCache;
+  }
+  try {
+    const response = await baseHttp.get("/api/festival/all");
+    const data: ResponseImpl = response.data;
+    if (data.code === 0 && Array.isArray(data.data)) {
+      festivalCache = data.data as FestivalItem[];
+      return festivalCache;
+    }
+  } catch {
+    // 网络异常时兜底为空，等价于「当前无节日」
+  }
+  return [];
 }
 
 /**
@@ -62,19 +116,14 @@ export const TIME_PERIOD = {
   NIGHT: "night",
 } as const;
 
-/** 节日常量 */
-export const FESTIVAL = {
-  NEW_YEAR: "newyear",
-} as const;
-
 /**
- * 依据当前时间解析出「时段 + 节日」场景
+ * 依据当前时间解析出「时段」场景
  * 时段：0-6 点夜晚、6-17 点白天、17-19 点傍晚、其余夜晚（与旧 fallback 保持一致）
- * 节日：11月-次年2月（getMonth() 0 基：10为11月、0为1月、1为2月）视为新年前后
+ *
+ * 注意：节日已改为动态数据，不再由此函数返回，请配合 resolveFestivalForDate 使用。
  */
 export function resolveCurrentScene(date: Date): {
   time_period: string | null;
-  festival: string | null;
 } {
   const hour = date.getHours();
   let time_period: string | null;
@@ -88,15 +137,52 @@ export function resolveCurrentScene(date: Date): {
     time_period = TIME_PERIOD.NIGHT;
   }
 
-  const month = date.getMonth();
-  const festival = month >= 10 || month <= 1 ? FESTIVAL.NEW_YEAR : null;
+  return { time_period };
+}
 
-  return { time_period, festival };
+/**
+ * 判断某一天是否落在节日区间内
+ *
+ * 算法与后端 MonthDayRangeUtils.containsDay 完全一致：
+ * 普通区间取 [起始索引, 结束索引]；跨年区间（起始索引 > 结束索引）取
+ * 「大于等于起始」或「小于等于结束」两段，即绕年一圈。
+ *
+ * 实现上用两次纯数值比较代替逐日遍历，因此可以安全地用于日期式与月份式两种区间。
+ */
+export function isDayInFestival(
+  date: Date,
+  festival: Pick<FestivalItem, "start_index" | "end_index">,
+): boolean {
+  const dayIndex = monthDayIndex(date.getMonth() + 1, date.getDate());
+  const { start_index, end_index } = festival;
+  if (start_index > end_index) {
+    // 跨年区间：年末段 或 年初段
+    return dayIndex >= start_index || dayIndex <= end_index;
+  }
+  return dayIndex >= start_index && dayIndex <= end_index;
+}
+
+/**
+ * 依据当前日期从节日列表中解析出所属节日 ID，无节日时返回 null。
+ *
+ * 单个日期最多只会命中一个节日 —— 这一点由管理端的「节日之间不可重叠重合」校验保证。
+ */
+export function resolveFestivalForDate(festivals: FestivalItem[], date: Date): string | null {
+  if (!festivals || festivals.length === 0) {
+    return null;
+  }
+  for (const festival of festivals) {
+    if (isDayInFestival(date, festival)) {
+      return festival.id;
+    }
+  }
+  return null;
 }
 
 /**
  * 依据当前场景从启用图池中随机选一张（「首页 home」专用的场景化入口）。
- * - 节日季：优先节日图，否则用非节日通用图；非节日季：只用非节日通用图
+ * - 节日：当日期落在某个启用节日区间内时，优先取绑定该节日的图；节日季无节日图则回退通用图；
+ *   非节日季只使用未绑定节日的通用图
  * - 时段优先：选池内匹配当前时段的图（含未标注时段的通用图），无匹配则退回整个选池
  * - 无时段图（time_period 为空）会被无条件纳入每个时段候选池 → 参与各时段轮播
  * - random 参数可注入以便测试（默认 Math.random）
@@ -107,12 +193,14 @@ export function resolveCurrentScene(date: Date): {
 export function pickBackgroundByScene(
   items: BackgroundItem[],
   date: Date,
+  festivals: FestivalItem[] = [],
   random: () => number = Math.random,
 ): string | null {
   if (!items || items.length === 0) {
     return null;
   }
-  const { time_period, festival } = resolveCurrentScene(date);
+  const { time_period } = resolveCurrentScene(date);
+  const festival = resolveFestivalForDate(festivals, date);
 
   // 节日季优先节日图；否则只用非节日通用图
   const festivalPool = items.filter((item) => item.festival === festival);

@@ -1,4 +1,5 @@
 import { http } from '@/shared/api/http'
+import { fetchEnabledFestivals } from '@/modules/system/api/festivals.service'
 
 export interface BackgroundModuleOption {
   value: string
@@ -9,8 +10,6 @@ export interface BackgroundModuleOption {
 
 /** 时段：day/eventing/night，null 表示任意时段 */
 export type BackgroundTimePeriod = 'day' | 'eventing' | 'night'
-/** 节日：newyear */
-export type BackgroundFestival = 'newyear'
 
 export interface BackgroundSceneOption {
   value: string | null
@@ -25,11 +24,25 @@ export const BACKGROUND_TIME_PERIOD_OPTIONS: BackgroundSceneOption[] = [
   { value: 'night', label: '夜晚' },
 ]
 
-/** 管理端「节日」下拉选项（null 表示非节日通用图） */
-export const BACKGROUND_FESTIVAL_OPTIONS: BackgroundSceneOption[] = [
-  { value: null, label: '无' },
-  { value: 'newyear', label: '新年' },
-]
+/**
+ * 管理端「节日」下拉选项（null 表示无节日通用图）。
+ *
+ * 节日已改为「系统管理 → 节日管理」中的动态数据，这里不再写死枚举：
+ * 只列出当前「启用中」的节日，已被关闭的节日不允许再被绑定。
+ * 拉取失败时退化为只含「无」选项，保证页面仍可操作。
+ */
+export async function fetchFestivalSceneOptions(): Promise<BackgroundSceneOption[]> {
+  const options: BackgroundSceneOption[] = [{ value: null, label: '无' }]
+  try {
+    const festivals = await fetchEnabledFestivals()
+    for (const festival of festivals) {
+      options.push({ value: festival.id, label: festival.name })
+    }
+  } catch {
+    // 节日接口异常不应阻断背景图页面的其他功能
+  }
+  return options
+}
 
 export interface BackgroundImageRecord {
   id: string

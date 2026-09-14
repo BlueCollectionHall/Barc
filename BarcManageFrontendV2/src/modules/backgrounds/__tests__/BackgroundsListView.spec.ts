@@ -8,6 +8,7 @@ import type { BackgroundImageRecord, BackgroundOrderItem } from '@/modules/backg
 const {
   fetchBackgroundModules,
   fetchBackgroundList,
+  fetchFestivalSceneOptions,
   uploadBackground,
   reorderBackground,
   setBackgroundEnabled,
@@ -19,6 +20,7 @@ const {
 } = vi.hoisted(() => ({
   fetchBackgroundModules: vi.fn(),
   fetchBackgroundList: vi.fn(),
+  fetchFestivalSceneOptions: vi.fn(),
   uploadBackground: vi.fn(),
   reorderBackground: vi.fn(),
   setBackgroundEnabled: vi.fn(),
@@ -32,6 +34,7 @@ const {
 vi.mock('@/modules/backgrounds/api/backgrounds.service', () => ({
   fetchBackgroundModules,
   fetchBackgroundList,
+  fetchFestivalSceneOptions,
   uploadBackground,
   reorderBackground,
   setBackgroundEnabled,
@@ -42,10 +45,6 @@ vi.mock('@/modules/backgrounds/api/backgrounds.service', () => ({
     { value: 'day', label: '白天' },
     { value: 'eventing', label: '傍晚' },
     { value: 'night', label: '夜晚' },
-  ],
-  BACKGROUND_FESTIVAL_OPTIONS: [
-    { value: null, label: '无' },
-    { value: 'newyear', label: '新年' },
   ],
 }))
 
@@ -72,6 +71,9 @@ vi.mock('element-plus', async () => {
     },
   }
 })
+
+/** 节日 ID：背景图现在绑定的是「节日管理」里的节日主键，而不是写死的枚举值 */
+const FESTIVAL_ID = 'fest-ny'
 
 function createRecord(
   id: string,
@@ -137,6 +139,11 @@ describe('BackgroundsListView', () => {
       createRecord('bg-1', 'a.jpg', true),
       createRecord('bg-2', 'b.jpg', false),
     ])
+    // 节日下拉来自「系统管理 → 节日管理」，这里注入一个启用中的新年
+    fetchFestivalSceneOptions.mockResolvedValue([
+      { value: null, label: '无' },
+      { value: FESTIVAL_ID, label: '新年' },
+    ])
     deleteBackground.mockResolvedValue(null)
     reorderBackground.mockResolvedValue(null)
     setBackgroundEnabled.mockResolvedValue(createRecord('bg-1', 'a.jpg', false))
@@ -156,6 +163,14 @@ describe('BackgroundsListView', () => {
     expect(wrapper.text()).toContain('a.jpg')
     expect(wrapper.text()).toContain('b.jpg')
     expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('loads the festival options from the festival module', async () => {
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+
+    expect(fetchFestivalSceneOptions).toHaveBeenCalledTimes(1)
   })
 
   it('hides scene columns and shows a hint for a non-scene module', async () => {
@@ -277,14 +292,14 @@ describe('BackgroundsListView', () => {
 
     const timeSelect = findSelect(wrapper, 'filter-time-period')
 
-    // 选「白天」→ 只剩 day.jpg
+    // 选「白天」-> 只剩 day.jpg
     await timeSelect.vm.$emit('update:modelValue', 'day')
     await flushPromises()
     expect(wrapper.text()).toContain('day.jpg')
     expect(wrapper.text()).not.toContain('night.jpg')
     expect(wrapper.text()).not.toContain('any.jpg')
 
-    // 选「未标注（任意）」（null）→ 只剩未标注时段的图（兼容无时段）
+    // 选「未标注（任意）」（null）-> 只剩未标注时段的图（兼容无时段）
     await timeSelect.vm.$emit('update:modelValue', null)
     await flushPromises()
     expect(wrapper.text()).toContain('any.jpg')
@@ -294,7 +309,7 @@ describe('BackgroundsListView', () => {
 
   it('filters rows by festival and can narrow down to untagged rows', async () => {
     fetchBackgroundList.mockResolvedValue([
-      createRecord('bg-ny', 'ny.jpg', true, { festival: 'newyear' }),
+      createRecord('bg-ny', 'ny.jpg', true, { festival: FESTIVAL_ID }),
       createRecord('bg-plain', 'plain.jpg', true, { festival: null }),
     ])
     const wrapper = mount(BackgroundsListView)
@@ -304,12 +319,12 @@ describe('BackgroundsListView', () => {
 
     const festivalSelect = findSelect(wrapper, 'filter-festival')
 
-    await festivalSelect.vm.$emit('update:modelValue', 'newyear')
+    await festivalSelect.vm.$emit('update:modelValue', FESTIVAL_ID)
     await flushPromises()
     expect(wrapper.text()).toContain('ny.jpg')
     expect(wrapper.text()).not.toContain('plain.jpg')
 
-    // 选「未标注（无节日）」（null）→ 兼容无节日的筛选
+    // 选「未标注（无节日）」（null）-> 兼容无节日的筛选
     await festivalSelect.vm.$emit('update:modelValue', null)
     await flushPromises()
     expect(wrapper.text()).toContain('plain.jpg')
@@ -318,8 +333,8 @@ describe('BackgroundsListView', () => {
 
   it('combines both filters and reports how many images match', async () => {
     fetchBackgroundList.mockResolvedValue([
-      createRecord('bg-1', 'day-newyear.jpg', true, { time_period: 'day', festival: 'newyear' }),
-      createRecord('bg-2', 'night-newyear.jpg', true, { time_period: 'night', festival: 'newyear' }),
+      createRecord('bg-1', 'day-newyear.jpg', true, { time_period: 'day', festival: FESTIVAL_ID }),
+      createRecord('bg-2', 'night-newyear.jpg', true, { time_period: 'night', festival: FESTIVAL_ID }),
     ])
     const wrapper = mount(BackgroundsListView)
 
@@ -327,7 +342,7 @@ describe('BackgroundsListView', () => {
     await switchToHome(wrapper)
 
     await findSelect(wrapper, 'filter-time-period').vm.$emit('update:modelValue', 'day')
-    await findSelect(wrapper, 'filter-festival').vm.$emit('update:modelValue', 'newyear')
+    await findSelect(wrapper, 'filter-festival').vm.$emit('update:modelValue', FESTIVAL_ID)
     await flushPromises()
 
     const summary = wrapper.find('[data-test="filter-summary"]').text()
@@ -335,6 +350,23 @@ describe('BackgroundsListView', () => {
     expect(summary).toContain('共 2 张')
     expect(wrapper.text()).toContain('day-newyear.jpg')
     expect(wrapper.text()).not.toContain('night-newyear.jpg')
+  })
+
+  it('resets a stale festival binding when the festival was removed in admin', async () => {
+    // 后端在删除节日时会把绑定它的背景图置为 NULL，但若本页仍停留在打开状态，
+    // 本地列表还持有旧节日 ID —— 这里必须显示为「无」，避免误导馆长
+    fetchBackgroundList.mockResolvedValue([
+      createRecord('bg-stale', 'stale.jpg', true, { festival: 'fest-deleted' }),
+    ])
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+    await switchToHome(wrapper)
+
+    const festivalSelect = findAllSelects(wrapper, 'row-festival')[0]
+    expect(festivalSelect).toBeDefined()
+    // 断言失败时的提示信息用于定位，这里仅校验「已失效节日被归一为空」
+    expect(festivalSelect!.props('modelValue' as never)).toBeNull()
   })
 
   it('disables reordering while a filter is active', async () => {

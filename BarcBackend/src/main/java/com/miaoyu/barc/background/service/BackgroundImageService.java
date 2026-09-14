@@ -2,11 +2,11 @@ package com.miaoyu.barc.background.service;
 
 import com.miaoyu.barc.annotation.RequireUserAndPermissionAnno;
 import com.miaoyu.barc.api.service.CosGcService;
-import com.miaoyu.barc.background.enumeration.BackgroundFestivalEnum;
 import com.miaoyu.barc.background.enumeration.BackgroundModuleEnum;
 import com.miaoyu.barc.background.enumeration.BackgroundTimePeriodEnum;
 import com.miaoyu.barc.background.mapper.BackgroundImageMapper;
 import com.miaoyu.barc.background.model.BackgroundImageModel;
+import com.miaoyu.barc.festival.mapper.FestivalMapper;
 import com.miaoyu.barc.permission.PermissionConst;
 import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.response.SuccessR;
@@ -40,6 +40,8 @@ public class BackgroundImageService {
 
     @Autowired
     private BackgroundImageMapper backgroundImageMapper;
+    @Autowired
+    private FestivalMapper festivalMapper;
     @Autowired
     private CosService cosService;
     @Autowired
@@ -82,14 +84,15 @@ public class BackgroundImageService {
         if (contentType == null || !contentType.startsWith("image/")) {
             return ResponseEntity.ok(new J(1, "仅支持上传图片文件", null));
         }
-        // 校验并归一化场景标签（时段 + 节日，空串视为任意）
+        // 校验并归一化场景标签（时段 + 节日，空串视为任意 / 无节日）
         String normTime = normalizeSceneValue(timePeriod);
         String normFestival = normalizeSceneValue(festival);
         if (normTime != null && BackgroundTimePeriodEnum.fromCode(normTime) == null) {
             return ResponseEntity.ok(new J(1, "时段不合法: " + timePeriod, null));
         }
-        if (normFestival != null && BackgroundFestivalEnum.fromCode(normFestival) == null) {
-            return ResponseEntity.ok(new J(1, "节日不合法: " + festival, null));
+        // 节日改为「节日管理」中的动态数据，这里校验其仍然存在且处于启用状态
+        if (!isBindableFestival(normFestival)) {
+            return ResponseEntity.ok(new J(1, "节日不合法或已被关闭: " + festival, null));
         }
         // 文件名：UUID第一段 - 到秒的时间戳 . 扩展名
         String uuidSeg = new GenerateUUID().getUuid32u().substring(0, 8);
@@ -182,14 +185,15 @@ public class BackgroundImageService {
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         }
-        // 空串归一化为 NULL（表示任意时段 / 非节日），非空则校验合法性
+        // 空串归一化为 NULL（表示任意时段 / 无节日），非空则校验合法性
         String normTime = normalizeSceneValue(timePeriod);
         String normFestival = normalizeSceneValue(festival);
         if (normTime != null && BackgroundTimePeriodEnum.fromCode(normTime) == null) {
             return ResponseEntity.ok(new J(1, "时段不合法: " + timePeriod, null));
         }
-        if (normFestival != null && BackgroundFestivalEnum.fromCode(normFestival) == null) {
-            return ResponseEntity.ok(new J(1, "节日不合法: " + festival, null));
+        // 节日改为「节日管理」中的动态数据，这里校验其仍然存在且处于启用状态
+        if (!isBindableFestival(normFestival)) {
+            return ResponseEntity.ok(new J(1, "节日不合法或已被关闭: " + festival, null));
         }
         int rows = backgroundImageMapper.updateScene(id, normTime, normFestival);
         existing.setTime_period(normTime);
@@ -270,6 +274,19 @@ public class BackgroundImageService {
     /** 场景标签归一化：空串 / 纯空白视为 NULL（表示任意），否则 trim */
     private String normalizeSceneValue(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    /**
+     * 判断该节日 ID 是否可以被背景图绑定
+     *
+     * 规则：null 表示「无节日」通用图，直接放行；非 null 时必须是在「节日管理」中
+     * 仍然存在且处于启用状态的节日，避免把背景图绑到已删除 / 已关闭的节日上。
+     */
+    private boolean isBindableFestival(String festivalId) {
+        if (festivalId == null) {
+            return true;
+        }
+        return festivalMapper.selectEnabledById(festivalId) != null;
     }
 
     private void resolveDisplayUrl(BackgroundImageModel model) {

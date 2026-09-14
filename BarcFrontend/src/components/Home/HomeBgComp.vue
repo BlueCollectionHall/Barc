@@ -2,10 +2,13 @@
 import "@/style/Background.css";
 import { onMounted, ref } from "vue";
 import {
+  fetchFestivals,
   fetchModuleBackgroundItems,
   pickBackgroundByScene,
+  resolveFestivalForDate,
   resolveCurrentScene,
   TIME_PERIOD,
+  type FestivalItem,
 } from "@/utils/backgroundApi.ts";
 
 interface ImageNameImpl {
@@ -29,11 +32,13 @@ const bg_box = ref<HTMLDivElement | null>(null);
 
 /**
  * 兜底：当管理端没有任何启用背景图时，使用写死图片。
- * 时段与节日判定与 resolveCurrentScene 保持一致，避免前后不一致。
+ * 时段判定复用 resolveCurrentScene，节日判定复用 resolveFestivalForDate（与主链路同源），
+ * 避免两处逻辑不一致。
  */
-const fallbackSelect = () => {
-  const scene = resolveCurrentScene(new Date());
-  if (scene.festival) {
+const fallbackSelect = (festivals: FestivalItem[]) => {
+  const now = new Date();
+  const scene = resolveCurrentScene(now);
+  if (resolveFestivalForDate(festivals, now)) {
     imageName.value = baseUrl + newYearImagesName[Math.floor(Math.random() * newYearImagesName.length)];
     return;
   }
@@ -45,12 +50,16 @@ const fallbackSelect = () => {
 }
 
 onMounted(async () => {
-  // 优先取管理端「启用」的首页背景图，并按当前时段/节日选出候选池后随机取一张（每次访问换一张）
-  const items = await fetchModuleBackgroundItems("home");
-  const picked = pickBackgroundByScene(items, new Date());
+  // 并行取「启用的首页背景图」与「启用中的节日」（节日由馆长在管理端维护，不再写死在用户端）
+  const [items, festivals] = await Promise.all([
+    fetchModuleBackgroundItems("home"),
+    fetchFestivals(),
+  ]);
+  // 按当前时段与动态节日选出候选池后随机取一张（每次访问换一张）
+  const picked = pickBackgroundByScene(items, new Date(), festivals);
   imageName.value = picked;
   if (!imageName.value) {
-    fallbackSelect();
+    fallbackSelect(festivals);
   }
   if (bg_box.value && imageName.value) {
     bg_box.value.style.backgroundImage = `url("${imageName.value}")`;

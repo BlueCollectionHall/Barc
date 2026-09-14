@@ -360,11 +360,29 @@ CREATE TABLE IF NOT EXISTS background_image (
     sort_order INT NOT NULL DEFAULT 0 ,
     enabled TINYINT(1) NOT NULL DEFAULT 1 ,
     time_period VARCHAR(16) NULL ,
-    festival VARCHAR(32) NULL ,
+    festival VARCHAR(32) NULL COMMENT '绑定的节日ID，NULL 表示无节日通用图；节日被删除时自动置 NULL' ,
     created_by VARCHAR(32) NULL ,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
     deleted_at TIMESTAMP NULL ,
     INDEX idx_background_module_enabled_order (module, enabled, sort_order) ,
-    INDEX idx_background_object_key (object_key)
+    INDEX idx_background_object_key (object_key) ,
+    INDEX idx_background_festival (festival)
+);
+CREATE TABLE IF NOT EXISTS festival (
+    id VARCHAR(32) PRIMARY KEY NOT NULL ,
+    name VARCHAR(64) NOT NULL ,
+    start_month TINYINT NOT NULL ,
+    start_day TINYINT NOT NULL ,
+    end_month TINYINT NOT NULL ,
+    end_day TINYINT NOT NULL ,
+    start_index SMALLINT NOT NULL COMMENT '统一索引：月份 * 32 + 日，用于区间重叠判定' ,
+    end_index SMALLINT NOT NULL COMMENT '统一索引：大于 start_index 表示跨年环绕' ,
+    enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '关闭后保留数据与绑定关系，仅不参与用户端节日判定' ,
+    created_by VARCHAR(32) NULL ,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
+    deleted_at TIMESTAMP NULL ,
+    INDEX idx_festival_enabled (enabled, deleted_at) ,
+    INDEX idx_festival_range (start_index, end_index)
 );

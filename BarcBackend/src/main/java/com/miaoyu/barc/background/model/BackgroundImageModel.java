@@ -16,7 +16,7 @@ public class BackgroundImageModel {
     private Boolean enabled;
     /** 时段标签：day/eventing/night，NULL 表示任意时段 */
     private String time_period;
-    /** 节日标签：newyear，NULL 表示非节日通用图 */
+    /** 绑定的节日 ID（对应 festival 表），NULL 表示无节日通用图；节日被删除时自动置 NULL */
     private String festival;
     private String created_by;
     private LocalDateTime created_at;

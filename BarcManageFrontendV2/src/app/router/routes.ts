@@ -23,6 +23,7 @@ const OperationLogView = () => import('@/modules/works/views/OperationLogView.vu
 const MessagesListView = () => import('@/modules/messages/views/MessagesListView.vue')
 const FeedbackManageListView = () => import('@/modules/feedback/views/FeedbackManageListView.vue')
 const BackgroundsListView = () => import('@/modules/backgrounds/views/BackgroundsListView.vue')
+const FestivalsListView = () => import('@/modules/system/views/FestivalsListView.vue')
 
 export const adminChildren: RouteRecordRaw[] = [
   {
@@ -377,6 +378,24 @@ export const adminChildren: RouteRecordRaw[] = [
       menuGroupLabel: '系统管理',
       groupOrder: 70,
       menuOrder: 10,
+    },
+  },
+  {
+    path: 'system/festivals',
+    name: 'system-festivals',
+    component: FestivalsListView,
+    meta: {
+      title: '节日管理',
+      subtitle: '维护节日与日期区间，背景图可绑定节日并按节日优先展示。',
+      requiresAuth: true,
+      requiresManager: true,
+      // 1匹配鉴权：仅馆长（ADVANCED_ADMINISTRATOR）权限位可访问
+      minManagerPermissionBit: MANAGER_PERMISSION.ADVANCED_ADMINISTRATOR,
+      menuLabel: '节日管理',
+      menuGroup: 'sysmanage',
+      menuGroupLabel: '系统管理',
+      groupOrder: 70,
+      menuOrder: 20,
     },
   },
   {

@@ -5,6 +5,8 @@ import com.miaoyu.barc.background.mapper.BackgroundImageMapper;
 import com.miaoyu.barc.background.model.BackgroundImageModel;
 import com.miaoyu.barc.background.model.BackgroundModuleOption;
 import com.miaoyu.barc.background.enumeration.BackgroundModuleEnum;
+import com.miaoyu.barc.festival.mapper.FestivalMapper;
+import com.miaoyu.barc.festival.model.FestivalModel;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.tencent.cos.CosBucketConfigEnum;
 import com.miaoyu.barc.utils.tencent.cos.CosConfig;
@@ -35,6 +37,8 @@ class BackgroundImageServiceTest {
 
     @Mock
     private BackgroundImageMapper backgroundImageMapper;
+    @Mock
+    private FestivalMapper festivalMapper;
     @Mock
     private CosService cosService;
     @Mock
@@ -229,13 +233,15 @@ class BackgroundImageServiceTest {
         when(cosService.uploadFileWithKey(eq(image), anyString(), eq(CosBucketConfigEnum.image)))
                 .thenAnswer(inv -> new J(0, "文件上传成功", inv.getArgument(1)));
         when(backgroundImageMapper.insert(any(BackgroundImageModel.class))).thenReturn(1);
+        // 节日改为「节日管理」中的动态数据：存在且启用才允许绑定
+        when(festivalMapper.selectEnabledById("fest-1")).thenReturn(enabledFestival("fest-1"));
 
-        ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", "day", "newyear");
+        ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", "day", "fest-1");
 
         assertEquals(0, response.getBody().getCode());
         BackgroundImageModel model = (BackgroundImageModel) response.getBody().getData();
         assertEquals("day", model.getTime_period());
-        assertEquals("newyear", model.getFestival());
+        assertEquals("fest-1", model.getFestival());
     }
 
     @Test
@@ -247,9 +253,19 @@ class BackgroundImageServiceTest {
     }
 
     @Test
-    @DisplayName("上传背景图 - 非法节日被拒且不上传 COS")
+    @DisplayName("上传背景图 - 不存在的节日被拒且不上传 COS")
     void upload_invalidFestival() {
         ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", null, "bad");
+        assertEquals(1, response.getBody().getCode());
+        verify(cosService, never()).uploadFileWithKey(any(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("上传背景图 - 已关闭的节日不允许再绑定")
+    void upload_disabledFestival() {
+        // selectEnabledById 查不到（已关闭 / 已删除）时返回 null → 拒绝绑定
+        when(festivalMapper.selectEnabledById("fest-off")).thenReturn(null);
+        ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", null, "fest-off");
         assertEquals(1, response.getBody().getCode());
         verify(cosService, never()).uploadFileWithKey(any(), anyString(), any());
     }
@@ -258,7 +274,7 @@ class BackgroundImageServiceTest {
     @DisplayName("更新场景 - 记录不存在返回失败")
     void updateScene_notFound() {
         when(backgroundImageMapper.selectById("id1")).thenReturn(null);
-        ResponseEntity<J> response = backgroundImageService.updateSceneService("admin-uuid", "id1", "day", "newyear");
+        ResponseEntity<J> response = backgroundImageService.updateSceneService("admin-uuid", "id1", "day", "fest-1");
         assertEquals(1, response.getBody().getCode());
         verify(backgroundImageMapper, never()).updateScene(anyString(), any(), any());
     }
@@ -303,13 +319,30 @@ class BackgroundImageServiceTest {
     }
 
     @Test
+    @DisplayName("更新场景 - 合法节日写入节日 ID")
+    void updateScene_validFestival() {
+        BackgroundImageModel model = new BackgroundImageModel();
+        model.setId("id1");
+        when(backgroundImageMapper.selectById("id1")).thenReturn(model);
+        when(festivalMapper.selectEnabledById("fest-1")).thenReturn(enabledFestival("fest-1"));
+        when(backgroundImageMapper.updateScene("id1", null, "fest-1")).thenReturn(1);
+
+        ResponseEntity<J> response = backgroundImageService.updateSceneService("admin-uuid", "id1", null, "fest-1");
+
+        assertEquals(0, response.getBody().getCode());
+        verify(backgroundImageMapper).updateScene("id1", null, "fest-1");
+        BackgroundImageModel saved = (BackgroundImageModel) response.getBody().getData();
+        assertEquals("fest-1", saved.getFestival());
+    }
+
+    @Test
     @DisplayName("公开接口 - 携带时段与节日标签")
     void publicAll_carriesScene() {
         BackgroundImageModel home = new BackgroundImageModel();
         home.setModule("home");
         home.setObject_key("client/bg/home/A-1.jpg");
         home.setTime_period("day");
-        home.setFestival("newyear");
+        home.setFestival("fest-1");
         when(backgroundImageMapper.selectAllEnabled()).thenReturn(List.of(home));
         when(imageUrlResolver.resolve("client/bg/home/A-1.jpg")).thenReturn("https://signed/home");
 
@@ -322,6 +355,14 @@ class BackgroundImageServiceTest {
         BackgroundImageService.PublicItem item = grouped.get("home").get(0);
         assertEquals("https://signed/home", item.getUrl());
         assertEquals("day", item.getTime_period());
-        assertEquals("newyear", item.getFestival());
+        assertEquals("fest-1", item.getFestival());
+    }
+
+    /** 构造一个「存在且启用」的节日，供背景图绑定校验使用 */
+    private FestivalModel enabledFestival(String id) {
+        FestivalModel festival = new FestivalModel();
+        festival.setId(id);
+        festival.setEnabled(true);
+        return festival;
     }
 }

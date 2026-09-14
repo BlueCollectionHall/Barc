@@ -4,11 +4,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import RoutePageShell from '@/app/components/RoutePageShell.vue'
 import {
-  BACKGROUND_FESTIVAL_OPTIONS,
   BACKGROUND_TIME_PERIOD_OPTIONS,
   deleteBackground,
   fetchBackgroundList,
   fetchBackgroundModules,
+  fetchFestivalSceneOptions,
   reorderBackground,
   setBackgroundEnabled,
   updateBackgroundScene,
@@ -58,14 +58,23 @@ const TIME_PERIOD_FILTER_OPTIONS: BackgroundSceneOption[] = [
   })),
 ]
 
-/** 节日筛选选项：全部节日 / 新年 / 未标注节日(null) */
-const FESTIVAL_FILTER_OPTIONS: BackgroundSceneOption[] = [
+/**
+ * 「节日」下拉选项（null 表示无节日通用图）。
+ * 由页面挂载时拉取「启用中」的节日后填充，避免写死枚举。
+ */
+const festivalOptions = ref<BackgroundSceneOption[]>([{ value: null, label: '无' }])
+
+/**
+ * 节日筛选选项：全部节日 / 启用中的节日 / 未标注节日(null)。
+ * 节日来自「系统管理 → 节日管理」，因此这里用 computed 承载异步结果。
+ */
+const FESTIVAL_FILTER_OPTIONS = computed<BackgroundSceneOption[]>(() => [
   { value: FILTER_ALL, label: '全部节日' },
-  ...BACKGROUND_FESTIVAL_OPTIONS.map((opt) => ({
+  ...festivalOptions.value.map((opt) => ({
     value: opt.value,
     label: opt.value === null ? '未标注（无节日）' : opt.label,
   })),
-]
+])
 
 /** 当前筛选的时段条件：FILTER_ALL = 不过滤；null = 只看未标注时段的图 */
 const filterTimePeriod = ref<string | null>(FILTER_ALL)
@@ -126,11 +135,39 @@ async function loadModules(): Promise<void> {
   }
 }
 
+/**
+ * 加载「节日」下拉选项（启用中的节日）。
+ * 单独拉取：节日来自「节日管理」模块，与背景模块列表互不依赖，任一失败都不影响另一个。
+ */
+async function loadFestivalOptions(): Promise<void> {
+  festivalOptions.value = await fetchFestivalSceneOptions()
+  normalizeStaleFestivals()
+}
+
+/**
+ * 同步「已失效的节日绑定」。
+ *
+ * 场景：馆长在「节日管理」里删除或关闭了某个节日后，绑定它的背景图会被后端自动划归「无节日」；
+ * 若本页面仍停留在打开状态，本地列表还持有旧的节日 ID，会让下拉框显示成空值造成误解。
+ * 这里把「不在当前可选节日里的绑定」统一显示为「无」，与后端已置 NULL 的状态保持一致。
+ */
+function normalizeStaleFestivals(): void {
+  const selectable = new Set(festivalOptions.value.map((opt) => opt.value))
+  for (const row of list.value) {
+    const bound = row.festival
+    if (bound === null || bound === undefined || !selectable.has(bound)) {
+      row.festival = null
+    }
+  }
+}
+
 async function loadList(): Promise<void> {
   if (!module.value) return
   loading.value = true
   try {
     list.value = await fetchBackgroundList(module.value)
+    // 拉回列表后立即对齐一次节日绑定，避免外部删除节日导致的残留显示
+    normalizeStaleFestivals()
   } catch (error) {
     showError(getErrorMessage(error))
   } finally {
@@ -230,6 +267,8 @@ async function removeItem(row: BackgroundImageRecord): Promise<void> {
 
 onMounted(async () => {
   await loadModules()
+  // 先取节日选项，再拉列表：这样列表回来时就能立刻对齐失效的节日绑定
+  await loadFestivalOptions()
   await loadList()
 })
 </script>
@@ -351,7 +390,7 @@ onMounted(async () => {
           </template>
         </el-table-column>
 
-        <el-table-column v-if="sceneEnabled" label="节日" width="110">
+        <el-table-column v-if="sceneEnabled" label="节日" width="140">
           <template #default="{ row }">
             <el-select
               v-model="row.festival"
@@ -361,7 +400,7 @@ onMounted(async () => {
               @change="persistScene(row)"
             >
               <el-option
-                v-for="opt in BACKGROUND_FESTIVAL_OPTIONS"
+                v-for="opt in festivalOptions"
                 :key="String(opt.value)"
                 :value="opt.value"
                 :label="opt.label"
