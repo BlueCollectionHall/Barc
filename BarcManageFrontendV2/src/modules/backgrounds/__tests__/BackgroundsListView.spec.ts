@@ -238,6 +238,18 @@ describe('BackgroundsListView', () => {
     expect(showSuccess).toHaveBeenCalledWith('背景图场景已更新')
   })
 
+  it('teleports the preview layer so it is not confined to the glass panel', async () => {
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+
+    // .glass-panel 的 backdrop-filter 会创建 CSS 包含块；
+    // 若预览层不 teleport 到 body，position: fixed 的放大预览就被限制在面板内（只显示一小块）
+    const image = wrapper.findComponent({ name: 'ElImage' })
+    expect(image.exists()).toBe(true)
+    expect(image.props('previewTeleported')).toBe(true)
+  })
+
   it('shows the scene filter only for a scene-enabled module', async () => {
     const wrapper = mount(BackgroundsListView)
 

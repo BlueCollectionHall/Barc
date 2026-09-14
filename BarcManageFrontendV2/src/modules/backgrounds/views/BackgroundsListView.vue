@@ -321,6 +321,7 @@ onMounted(async () => {
               :src="row.url || row.object_key"
               fit="cover"
               :preview-src-list="row.url ? [row.url] : []"
+              preview-teleported
             />
           </template>
         </el-table-column>
