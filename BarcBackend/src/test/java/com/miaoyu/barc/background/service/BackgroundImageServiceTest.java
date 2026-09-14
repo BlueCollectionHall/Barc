@@ -3,6 +3,7 @@ package com.miaoyu.barc.background.service;
 import com.miaoyu.barc.api.service.CosGcService;
 import com.miaoyu.barc.background.mapper.BackgroundImageMapper;
 import com.miaoyu.barc.background.model.BackgroundImageModel;
+import com.miaoyu.barc.background.model.BackgroundModuleOption;
 import com.miaoyu.barc.background.enumeration.BackgroundModuleEnum;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.tencent.cos.CosBucketConfigEnum;
@@ -119,14 +120,28 @@ class BackgroundImageServiceTest {
     }
 
     @Test
-    @DisplayName("背景模块下拉 - 返回全部模块")
+    @DisplayName("背景模块下拉 - 返回全部模块且携带 sceneEnabled 标志")
     void modules_options() {
         ResponseEntity<J> response = backgroundImageService.modulesService("admin-uuid");
         assertEquals(0, response.getBody().getCode());
         @SuppressWarnings("unchecked")
-        List<com.miaoyu.barc.utils.dto.ValueLabelDto> list =
-                (List<com.miaoyu.barc.utils.dto.ValueLabelDto>) response.getBody().getData();
+        List<BackgroundModuleOption> list =
+                (List<BackgroundModuleOption>) response.getBody().getData();
         assertEquals(BackgroundModuleEnum.values().length, list.size());
+        // 首页为唯一启用场景化的模块
+        BackgroundModuleOption home = list.stream()
+                .filter(opt -> "home".equals(opt.getValue()))
+                .findFirst().orElse(null);
+        assertNotNull(home);
+        assertTrue(home.isSceneEnabled());
+        // 登录/注册模块不应启用场景化（纯随机）
+        BackgroundModuleOption sign = list.stream()
+                .filter(opt -> "sign".equals(opt.getValue()))
+                .findFirst().orElse(null);
+        assertNotNull(sign);
+        assertFalse(sign.isSceneEnabled());
+        // 不应出现已废弃的 student 独立模块
+        assertTrue(list.stream().noneMatch(opt -> "student".equals(opt.getValue())));
     }
 
     @Test

@@ -102,8 +102,8 @@ function findButton(wrapper: ReturnType<typeof mount>, label: string, index = 0)
 describe('BackgroundsListView', () => {
   beforeEach(() => {
     fetchBackgroundModules.mockResolvedValue([
-      { value: 'sign', label: '登录/注册' },
-      { value: 'home', label: '首页' },
+      { value: 'sign', label: '登录/注册', sceneEnabled: false },
+      { value: 'home', label: '首页', sceneEnabled: true },
     ])
     fetchBackgroundList.mockResolvedValue([
       createRecord('bg-1', 'a.jpg', true),
@@ -128,6 +128,17 @@ describe('BackgroundsListView', () => {
     expect(wrapper.text()).toContain('a.jpg')
     expect(wrapper.text()).toContain('b.jpg')
     expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('hides scene columns and shows a hint for a non-scene module', async () => {
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+
+    // sign 为纯随机模块：除了模块下拉，不应再出现「时段/节日」select
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    expect(selects.length).toBe(1)
+    expect(wrapper.text()).toContain('该模块按启用顺序随机轮播，暂不支持时段/节日')
   })
 
   it('confirms and deletes a background image, then reloads the list', async () => {
@@ -177,9 +188,15 @@ describe('BackgroundsListView', () => {
     expect(showSuccess).toHaveBeenCalledWith('背景图已停用')
   })
 
-  it('persists the scene select change', async () => {
+  it('persists the scene select change for the home module', async () => {
     const wrapper = mount(BackgroundsListView)
 
+    await flushPromises()
+
+    // 先切到「首页」（启用场景化的模块）
+    const moduleSelect = wrapper.findAllComponents({ name: 'ElSelect' })[0]
+    await moduleSelect!.vm.$emit('update:modelValue', 'home')
+    await moduleSelect!.vm.$emit('change', 'home')
     await flushPromises()
 
     // 第 0 个 select 是模块下拉；第 1 个是首行（bg-1）的「时段」select

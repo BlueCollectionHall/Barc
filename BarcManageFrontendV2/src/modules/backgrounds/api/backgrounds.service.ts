@@ -3,6 +3,8 @@ import { http } from '@/shared/api/http'
 export interface BackgroundModuleOption {
   value: string
   label: string
+  /** 该模块是否启用「时段 + 节日」场景化筛选（仅首页 true，其余纯随机） */
+  sceneEnabled: boolean
 }
 
 /** 时段：day/eventing/night，null 表示任意时段 */

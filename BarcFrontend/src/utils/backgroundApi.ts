@@ -30,7 +30,18 @@ export async function fetchBackgrounds(): Promise<BackgroundMap> {
   return {};
 }
 
-/** 获取某个模块的启用背景图 URL 列表（兼容旧用法，只取 url） */
+/**
+ * 获取某个模块的启用背景图 URL 列表（兼容旧用法，只取 url）。
+ *
+ * ⚠️ 注意：此方法「只取 url、丢弃时段/节日标签」，不做任何场景筛选。
+ * 当前仅「首页 home」启用场景化（走 fetchModuleBackgroundItems + pickBackgroundByScene），
+ * 其余模块（sign / join / feedback / messageboard）均通过本方法纯随机抽取，
+ * 即「按启用顺序随机轮播，不区分时段/节日」。
+ *
+ * 扩展点：若未来某模块要启用场景化，只需把对应组件改为
+ * 调用 fetchModuleBackgroundItems(module) + pickBackgroundByScene(items, new Date()) 即可，
+ * 同时将后端 BackgroundModuleEnum 中该模块的 sceneEnabled 置为 true。
+ */
 export async function fetchModuleBackgrounds(module: string): Promise<string[]> {
   const items = await fetchModuleBackgroundItems(module);
   return items.map((item) => item.url);
@@ -84,10 +95,14 @@ export function resolveCurrentScene(date: Date): {
 }
 
 /**
- * 依据当前场景从启用图池中随机选一张：
+ * 依据当前场景从启用图池中随机选一张（「首页 home」专用的场景化入口）。
  * - 节日季：优先节日图，否则用非节日通用图；非节日季：只用非节日通用图
  * - 时段优先：选池内匹配当前时段的图（含未标注时段的通用图），无匹配则退回整个选池
+ * - 无时段图（time_period 为空）会被无条件纳入每个时段候选池 → 参与各时段轮播
  * - random 参数可注入以便测试（默认 Math.random）
+ *
+ * 扩展点：仅当某模块启用场景化（后端 BackgroundModuleEnum.sceneEnabled = true）时，
+ * 该模块的组件才走本方法；其余模块保持 fetchModuleBackgrounds（纯随机）。
  */
 export function pickBackgroundByScene(
   items: BackgroundItem[],

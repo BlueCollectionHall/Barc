@@ -31,6 +31,11 @@ const moduleLabel = computed(
   () => modules.value.find((item) => item.value === module.value)?.label ?? module.value,
 )
 
+/** 当前选中模块是否启用「时段 + 节日」场景化筛选（仅首页 true，其余纯随机） */
+const sceneEnabled = computed(
+  () => modules.value.find((item) => item.value === module.value)?.sceneEnabled ?? false,
+)
+
 async function loadModules(): Promise<void> {
   try {
     modules.value = await fetchBackgroundModules()
@@ -174,6 +179,14 @@ onMounted(async () => {
     </template>
 
     <section class="glass-panel panel" v-loading="loading">
+      <el-alert
+        v-if="!sceneEnabled"
+        class="scene-hint"
+        type="info"
+        :closable="false"
+        show-icon
+        title="该模块按启用顺序随机轮播，暂不支持时段/节日"
+      />
       <el-table :data="list" row-key="id" empty-text="当前模块还没有背景图">
         <el-table-column label="预览" width="180">
           <template #default="{ row }">
@@ -192,7 +205,7 @@ onMounted(async () => {
           </template>
         </el-table-column>
 
-        <el-table-column label="时段" width="120">
+        <el-table-column v-if="sceneEnabled" label="时段" width="120">
           <template #default="{ row }">
             <el-select v-model="row.time_period" size="small" class="scene-select" @change="persistScene(row)">
               <el-option
@@ -205,7 +218,7 @@ onMounted(async () => {
           </template>
         </el-table-column>
 
-        <el-table-column label="节日" width="110">
+        <el-table-column v-if="sceneEnabled" label="节日" width="110">
           <template #default="{ row }">
             <el-select v-model="row.festival" size="small" class="scene-select" @change="persistScene(row)">
               <el-option
@@ -255,6 +268,10 @@ onMounted(async () => {
 
 .panel {
   padding: 1rem;
+}
+
+.scene-hint {
+  margin-bottom: 0.75rem;
 }
 
 .preview {
