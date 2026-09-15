@@ -233,8 +233,8 @@ class BackgroundImageServiceTest {
         when(cosService.uploadFileWithKey(eq(image), anyString(), eq(CosBucketConfigEnum.image)))
                 .thenAnswer(inv -> new J(0, "文件上传成功", inv.getArgument(1)));
         when(backgroundImageMapper.insert(any(BackgroundImageModel.class))).thenReturn(1);
-        // 节日改为「节日管理」中的动态数据：存在且启用才允许绑定
-        when(festivalMapper.selectEnabledById("fest-1")).thenReturn(enabledFestival("fest-1"));
+        // 节日改为「节日管理」中的动态数据：节日存在即可绑定
+        when(festivalMapper.selectById("fest-1")).thenReturn(enabledFestival("fest-1"));
 
         ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", "day", "fest-1");
 
@@ -261,13 +261,31 @@ class BackgroundImageServiceTest {
     }
 
     @Test
-    @DisplayName("上传背景图 - 已关闭的节日不允许再绑定")
-    void upload_disabledFestival() {
-        // selectEnabledById 查不到（已关闭 / 已删除）时返回 null → 拒绝绑定
-        when(festivalMapper.selectEnabledById("fest-off")).thenReturn(null);
-        ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", null, "fest-off");
+    @DisplayName("上传背景图 - 已删除的节日被拒（selectById 查不到）")
+    void upload_deletedFestival() {
+        // 已删除的节日查不到 → 拒绝绑定（删除时后端已把相关背景图划归「无节日」）
+        when(festivalMapper.selectById("fest-gone")).thenReturn(null);
+        ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", null, "fest-gone");
         assertEquals(1, response.getBody().getCode());
         verify(cosService, never()).uploadFileWithKey(any(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("上传背景图 - 已关闭但未删除的节日仍可绑定（关闭只影响用户端判定）")
+    void upload_disabledFestivalStillBindable() {
+        FestivalModel disabled = new FestivalModel();
+        disabled.setId("fest-off");
+        disabled.setEnabled(false);
+        when(festivalMapper.selectById("fest-off")).thenReturn(disabled);
+        when(cosService.uploadFileWithKey(eq(image), anyString(), eq(CosBucketConfigEnum.image)))
+                .thenAnswer(inv -> new J(0, "文件上传成功", inv.getArgument(1)));
+        when(backgroundImageMapper.insert(any(BackgroundImageModel.class))).thenReturn(1);
+
+        ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", null, "fest-off");
+
+        assertEquals(0, response.getBody().getCode());
+        BackgroundImageModel saved = (BackgroundImageModel) response.getBody().getData();
+        assertEquals("fest-off", saved.getFestival());
     }
 
     @Test
@@ -324,7 +342,7 @@ class BackgroundImageServiceTest {
         BackgroundImageModel model = new BackgroundImageModel();
         model.setId("id1");
         when(backgroundImageMapper.selectById("id1")).thenReturn(model);
-        when(festivalMapper.selectEnabledById("fest-1")).thenReturn(enabledFestival("fest-1"));
+        when(festivalMapper.selectById("fest-1")).thenReturn(enabledFestival("fest-1"));
         when(backgroundImageMapper.updateScene("id1", null, "fest-1")).thenReturn(1);
 
         ResponseEntity<J> response = backgroundImageService.updateSceneService("admin-uuid", "id1", null, "fest-1");

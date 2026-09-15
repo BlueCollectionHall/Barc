@@ -103,10 +103,12 @@ public final class MonthDayRangeUtils {
     /**
      * 枚举区间覆盖的全部「月日」统一索引（跨年区间会自动绕行展开）。
      *
-     * 注意：跨年区间绕行到次年的那一段会整体加上一圈（+384），使结果成为一条连续递增的坐标区间；
-     * 这与 {@link #isOverlapped} 内部使用的坐标体系一致，便于把「圆环上的区间」当作直线区间处理。
+     * 约定（与 {@link #isOverlapped} 使用同一套坐标，因此不存在语义差异）：
+     * 1、只产出真实存在的日期，绝不包含月度空隙上的索引（如 2 月的 30、31 日）；
+     * 2、跨年区间绕行到次年的那一段整体加一圈（+384），使结果成为一条连续递增的坐标序列。
      *
-     * 例：[12-01, 02-28] → [386 … 415, 417 … 467]，即 12 月整月 + 次年 1 月整月 + 次年 2 月 1-28 日。
+     * 例：[12-01, 02-28] → [385 … 415, 417 … 476]，
+     * 即 12 月整月 + 次年 1 月整月 + 次年 2 月 1-28 日。
      *
      * @param startMonth 起始月
      * @param startDay   起始日
@@ -120,25 +122,35 @@ public final class MonthDayRangeUtils {
         if (startIndex <= endIndex) {
             // 普通区间：一次性走完，无需绕行
             for (int index = startIndex; index <= endIndex; index++) {
-                indexes.add(index);
+                if (isRealDayIndex(index)) {
+                    indexes.add(index);
+                }
             }
             return indexes;
         }
-        // 跨年区间：从起始日走到年末（第一圈），再从年初走到结束日（第二圈，整体加一圈）
-        for (int month = startMonth; month <= 12; month++) {
-            int fromDay = month == startMonth ? startDay : 1;
-            int maxDay = maxDayOfMonth(month, null);
-            for (int day = fromDay; day <= maxDay; day++) {
-                indexes.add(toIndex(month, day));
+        // 跨年区间：第一圈从起始日走到年末（12-31）
+        for (int index = startIndex; index <= MAX_DAY_INDEX; index++) {
+            if (isRealDayIndex(index)) {
+                indexes.add(index);
             }
         }
-        for (int month = 1; month <= endMonth; month++) {
-            int maxDay = month == endMonth ? endDay : maxDayOfMonth(month, null);
-            for (int day = 1; day <= maxDay; day++) {
-                indexes.add(toIndex(month, day) + CYCLE);
+        // 第二圈从年初（1-1）走到结束日，整体加一圈，坐标落到第一圈之后
+        for (int index = MONTH_WEIGHT + 1; index <= endIndex; index++) {
+            if (isRealDayIndex(index)) {
+                indexes.add(index + CYCLE);
             }
         }
         return indexes;
+    }
+
+    /**
+     * 判断统一索引是否对应真实存在的一天。
+     *
+     * 每月最多 31 天，而进位基数是 32，因此对 32 取余为 0 的索引落在月度空隙上（例如 64 = 2 月 0 日），
+     * 必须排除，否则重叠判定会把不存在的日期也算进覆盖范围。
+     */
+    private static boolean isRealDayIndex(int index) {
+        return index % MONTH_WEIGHT != 0;
     }
 
     /**
@@ -185,32 +197,13 @@ public final class MonthDayRangeUtils {
     /**
      * 把区间覆盖的每一天转换成统一索引的集合（跨年区间会自动绕行展开，跨年段加一圈 +384）
      *
-     * 实现要点：每月只有 1-31 日，因此索引对 32 取余为 0 的坐标属于月度空隙（不存在的一天），
-     * 枚举时直接跳过；这样得到的就是精确的「真实日期」集合。
+     * 直接复用 {@link #enumerateDayIndexes}，保证「枚举」与「重叠判定」两处使用的是同一套坐标与过滤规则。
      */
     private static Set<Integer> toDayIndexSet(int startIndex, int endIndex) {
-        Set<Integer> indexes = new HashSet<>();
-        if (startIndex <= endIndex) {
-            for (int index = startIndex; index <= endIndex; index++) {
-                if (index % MONTH_WEIGHT != 0) {
-                    indexes.add(index);
-                }
-            }
-            return indexes;
-        }
-        // 跨年区间：第一圈从起始日走到年末（12-31）
-        for (int index = startIndex; index <= MAX_DAY_INDEX; index++) {
-            if (index % MONTH_WEIGHT != 0) {
-                indexes.add(index);
-            }
-        }
-        // 第二圈从年初（1-1）走到结束日，整体加一圈，坐标落到第一圈之后
-        for (int index = MONTH_WEIGHT + 1; index <= endIndex; index++) {
-            if (index % MONTH_WEIGHT != 0) {
-                indexes.add(index + CYCLE);
-            }
-        }
-        return indexes;
+        // 反推回「月 / 日」后交给枚举方法，避免两处各写一套遍历逻辑
+        return new HashSet<>(enumerateDayIndexes(
+                startIndex / MONTH_WEIGHT, startIndex % MONTH_WEIGHT,
+                endIndex / MONTH_WEIGHT, endIndex % MONTH_WEIGHT));
     }
 
     /**

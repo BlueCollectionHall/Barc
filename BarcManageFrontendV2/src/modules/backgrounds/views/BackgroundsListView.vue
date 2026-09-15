@@ -136,7 +136,7 @@ async function loadModules(): Promise<void> {
 }
 
 /**
- * 加载「节日」下拉选项（启用中的节日）。
+ * 加载「节日」下拉选项（全部节日，含已关闭）。
  * 单独拉取：节日来自「节日管理」模块，与背景模块列表互不依赖，任一失败都不影响另一个。
  */
 async function loadFestivalOptions(): Promise<void> {
@@ -145,11 +145,12 @@ async function loadFestivalOptions(): Promise<void> {
 }
 
 /**
- * 同步「已失效的节日绑定」。
+ * 清理「已失效的节日绑定」。
  *
- * 场景：馆长在「节日管理」里删除或关闭了某个节日后，绑定它的背景图会被后端自动划归「无节日」；
- * 若本页面仍停留在打开状态，本地列表还持有旧的节日 ID，会让下拉框显示成空值造成误解。
- * 这里把「不在当前可选节日里的绑定」统一显示为「无」，与后端已置 NULL 的状态保持一致。
+ * 场景：馆长在「节日管理」里**删除**了某个节日后，绑定它的背景图会被后端自动划归「无节日」；
+ * 若本页面仍停留在打开状态，本地列表还持有已不存在的节日 ID，下拉框会显示成空值造成误解。
+ * 这里只把「已不存在的节日」归一为「无」——**已关闭的节日不算失效**：
+ * 关闭只表示不参与用户端判定，绑定关系要保留，因此仍在下拉中可选。
  */
 function normalizeStaleFestivals(): void {
   const selectable = new Set(festivalOptions.value.map((opt) => opt.value))
@@ -330,6 +331,7 @@ onMounted(async () => {
             :key="String(opt.value)"
             :value="opt.value"
             :label="opt.label"
+            :disabled="opt.disabled"
           />
         </el-select>
       </div>
@@ -404,6 +406,7 @@ onMounted(async () => {
                 :key="String(opt.value)"
                 :value="opt.value"
                 :label="opt.label"
+                :disabled="opt.disabled"
               />
             </el-select>
           </template>

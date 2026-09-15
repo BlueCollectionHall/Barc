@@ -361,18 +361,17 @@ class FestivalServiceTest {
     }
 
     @Test
-    @DisplayName("删除 - 删除失败时不返回成功结果")
-    void delete_softDeleteFail() {
+    @DisplayName("删除 - 软删除未生效时抛出异常，触发事务回滚（不让解绑被单独提交）")
+    void delete_softDeleteFailRollsBack() {
         FestivalModel existing = namedFestival("新年", 12, 1, 2, 28);
         existing.setId("fest-ny");
         when(festivalMapper.selectById("fest-ny")).thenReturn(existing);
-        when(backgroundImageMapper.clearFestival("fest-ny")).thenReturn(0);
+        when(backgroundImageMapper.clearFestival("fest-ny")).thenReturn(3);
         when(festivalMapper.softDelete("fest-ny")).thenReturn(0);
 
-        ResponseEntity<J> response = festivalService.deleteService("admin-uuid", "fest-ny");
-
-        assertEquals(1, response.getBody().getCode());
-        assertTrue(String.valueOf(response.getBody().getMsg()).contains("删除失败"));
+        // 必须抛异常而不是返回错误码：@Transactional(rollbackFor = Exception.class) 只对异常回滚，
+        // 若返回 ResponseEntity 则「已解绑背景图」会被单独提交，导致背景图丢绑定而节日还在
+        assertThrows(IllegalStateException.class, () -> festivalService.deleteService("admin-uuid", "fest-ny"));
     }
 
     // ============ 公开接口 ============
@@ -390,6 +389,23 @@ class FestivalServiceTest {
         assertEquals(1, list.size());
         assertEquals("新年", list.get(0).getName());
         verify(festivalMapper).selectAllEnabled();
+    }
+
+    @Test
+    @DisplayName("选项接口 - 返回全部节日（含已关闭），供背景图下拉保留绑定")
+    void options_returnsAllIncludingDisabled() {
+        FestivalModel disabled = namedFestival("已关闭节日", 3, 1, 3, 31);
+        disabled.setEnabled(false);
+        when(festivalMapper.selectAll()).thenReturn(List.of(namedFestival("新年", 12, 1, 2, 28), disabled));
+
+        ResponseEntity<J> response = festivalService.optionsService("admin-uuid");
+
+        assertEquals(0, response.getBody().getCode());
+        @SuppressWarnings("unchecked")
+        List<FestivalModel> list = (List<FestivalModel>) response.getBody().getData();
+        assertEquals(2, list.size());
+        // 关闭的节日必须出现在候选中，否则背景图页面无法显示 / 保留它的绑定
+        assertFalse(list.get(1).getEnabled());
     }
 
     // ============ 测试辅助 ============

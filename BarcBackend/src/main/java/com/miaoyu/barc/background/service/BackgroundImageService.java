@@ -279,14 +279,18 @@ public class BackgroundImageService {
     /**
      * 判断该节日 ID 是否可以被背景图绑定
      *
-     * 规则：null 表示「无节日」通用图，直接放行；非 null 时必须是在「节日管理」中
-     * 仍然存在且处于启用状态的节日，避免把背景图绑到已删除 / 已关闭的节日上。
+     * 规则：null 表示「无节日」通用图，直接放行；非 null 时必须是「节日管理」中仍然存在的节日。
+     *
+     * 注意：这里刻意「不」要求节日处于启用状态 ——
+     * 1、关闭节日的语义是「保留数据与背景图绑定，仅不参与用户端判定」，若在此禁止绑定，
+     *    馆长在节日关闭期间连该图的「时段」都改不动（提交时会连带已关闭的节日 ID 一起被拒）；
+     * 2、已删除的节日仍会被拒绝，因为删除时后端已把这些背景图统一划归「无节日」。
      */
     private boolean isBindableFestival(String festivalId) {
         if (festivalId == null) {
             return true;
         }
-        return festivalMapper.selectEnabledById(festivalId) != null;
+        return festivalMapper.selectById(festivalId) != null;
     }
 
     private void resolveDisplayUrl(BackgroundImageModel model) {

@@ -74,6 +74,8 @@ vi.mock('element-plus', async () => {
 
 /** 节日 ID：背景图现在绑定的是「节日管理」里的节日主键，而不是写死的枚举值 */
 const FESTIVAL_ID = 'fest-ny'
+/** 已关闭的节日 ID：关闭只表示不参与用户端判定，绑定关系要保留 */
+const CLOSED_FESTIVAL_ID = 'fest-closed'
 
 function createRecord(
   id: string,
@@ -139,10 +141,11 @@ describe('BackgroundsListView', () => {
       createRecord('bg-1', 'a.jpg', true),
       createRecord('bg-2', 'b.jpg', false),
     ])
-    // 节日下拉来自「系统管理 → 节日管理」，这里注入一个启用中的新年
+    // 节日下拉来自「系统管理 → 节日管理」：含一个启用中的新年与一个已关闭的节日
     fetchFestivalSceneOptions.mockResolvedValue([
       { value: null, label: '无' },
       { value: FESTIVAL_ID, label: '新年' },
+      { value: CLOSED_FESTIVAL_ID, label: '已关闭节日（已关闭）', disabled: true },
     ])
     deleteBackground.mockResolvedValue(null)
     reorderBackground.mockResolvedValue(null)
@@ -354,7 +357,7 @@ describe('BackgroundsListView', () => {
 
   it('resets a stale festival binding when the festival was removed in admin', async () => {
     // 后端在删除节日时会把绑定它的背景图置为 NULL，但若本页仍停留在打开状态，
-    // 本地列表还持有旧节日 ID —— 这里必须显示为「无」，避免误导馆长
+    // 本地列表还持有已不存在的节日 ID —— 这里必须显示为「无」，避免误导馆长
     fetchBackgroundList.mockResolvedValue([
       createRecord('bg-stale', 'stale.jpg', true, { festival: 'fest-deleted' }),
     ])
@@ -367,6 +370,21 @@ describe('BackgroundsListView', () => {
     expect(festivalSelect).toBeDefined()
     // 断言失败时的提示信息用于定位，这里仅校验「已失效节日被归一为空」
     expect(festivalSelect!.props('modelValue' as never)).toBeNull()
+  })
+
+  it('keeps a binding to a closed festival (关闭不等于解绑)', async () => {
+    // 关闭的节日必须继续留在下拉里，否则馆长既看不到绑定、也改不动这张图的「时段」
+    fetchBackgroundList.mockResolvedValue([
+      createRecord('bg-closed', 'closed.jpg', true, { festival: CLOSED_FESTIVAL_ID }),
+    ])
+    const wrapper = mount(BackgroundsListView)
+
+    await flushPromises()
+    await switchToHome(wrapper)
+
+    const festivalSelect = findAllSelects(wrapper, 'row-festival')[0]
+    expect(festivalSelect).toBeDefined()
+    expect(festivalSelect!.props('modelValue' as never)).toBe(CLOSED_FESTIVAL_ID)
   })
 
   it('disables reordering while a filter is active', async () => {

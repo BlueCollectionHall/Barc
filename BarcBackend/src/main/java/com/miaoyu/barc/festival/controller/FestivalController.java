@@ -71,6 +71,13 @@ public class FestivalController {
         return festivalService.deleteService(request.getAttribute("uuid").toString(), id);
     }
 
+    /** 管理端：全部节日（含已关闭，供背景图「节日」下拉展示与筛选，1匹配鉴权） */
+    @GetMapping("/options")
+    public ResponseEntity<J> optionsControl(HttpServletRequest request) {
+        // 走一次鉴权切面：传入 uuid 以校验馆长权限
+        return festivalService.optionsService(request.getAttribute("uuid").toString());
+    }
+
     /** 用户端：启用中的节日列表（含日期区间，无需登录） */
     @GetMapping("/all")
     @IgnoreAuth

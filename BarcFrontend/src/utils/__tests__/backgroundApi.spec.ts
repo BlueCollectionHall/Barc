@@ -38,10 +38,22 @@ function festival(
   };
 }
 
-/** 新年：月份式 12 月 → 次年 2 月，落库为 12-01 → 02-28（跨年区间） */
-const NEW_YEAR = festival("fest-ny", "新年", 12, 1, 2, 28);
+/** 新年：月份式 12 月 → 次年 2 月，落库为 12-01 → 02-29（跨年区间） */
+const NEW_YEAR = festival("fest-ny", "新年", 12, 1, 2, 29);
 /** 暑期：日期式 07-01 → 08-31（不跨年） */
 const SUMMER = festival("fest-summer", "暑期", 7, 1, 8, 31);
+
+describe("festival index convention (must match the backend)", () => {
+  it("uses month * 32 + day so that new year is a cross-year range", () => {
+    // 后端统一索引算法为「月 * 32 + 日」（见 MonthDayRangeUtils.toIndex）。
+    // 这条用例锁死该约定：历史上迁移种子曾误按「月 * 31 + 日」手算（写成 386 / 478），
+    // 结果新年被当成非跨年区间，1-2 月判定不到新年，绑定新年的背景图不会展示。
+    expect(NEW_YEAR.start_index).toBe(12 * 32 + 1); // 385
+    expect(NEW_YEAR.end_index).toBe(2 * 32 + 29); // 93
+    // start_index > end_index 即跨年环绕
+    expect(NEW_YEAR.start_index).toBeGreaterThan(NEW_YEAR.end_index);
+  });
+});
 
 describe("resolveCurrentScene", () => {
   it("maps hours to night / day / eventing / night", () => {

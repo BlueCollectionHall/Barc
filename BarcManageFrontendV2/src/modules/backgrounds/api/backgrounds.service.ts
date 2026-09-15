@@ -1,5 +1,5 @@
 import { http } from '@/shared/api/http'
-import { fetchEnabledFestivals } from '@/modules/system/api/festivals.service'
+import { fetchFestivalOptions } from '@/modules/system/api/festivals.service'
 
 export interface BackgroundModuleOption {
   value: string
@@ -14,6 +14,12 @@ export type BackgroundTimePeriod = 'day' | 'eventing' | 'night'
 export interface BackgroundSceneOption {
   value: string | null
   label: string
+  /**
+   * 该选项对应的节日是否已关闭。
+   * 关闭的节日仍会出现在下拉里（关闭只表示「不参与用户端判定」，绑定关系要保留），
+   * 但会用「（已关闭）」标注出来，避免馆长误以为它仍在生效。
+   */
+  disabled?: boolean
 }
 
 /** 管理端「时段」下拉选项（null 表示任意时段） */
@@ -27,16 +33,22 @@ export const BACKGROUND_TIME_PERIOD_OPTIONS: BackgroundSceneOption[] = [
 /**
  * 管理端「节日」下拉选项（null 表示无节日通用图）。
  *
- * 节日已改为「系统管理 → 节日管理」中的动态数据，这里不再写死枚举：
- * 只列出当前「启用中」的节日，已被关闭的节日不允许再被绑定。
+ * 节日来自「系统管理 → 节日管理」的动态数据，这里列出全部节日（含已关闭）：
+ * 关闭的节日必须继续可选 —— 否则这些背景图上的节日绑定会在页面上「消失」，
+ * 且馆长连「时段」都无法再修改（提交时会连带已关闭的节日 ID 一起被后端拒绝）。
+ *
  * 拉取失败时退化为只含「无」选项，保证页面仍可操作。
  */
 export async function fetchFestivalSceneOptions(): Promise<BackgroundSceneOption[]> {
   const options: BackgroundSceneOption[] = [{ value: null, label: '无' }]
   try {
-    const festivals = await fetchEnabledFestivals()
+    const festivals = await fetchFestivalOptions()
     for (const festival of festivals) {
-      options.push({ value: festival.id, label: festival.name })
+      options.push({
+        value: festival.id,
+        label: festival.enabled ? festival.name : `${festival.name}（已关闭）`,
+        disabled: !festival.enabled,
+      })
     }
   } catch {
     // 节日接口异常不应阻断背景图页面的其他功能

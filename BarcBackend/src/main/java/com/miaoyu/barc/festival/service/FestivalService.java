@@ -194,13 +194,16 @@ public class FestivalService {
         // 先解绑背景图，再删除节日：两步在同一事务内，避免中间态被读取到
         int unbound = backgroundImageMapper.clearFestival(id);
         int rows = festivalMapper.softDelete(id);
-        if (rows > 0) {
-            DeleteResult result = new DeleteResult();
-            result.setId(id);
-            result.setUnboundBackgrounds(unbound);
-            return ResponseEntity.ok(new ResourceR().resourceSuch(true, result));
+        if (rows <= 0) {
+            // 影响行数为 0 说明删除未真正生效（例如并发下已被他人删除）。
+            // 此时必须抛异常让事务回滚，否则「已解绑背景图」这一步会被单独提交，
+            // 造成背景图丢失节日绑定、而节日仍然存在的脏数据。
+            throw new IllegalStateException("节日删除失败，id=" + id + "，unbound=" + unbound);
         }
-        return ResponseEntity.ok(new J(1, "节日删除失败", null));
+        DeleteResult result = new DeleteResult();
+        result.setId(id);
+        result.setUnboundBackgrounds(unbound);
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, result));
     }
 
     // ============ 公开接口（用户端背景图节日判定用，无需登录） ============
@@ -210,6 +213,23 @@ public class FestivalService {
      */
     public J publicAllService() {
         return new ResourceR().resourceSuch(true, festivalMapper.selectAllEnabled());
+    }
+
+    /**
+     * 管理端相关页面：全部节日（含已关闭，供背景图的「节日」下拉使用）
+     *
+     * 背景图页面需要显示并保留「已关闭」节日的绑定关系（关闭不等于解绑），
+     * 因此这里提供含关闭项的列表，且同样使用 1匹配馆长鉴权；
+     * 而用户端只认 /api/festival/all（仅启用中的节日）。
+     */
+    @RequireUserAndPermissionAnno({ @RequireUserAndPermissionAnno.Check(
+            identity = UserIdentityEnum.MANAGER,
+            targetPermission = PermissionConst.ADVANCED_ADMINISTRATOR,
+            isSuchElseRequire = false,
+            isHasElseUpper = true
+    )})
+    public ResponseEntity<J> optionsService(String uuid) {
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, festivalMapper.selectAll()));
     }
 
     // ============ 私有辅助 ============

@@ -117,6 +117,15 @@ export function fetchFestivals(): Promise<FestivalRecord[]> {
   return http.get<FestivalRecord[]>('/api/festival/admin/list')
 }
 
+/**
+ * 管理端：全部节日（含已关闭），供背景图的「节日」下拉与筛选使用
+ *
+ * 与 fetchFestivals 的区别：不附带背景图绑定数量统计，避免背景图页面为了下拉选项触发 N 次统计查询。
+ */
+export function fetchFestivalOptions(): Promise<FestivalRecord[]> {
+  return http.get<FestivalRecord[]>('/api/festival/options')
+}
+
 /** 管理端：新增节日 */
 export function createFestival(payload: FestivalPayload): Promise<FestivalRecord> {
   return http.post<FestivalRecord>('/api/festival/admin/create', payload)
@@ -137,9 +146,4 @@ export function setFestivalEnabled(id: string, enabled: boolean): Promise<Festiv
 /** 管理端：删除节日（后端自动把绑定背景图划归「无节日」） */
 export function deleteFestival(id: string): Promise<FestivalDeleteResult> {
   return http.delete<FestivalDeleteResult>(`/api/festival/admin/${id}`)
-}
-
-/** 用户端：启用中的节日列表（无需登录） */
-export function fetchEnabledFestivals(): Promise<FestivalRecord[]> {
-  return http.get<FestivalRecord[]>('/api/festival/all')
 }

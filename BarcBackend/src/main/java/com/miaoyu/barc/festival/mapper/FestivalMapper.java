@@ -13,8 +13,11 @@ import java.util.List;
 /**
  * 节日数据访问层
  *
- * 说明：节日用「统一索引」start_index/end_index（月 * 32 + 日）表达区间，
- * 因此区间重叠、区间环绕判定都可以直接用 SQL 完成，避免把全表拉回内存比对。
+ * 说明：
+ * 1、节日区间的起止用「统一索引」start_index/end_index（月 * 32 + 日）表达，便于比较与排序；
+ * 2、区间是否重叠重合、某天是否属于某节日，都交由 {@link com.miaoyu.barc.festival.utils.MonthDayRangeUtils}
+ *    在内存中判定 —— 因为统一索引在相邻月之间留有空隙，纯 SQL 的端点比较会把
+ *    毫无交集的区间误判为重叠；节日数量极少，全量取出后逐日比对既准确又足够快。
  */
 @Mapper
 public interface FestivalMapper {

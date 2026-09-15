@@ -56,9 +56,36 @@ class MonthDayRangeUtilsTest {
     @Test
     @DisplayName("跨年判定 - 起始索引大于结束索引即为跨年")
     void isCrossYear() {
-        assertTrue(MonthDayRangeUtils.isCrossYear(386, 60));
-        assertFalse(MonthDayRangeUtils.isCrossYear(33, 383));
+        // 新年 12-01 → 02-28：起始索引 385 大于结束索引 92，属于跨年区间
+        assertTrue(MonthDayRangeUtils.isCrossYear(
+                MonthDayRangeUtils.toIndex(12, 1), MonthDayRangeUtils.toIndex(2, 28)));
+        assertFalse(MonthDayRangeUtils.isCrossYear(
+                MonthDayRangeUtils.toIndex(1, 1), MonthDayRangeUtils.toIndex(12, 31)));
         assertFalse(MonthDayRangeUtils.isCrossYear(33, 33));
+    }
+
+    @Test
+    @DisplayName("回归 - 新年种子索引必须是 12-01 → 02-29（曾因按「月*31+日」手算写成 386/478 而失效）")
+    void newYearSeedIndexRegression() {
+        // 该用例锁定 V11 订正后的新年索引，防止再次出现「索引算错 → 新年季判定不到新年」的缺陷。
+        // 错误索引 386/478 的下场：478 越出合法上界 415，区间被当成非跨年，1-2 月与 12-01 都不命中。
+        int startIndex = MonthDayRangeUtils.toIndex(12, 1);
+        int endIndex = MonthDayRangeUtils.toIndex(2, 29);
+        assertEquals(385, startIndex);
+        assertEquals(93, endIndex);
+        assertTrue(MonthDayRangeUtils.isCrossYear(startIndex, endIndex));
+
+        // 新年季的每一天都必须命中
+        assertTrue(MonthDayRangeUtils.containsDay(MonthDayRangeUtils.toIndex(12, 1), startIndex, endIndex));
+        assertTrue(MonthDayRangeUtils.containsDay(MonthDayRangeUtils.toIndex(12, 31), startIndex, endIndex));
+        assertTrue(MonthDayRangeUtils.containsDay(MonthDayRangeUtils.toIndex(1, 15), startIndex, endIndex));
+        assertTrue(MonthDayRangeUtils.containsDay(MonthDayRangeUtils.toIndex(2, 29), startIndex, endIndex));
+        // 非新年季不能误命中
+        assertFalse(MonthDayRangeUtils.containsDay(MonthDayRangeUtils.toIndex(11, 30), startIndex, endIndex));
+        assertFalse(MonthDayRangeUtils.containsDay(MonthDayRangeUtils.toIndex(3, 1), startIndex, endIndex));
+        // 元旦必须被判定为与新年重叠，否则可以造出真正重叠的数据
+        assertTrue(MonthDayRangeUtils.isOverlapped(startIndex, endIndex,
+                MonthDayRangeUtils.toIndex(1, 1), MonthDayRangeUtils.toIndex(1, 2)));
     }
 
     @Test
