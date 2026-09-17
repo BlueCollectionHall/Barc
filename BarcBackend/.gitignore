@@ -4,7 +4,9 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 #src/main/resources/mappers/
+# 本地环境配置包含数据库及第三方服务凭据，禁止纳入版本控制。
 **/application.yaml
+**/application-prod.yaml
 
 ### STS ###
 .apt_generated
