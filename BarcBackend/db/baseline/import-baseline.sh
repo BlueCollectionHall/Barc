@@ -20,6 +20,26 @@
 
 set -euo pipefail
 
+# ---------- 0. 行尾自愈 ----------
+# 从 Windows 复制或在编辑器里粘贴的脚本可能带 CRLF 行尾，
+# 这会让 bash 报 "bad interpreter"，或让变量值末尾多出 \r 而引发难以定位的错误。
+# 这里检测并就地修正，随后用 bash 重新执行自身。
+if [ -f "$0" ]; then
+    self_bytes=$(wc -c < "$0" | tr -d ' ')
+    stripped_bytes=$(tr -d '\r' < "$0" | wc -c | tr -d ' ')
+    if [ "$self_bytes" != "$stripped_bytes" ]; then
+        echo "[提示] 检测到 Windows CRLF 行尾，正在自动修正本脚本..."
+        if command -v sed >/dev/null 2>&1; then
+            sed -i 's/\r$//' "$0"
+            echo "[提示] 修正完成，重新执行。"
+            exec bash "$0" "$@"
+        fi
+        echo "错误：脚本含 CRLF 行尾且系统没有 sed，请先执行：" >&2
+        echo "  tr -d '\\r' < \"$0\" > import-baseline-fixed.sh && bash import-baseline-fixed.sh $*" >&2
+        exit 1
+    fi
+fi
+
 SCHEMA_FILE="${1:-}"
 HISTORY_FILE="${2:-}"
 DB_NAME="${3:-ba-prod}"
