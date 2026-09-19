@@ -26,7 +26,7 @@ cd BarcBackend
 
 # 或打包后运行
 ./mvnw package
-java -jar target/BarcBackend-0.1.16.jar
+java -jar target/BarcBackend-<版本>.jar    # 版本号以 BarcBackend/pom.xml 为准
 ```
 
 - 启动后访问：`http://localhost:51000`
@@ -34,7 +34,7 @@ java -jar target/BarcBackend-0.1.16.jar
 - 数据库环境会按启动方式自动选择：IDE、直接运行 `main`、`./mvnw spring-boot:run` 默认启用 `dev`；打包后执行 `java -jar` 默认启用 `prod`。
 - `application.yaml` 的基础数据源是开发数据库；本地且不受 Git 跟踪的 `application-prod.yaml` 会在生产环境把连接地址覆盖为 `127.0.0.1:51001/ba-prod`。**开发库与生产库位于同一 MySQL 实例、同一端口，仅库名不同**，因此库名才是区分两个环境的关键；修改库名时必须同步调整该文件 URL 与启动校验中的生产库指纹。打包或部署时必须携带该文件；生产 Profile 会校验最终数据源必须以 `jdbc:mysql://127.0.0.1:51001/ba-prod` 开头，文件缺失、库名不符或环境冲突时拒绝启动而不会回退到开发库。
 - 生产服务器推荐通过环境变量 `BARC_PROD_DB_USERNAME`、`BARC_PROD_DB_PASSWORD` 提供凭据。也可在打包前替换 `application.yaml` 生产配置中的占位符，但该方式会把明文凭据写入 JAR，必须严格限制制品和备份的访问权限；修改已经生成的 JAR 之外的源码配置不会影响该 JAR。
-- 新生产库首次上线前，必须恢复一份同时包含完整结构与匹配 `flyway_schema_history` 的已验证备份，或由 DBA 执行经验证的建表流程并将 Flyway 基线标记到匹配版本（当前迁移版本为 `11`）。当前历史迁移不能独立从空库创建完整结构；仅导入 `schema.sql` 也会与 V1/V2 等历史迁移冲突，因此禁止直接对空库或仅导入 `schema.sql` 的库启动生产服务。具体操作请使用 `BarcBackend/db/baseline/` 下的导出/导入脚本，并参阅 [数据库初始化指南.md](./数据库初始化指南.md)。
+- 新生产库首次上线前，必须恢复一份同时包含完整结构与匹配 `flyway_schema_history` 的已验证备份，或由 DBA 执行经验证的建表流程并将 Flyway 基线标记到匹配版本（当前迁移版本以 `BarcBackend/src/main/resources/db/migration/` 下最大编号为准）。当前历史迁移不能独立从空库创建完整结构；仅导入 `schema.sql` 也会与 V1/V2 等历史迁移冲突，因此禁止直接对空库或仅导入 `schema.sql` 的库启动生产服务。具体操作请使用 `BarcBackend/db/baseline/` 下的导出/导入脚本，并参阅 [数据库初始化指南.md](./数据库初始化指南.md)。
 - 如需临时覆盖自动选择，可显式传入 `--spring.profiles.active=dev` 或 `--spring.profiles.active=prod`；命令行、JVM 系统属性与环境变量的显式配置优先于自动识别。禁止在生产服务器传入 `dev`，否则服务会主动连接开发数据库。若其他配置来源导致 `dev` 与 `prod` 同时激活，服务会直接拒绝启动，避免配置覆盖顺序产生歧义。
 
 ### 1.3 依赖服务
@@ -364,7 +364,7 @@ export interface RankImpl {
 **必须通过 Flyway 迁移新增，不要再修改 `schema.sql`。**
 `schema.sql` 已退役（`spring.sql.init.mode: never`），不再参与建表；结构变更的唯一来源是 `src/main/resources/db/migration/`。
 
-在 `db/migration/` 下新建迁移文件，版本号接续当前最高版本（当前为 `V11`，故下一个是 `V12`）：
+在 `db/migration/` 下新建迁移文件，版本号接续该目录下的最大编号（示例写作时为 `V11`，故下一条是 `V12`）：
 
 ```sql
 -- 文件名示例：V12__add_rank_table.sql
@@ -656,7 +656,7 @@ Body: {
 
 ### Q5: 数据库字段改了怎么办？
 
-1. 在 `src/main/resources/db/migration/` 新增一个 Flyway 迁移脚本，版本号接续当前最高版本（当前为 `V11`）
+1. 在 `src/main/resources/db/migration/` 新增一个 Flyway 迁移脚本，版本号接续该目录下的最大编号
 2. 已应用到环境的迁移**不要修改**，需要订正时新增更高版本的迁移
 3. **不要直接修改 `schema.sql`**——它已退役（`spring.sql.init.mode: never`），不再参与建表
 4. 迁移会在下次 `java -jar` 启动时自动应用
@@ -691,6 +691,21 @@ axios.interceptors.response.use(
 | 不要删除 `schema.sql` 中的表 | 该文件已退役不再执行，但其 DDL 是历史结构参考 |
 | 不要修改已应用到环境的 Flyway 迁移 | 会破坏 checksum 校验导致启动失败，订正请新增更高版本的迁移 |
 | 不要在生产环境测试 | 使用测试环境 |
+| 不要在文档中写死版本号等易变值 | 每次发版都要同步、容易漏，写法见下方「文档维护约定」 |
+
+### 📄 文档维护约定
+
+文档只写**不会变**的信息；会变的值一律指向事实来源或使用占位符，避免每次发版都要同步文档。
+
+| 类型 | 写法 | 原因 |
+|---|---|---|
+| 命令示例中的文件名 | 用占位符，如 `java -jar BarcBackend-<版本>.jar` | 版本号会变；读者可对照 `BarcBackend/pom.xml` |
+| "当前最新版本 / 迁移版本" | 指向来源，如"以 `db/migration/` 下最大编号为准" | 每加一条迁移就过期，手工同步永远追不上 |
+| 历史事实（某事发生在哪个版本） | **保留具体版本号**，如"`schema.sql` 已于 0.1.16 退役" | 历史不可变，改掉反而丢失信息 |
+| 快照数字（表数量等验证锚点） | 保留数字并标注时点，如"截至 0.1.16 实测 36 张" | 便于比对，同时说明它会增长 |
+| 历史设计文档（`docs/superpowers/`） | **不要修改** | 它们是时间点快照，应保持原貌 |
+
+> 判断标准只有一条：**这个值将来会变吗？** 会变就指向来源，不会变就如实记录。
 
 ### ⚠️ 谨慎操作
 
