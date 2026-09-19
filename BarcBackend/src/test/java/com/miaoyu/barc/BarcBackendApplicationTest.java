@@ -78,7 +78,23 @@ class BarcBackendApplicationTest {
     @Test
     void shouldRejectProductionProfileWithDevelopmentDatasource() {
         MockEnvironment environment = new MockEnvironment()
-                .withProperty("spring.datasource.url", "jdbc:mysql://example.invalid:3306/ba");
+                .withProperty("spring.datasource.url", "jdbc:mysql://example.invalid:51001/ba-prod");
+        environment.setActiveProfiles(BarcBackendApplication.PRODUCTION_PROFILE);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> BarcBackendApplication.validateProductionConfiguration(environment, productionConfigurationUrl())
+        );
+    }
+
+    /**
+     * 开发库与生产库位于同一实例同一端口，仅库名不同；
+     * 因此生产配置若指向开发库，必须依靠库名校验拦下，不能只看主机与端口。
+     */
+    @Test
+    void shouldRejectProductionProfilePointingToDevelopmentDatabase() {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("spring.datasource.url", "jdbc:mysql://127.0.0.1:51001/ba");
         environment.setActiveProfiles(BarcBackendApplication.PRODUCTION_PROFILE);
 
         assertThrows(
@@ -93,7 +109,7 @@ class BarcBackendApplicationTest {
     @Test
     void shouldRejectProductionProfileWithoutConfigurationFile() {
         MockEnvironment environment = new MockEnvironment()
-                .withProperty("spring.datasource.url", "jdbc:mysql://127.0.0.1:3306/ba-prod");
+                .withProperty("spring.datasource.url", "jdbc:mysql://127.0.0.1:51001/ba-prod");
         environment.setActiveProfiles(BarcBackendApplication.PRODUCTION_PROFILE);
 
         assertThrows(
@@ -108,7 +124,7 @@ class BarcBackendApplicationTest {
     @Test
     void shouldAcceptLocalProductionDatasource() {
         MockEnvironment environment = new MockEnvironment()
-                .withProperty("spring.datasource.url", "jdbc:mysql://127.0.0.1:3306/ba-prod");
+                .withProperty("spring.datasource.url", "jdbc:mysql://127.0.0.1:51001/ba-prod");
         environment.setActiveProfiles(BarcBackendApplication.PRODUCTION_PROFILE);
 
         assertDoesNotThrow(() -> BarcBackendApplication.validateProductionConfiguration(
@@ -123,7 +139,7 @@ class BarcBackendApplicationTest {
     @Test
     void shouldRejectConflictingProfiles() {
         MockEnvironment environment = new MockEnvironment()
-                .withProperty("spring.datasource.url", "jdbc:mysql://127.0.0.1:3306/ba-prod");
+                .withProperty("spring.datasource.url", "jdbc:mysql://127.0.0.1:51001/ba-prod");
         environment.setActiveProfiles(
                 BarcBackendApplication.DEVELOPMENT_PROFILE,
                 BarcBackendApplication.PRODUCTION_PROFILE

@@ -18,7 +18,11 @@ public class BarcBackendApplication {
 
     static final String DEVELOPMENT_PROFILE = "dev";
     static final String PRODUCTION_PROFILE = "prod";
-    static final String PRODUCTION_DATASOURCE_PREFIX = "jdbc:mysql://127.0.0.1:3306/";
+    // 生产库指纹：同时锁定主机、端口与库名。
+    // 本项目的开发库（ba）与生产库（ba-prod）位于同一 MySQL 实例、同一端口，
+    // 仅库名不同，因此只有把库名一并纳入校验，才能防止生产环境静默连到开发库。
+    // 变更生产库地址或库名时，必须同步修改此常量与 application-prod.yaml。
+    static final String PRODUCTION_DATASOURCE_PREFIX = "jdbc:mysql://127.0.0.1:51001/ba-prod";
     private static final String ACTIVE_PROFILE_ARGUMENT = "--spring.profiles.active=";
 
     /**
@@ -53,7 +57,7 @@ public class BarcBackendApplication {
      *
      * @param environment 已完成 Config Data 加载的 Spring 环境
      * @param productionConfigurationUrl classpath 中的生产配置资源地址
-     * @throws IllegalStateException 环境冲突、配置文件缺失或生产数据源不是本机 MySQL 时抛出
+     * @throws IllegalStateException 环境冲突、配置文件缺失或生产数据源指纹不匹配时抛出
      */
     static void validateProductionConfiguration(Environment environment, URL productionConfigurationUrl) {
         boolean developmentActive = Arrays.asList(environment.getActiveProfiles()).contains(DEVELOPMENT_PROFILE);
@@ -70,8 +74,9 @@ public class BarcBackendApplication {
 
         String datasourceUrl = environment.getProperty("spring.datasource.url");
         if (datasourceUrl == null || !datasourceUrl.startsWith(PRODUCTION_DATASOURCE_PREFIX)) {
+            // 直接复用常量，避免错误提示与实际校验规则出现两处不一致。
             throw new IllegalStateException(
-                    "生产数据源配置错误：spring.datasource.url 必须指向 127.0.0.1:3306"
+                    "生产数据源配置错误：spring.datasource.url 必须以 " + PRODUCTION_DATASOURCE_PREFIX + " 开头"
             );
         }
     }

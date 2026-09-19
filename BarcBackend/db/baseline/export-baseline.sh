@@ -140,7 +140,7 @@ fi
 cat <<EOF
 
 下一步（在同一台机器上执行）：
-  ./import-baseline.sh $SCHEMA_FILE $HISTORY_FILE <新库名> <新库用户名> 127.0.0.1 3306
+  ./import-baseline.sh $SCHEMA_FILE $HISTORY_FILE <新库名> <新库用户名> 127.0.0.1 51001
 
 注意：这两个文件不含业务数据，但包含迁移历史，请勿提交到公开仓库，用完后及时删除。
 EOF

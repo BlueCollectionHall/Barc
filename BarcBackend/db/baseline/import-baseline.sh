@@ -16,7 +16,7 @@
 #   ./import-baseline.sh <01-schema.sql> <02-flyway-history.sql> [库名] [用户名] [主机] [端口]
 #
 # 示例：
-#   ./import-baseline.sh ./01-schema.sql ./02-flyway-history.sql ba-prod barc_user 127.0.0.1 3306
+#   ./import-baseline.sh ./01-schema.sql ./02-flyway-history.sql ba-prod barc_user 127.0.0.1 51001
 
 set -euo pipefail
 
@@ -45,7 +45,8 @@ HISTORY_FILE="${2:-}"
 DB_NAME="${3:-ba-prod}"
 DB_USER="${4:-}"
 DB_HOST="${5:-127.0.0.1}"
-DB_PORT="${6:-3306}"
+# 默认 51001：本项目生产库与开发库同实例同端口，仅库名不同（ba-prod 与 ba）。
+DB_PORT="${6:-51001}"
 
 # ---------- 参数校验 ----------
 if [[ -z "$SCHEMA_FILE" || -z "$HISTORY_FILE" ]]; then
@@ -139,7 +140,7 @@ fi
 
 cat <<'EOF'
 下一步：
-1、用目标环境的 application-prod.yaml 指向该库（默认 127.0.0.1:3306）；
+1、用目标环境的 application-prod.yaml 指向该库（本项目为 127.0.0.1:51001/ba-prod）；
 2、启动后端，日志应出现「Current version of schema ...: <版本>」且没有「Migrating」动作；
 3、确认无误后再对外提供服务。
 EOF
