@@ -16,7 +16,9 @@ public interface UserArchiveMapper {
     List<UserArchiveModel> selectAll();
 
     // 无条件分页查询方法
-    @Select("SELECT a.uuid, a.nickname, b.username, a.avatar, a.permission, a.identity, a.updated_at FROM user_archive a LEFT JOIN ba.user_basic b ON a.uuid = b.uuid LIMIT #{offset}, #{pageSize}")
+    // 注意：不得写成「库名.表名」形式。开发库与生产库同实例不同库名（ba / ba-prod），
+    // 一旦带上库名前缀，生产环境会把 user_basic 指到开发库，导致用户名整列为空（跨库读取）。
+    @Select("SELECT a.uuid, a.nickname, b.username, a.avatar, a.permission, a.identity, a.updated_at FROM user_archive a LEFT JOIN user_basic b ON a.uuid = b.uuid LIMIT #{offset}, #{pageSize}")
     List<UserInfoVo> selectByPage(@Param("offset") int offset, @Param("pageSize") int pageSize);
 
     // 分页查询用户信息（关联两个表）
