@@ -20,6 +20,7 @@ const ClaimsListView = () => import('@/modules/works/views/ClaimsListView.vue')
 const ComplaintsListView = () => import('@/modules/works/views/ComplaintsListView.vue')
 const CommentComplaintsView = () => import('@/modules/works/views/CommentComplaintsView.vue')
 const OperationLogView = () => import('@/modules/works/views/OperationLogView.vue')
+const WorkCategoriesView = () => import('@/modules/works/views/WorkCategoriesView.vue')
 const MessagesListView = () => import('@/modules/messages/views/MessagesListView.vue')
 const FeedbackManageListView = () => import('@/modules/feedback/views/FeedbackManageListView.vue')
 const BackgroundsListView = () => import('@/modules/backgrounds/views/BackgroundsListView.vue')
@@ -209,6 +210,25 @@ export const adminChildren: RouteRecordRaw[] = [
       menuGroupLabel: '作品管理',
       groupOrder: 40,
       menuOrder: 10,
+    },
+  },
+  {
+    // 作品分类管理：菜单排在「作品管理」之后、「认领管理」之前
+    // 权限与作品管理组其余页面一致（SEC_MAINTAINER 的 1匹配）
+    path: 'works/categories',
+    name: 'works-categories',
+    component: WorkCategoriesView,
+    meta: {
+      title: '作品分类管理',
+      subtitle: '维护作品分类的多层级结构；用户端顶栏导航与上传页的分类选项都取自这里。',
+      requiresAuth: true,
+      requiresManager: true,
+      minManagerPermissionBit: MANAGER_PERMISSION.SEC_MAINTAINER,
+      menuLabel: '作品分类',
+      menuGroup: 'works',
+      menuGroupLabel: '作品管理',
+      groupOrder: 40,
+      menuOrder: 15,
     },
   },
   {
