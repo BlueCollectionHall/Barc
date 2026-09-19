@@ -17,7 +17,7 @@ public class WorkEditDetailDto {
     private List<String> content_image_urls; // 已签名的内容图URL列表
     private List<ContentImageDto> content_images; // 带图片ID的内容图，用于作者侧安全删除
     private String uploader_nickname;        // uploader 对应的平台收录者昵称
-    private String author_display;           // author 对应的平台当前归属账号昵称；未认领时为蔚蓝收录助手
+    private String author_display;           // author 对应的平台当前归属账号昵称；未认领时为绑定官方账号昵称，账号缺失时为「未知用户」
     private String school_name;              // 关联学园名
     private String club_name;                // 关联部团名
     private String student_name;             // 关联学生名

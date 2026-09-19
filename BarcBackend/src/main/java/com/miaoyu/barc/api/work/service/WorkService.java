@@ -8,7 +8,6 @@ import com.miaoyu.barc.api.mapper.StudentMapper;
 import com.miaoyu.barc.api.model.SchoolClubModel;
 import com.miaoyu.barc.api.model.SchoolModel;
 import com.miaoyu.barc.api.model.StudentModel;
-import com.miaoyu.barc.api.work.constant.WorkAttributionConst;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
 import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkCategoryMapper;
@@ -29,7 +28,9 @@ import com.miaoyu.barc.response.ChangeR;
 import com.miaoyu.barc.response.ErrorR;
 import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.response.UserR;
+import com.miaoyu.barc.user.enumeration.OfficialAccountEnum;
 import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
+import com.miaoyu.barc.user.service.OfficialAccountService;
 import com.miaoyu.barc.utils.GenerateUUID;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.JwtService;
@@ -64,6 +65,8 @@ public class WorkService {
     private WorkMapper workMapper;
     @Autowired
     private WorkAttributionService workAttributionService;
+    @Autowired
+    private OfficialAccountService officialAccountService;
     @Autowired
     private StudentMapper studentMapper;
     @Autowired
@@ -398,7 +401,8 @@ public class WorkService {
         }
 
         String uploaderNickname = workAttributionService.resolveUploaderNickname(work);
-        // author 始终是平台内归属账号；未认领作品会解析为蔚蓝收录助手，而不是站外原作者署名。
+        // author 始终是平台内归属账号；未认领作品会解析为当前绑定的官方账号
+        // （OfficialAccountEnum.COLLECTION_ASSISTANT），而不是站外原作者署名。
         String authorDisplay = workAttributionService.resolvePlatformOwnerNickname(work);
 
         String schoolName = "", clubName = "", studentName = "";
@@ -452,8 +456,15 @@ public class WorkService {
         else {
             if (requestModel.getAuthor_nickname() == null)
                 return ResponseEntity.ok(new ErrorR().normal("搬运收录的作品，请标注该作品作者在其他平台常用昵称！"));
+            // 未认领作品的临时归属账号改为「管理端可配置」：未配置时必须阻断，
+            // 不允许回落到任何硬编码 UUID，否则会在生产写入悬空归属。
+            String officialUuid = officialAccountService.findBoundUuid(OfficialAccountEnum.COLLECTION_ASSISTANT);
+            if (officialUuid == null) {
+                return ResponseEntity.ok(new ErrorR().normal(
+                        "官方账号未配置：未认领收录作品的临时归属账号尚未在「用户 → 官方账号」中绑定，请联系馆长配置后再收录。"));
+            }
             requestModel.setUploader(uuid);
-            requestModel.setAuthor(WorkAttributionConst.COLLECTION_ASSISTANT_UUID);
+            requestModel.setAuthor(officialUuid);
         }
         requestModel.setBanner_image("");
         requestModel.setCover_image("");

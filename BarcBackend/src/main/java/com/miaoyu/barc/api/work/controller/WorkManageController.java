@@ -128,17 +128,17 @@ public class WorkManageController {
 
     // ==================== 辅助搜索 ====================
 
-    /** 搜索作品（按ID/标题），供指派作者等下拉选择 */
+    /** 搜索作品（按ID/标题），供指派作者等下拉选择（MANAGER + 比大小鉴权，见 WorkManageService#searchWorks） */
     @GetMapping("/search-work")
-    public ResponseEntity<J> searchWork(@RequestParam("keyword") String keyword) {
-        List<WorkModel> works = workManageService.searchWorks(keyword);
+    public ResponseEntity<J> searchWork(HttpServletRequest r, @RequestParam("keyword") String keyword) {
+        List<WorkModel> works = workManageService.searchWorks(uuid(r), keyword);
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, works));
     }
 
-    /** 搜索用户（按UUID/用户名/昵称），供指派作者等下拉选择 */
+    /** 搜索用户（按UUID/用户名/昵称），供指派作者等下拉选择（MANAGER + 比大小鉴权，见 WorkManageService#searchUsers） */
     @GetMapping("/search-user")
-    public ResponseEntity<J> searchUser(@RequestParam("keyword") String keyword) {
-        List<UserInfoVo> users = workManageService.searchUsers(keyword);
+    public ResponseEntity<J> searchUser(HttpServletRequest r, @RequestParam("keyword") String keyword) {
+        List<UserInfoVo> users = workManageService.searchUsers(uuid(r), keyword);
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, users));
     }
 }

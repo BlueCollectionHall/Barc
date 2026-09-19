@@ -1,6 +1,5 @@
 package com.miaoyu.barc.api.work.service;
 
-import com.miaoyu.barc.api.work.constant.WorkAttributionConst;
 import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
 import com.miaoyu.barc.user.model.UserArchiveModel;
@@ -17,6 +16,12 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class WorkAttributionServiceTest {
+    /**
+     * 官方账号 UUID 已改为「管理端可配置」，不再是生产常量。
+     * 测试使用自有字面量，避免与任何生产配置耦合。
+     */
+    private static final String OFFICIAL_ACCOUNT_UUID = "test-official-account-uuid";
+
     @Mock
     private UserArchiveMapper userArchiveMapper;
 
@@ -28,16 +33,16 @@ class WorkAttributionServiceTest {
     void unclaimedWork_ShouldResolveCollectionAssistantAsPlatformOwner() {
         WorkModel work = new WorkModel();
         work.setIs_claim(false);
-        work.setAuthor(WorkAttributionConst.COLLECTION_ASSISTANT_UUID);
+        work.setAuthor(OFFICIAL_ACCOUNT_UUID);
         work.setAuthor_nickname("guochouchou");
 
         UserArchiveModel assistant = new UserArchiveModel();
-        assistant.setUuid(WorkAttributionConst.COLLECTION_ASSISTANT_UUID);
-        assistant.setNickname("蔚蓝收录助手");
-        when(userArchiveMapper.selectByUuid(WorkAttributionConst.COLLECTION_ASSISTANT_UUID)).thenReturn(assistant);
+        assistant.setUuid(OFFICIAL_ACCOUNT_UUID);
+        assistant.setNickname("官方账号昵称");
+        when(userArchiveMapper.selectByUuid(OFFICIAL_ACCOUNT_UUID)).thenReturn(assistant);
 
-        assertEquals("蔚蓝收录助手", workAttributionService.resolvePlatformOwnerNickname(work));
-        verify(userArchiveMapper).selectByUuid(WorkAttributionConst.COLLECTION_ASSISTANT_UUID);
+        assertEquals("官方账号昵称", workAttributionService.resolvePlatformOwnerNickname(work));
+        verify(userArchiveMapper).selectByUuid(OFFICIAL_ACCOUNT_UUID);
     }
 
     @Test

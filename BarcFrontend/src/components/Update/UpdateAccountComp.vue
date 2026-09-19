@@ -217,7 +217,7 @@ const resetPassword = async () => {
           <p>纪念账号：账号将会禁止被登录，可以联系管理员解除；</p>
           <p>关闭账号：账号仅能被浏览，无法再登录；</p>
           <p>注销账号：账号将被软删除，您可以在1个月内重启账号，否则将进入删除账号环节；</p>
-          <p>删除账号：账号将被硬删除，无法找回，名下所有作品将划归“蔚蓝收录助手”账号下；</p>
+          <p>删除账号：账号将被硬删除，无法找回，名下所有作品将划归官方账号名下；</p>
           <el-button type="default">纪念账号</el-button>
           <el-button type="warning">关闭账号</el-button>
           <el-button type="danger">注销账号</el-button>

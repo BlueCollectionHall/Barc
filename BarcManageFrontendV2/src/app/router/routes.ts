@@ -7,6 +7,7 @@ const LoginView = () => import('@/modules/auth/views/LoginView.vue')
 const DashboardView = () => import('@/modules/dashboard/views/DashboardView.vue')
 const UsersListView = () => import('@/modules/users/views/UsersListView.vue')
 const UsersPermissionsView = () => import('@/modules/users/views/UsersPermissionsView.vue')
+const OfficialAccountsView = () => import('@/modules/users/views/OfficialAccountsView.vue')
 const NoticesListView = () => import('@/modules/notices/views/NoticesListView.vue')
 const NoticeEditorView = () => import('@/modules/notices/views/NoticeEditorView.vue')
 const SchoolListView = () => import('@/modules/school-club-student/views/SchoolListView.vue')
@@ -93,6 +94,24 @@ export const adminChildren: RouteRecordRaw[] = [
       groupOrder: 20,
       menuOrder: 30,
       feedbackType: 'USER',
+    },
+  },
+  {
+    path: 'users/official-accounts',
+    name: 'users-official-accounts',
+    component: OfficialAccountsView,
+    meta: {
+      title: '官方账号',
+      subtitle: '指定各官方业务在平台内使用的账号；未配置时对应业务的写链路会被阻断。',
+      requiresAuth: true,
+      requiresManager: true,
+      // 1匹配鉴权：仅馆长（ADVANCED_ADMINISTRATOR）权限位可访问
+      minManagerPermissionBit: MANAGER_PERMISSION.ADVANCED_ADMINISTRATOR,
+      menuLabel: '官方账号',
+      menuGroup: 'users',
+      menuGroupLabel: '用户',
+      groupOrder: 20,
+      menuOrder: 40,
     },
   },
   {

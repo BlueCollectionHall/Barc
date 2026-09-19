@@ -10,7 +10,6 @@ import com.miaoyu.barc.api.model.SchoolClubModel;
 import com.miaoyu.barc.api.model.SchoolModel;
 import com.miaoyu.barc.api.model.StudentModel;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
-import com.miaoyu.barc.api.work.constant.WorkAttributionConst;
 import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkClaimMapper;
 import com.miaoyu.barc.api.work.mapper.WorkCoverImageMapper;
@@ -33,12 +32,14 @@ import com.miaoyu.barc.response.ChangeR;
 import com.miaoyu.barc.response.ErrorR;
 import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.response.UserR;
+import com.miaoyu.barc.user.enumeration.OfficialAccountEnum;
 import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
 import com.miaoyu.barc.user.mapper.UserBasicMapper;
 import com.miaoyu.barc.user.model.UserArchiveModel;
 import com.miaoyu.barc.user.model.UserBasicModel;
 import com.miaoyu.barc.user.model.vo.UserInfoVo;
+import com.miaoyu.barc.user.service.OfficialAccountService;
 import com.miaoyu.barc.utils.GenerateUUID;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.dto.PageRequestDto;
@@ -88,6 +89,7 @@ public class WorkManageService {
     @Autowired private SendEmailUtils sendEmailUtils;
     @Autowired private WorkService workService;
     @Autowired private WorkAttributionService workAttributionService;
+    @Autowired private OfficialAccountService officialAccountService;
     @Autowired private WorkImageMapper workImageMapper;
     @Autowired private CosService cosService;
     @Autowired private WorkCoverImageMapper workCoverImageMapper;
@@ -374,8 +376,14 @@ public class WorkManageService {
         WorkModel work = workMapper.selectById(workId);
         if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         if (!work.getIs_claim()) return ResponseEntity.ok(new ErrorR().normal("该作品未被认领"));
+        // 归属账号必须在改动作品之前解析：未配置时直接阻断，不落任何脏归属
+        String officialUuid = officialAccountService.findBoundUuid(OfficialAccountEnum.COLLECTION_ASSISTANT);
+        if (officialUuid == null) {
+            return ResponseEntity.ok(new ErrorR().normal(
+                    "官方账号未配置：未认领收录作品的临时归属账号尚未在「用户 → 官方账号」中绑定，无法撤销认领。"));
+        }
         work.setIs_claim(false);
-        work.setAuthor(WorkAttributionConst.COLLECTION_ASSISTANT_UUID);
+        work.setAuthor(officialUuid);
         workMapper.update(work);
         recordLog(workId, uuid, OP_CLAIM_REVOKE, Map.of("remark", "管理员撤销认领"));
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
@@ -454,13 +462,30 @@ public class WorkManageService {
 
     // ==================== 内部工具 ====================
 
-    /** 搜索作品（供指派作者场景），返回最多10条 */
-    public List<WorkModel> searchWorks(String keyword) {
+    /**
+     * 搜索作品（供指派作者场景），返回最多 10 条。
+     *
+     * 鉴权说明：这是管理端「认领管理」的辅助搜索口，必须做权限校验。
+     * 采用「比大小」判定（isHasElseUpper = false，即 permission >= DISCIPLINARY_COMMITTEE），
+     * 等价于「只要身份是 MANAGER 即可」——所有管理者权限值都 ≥ 1。
+     * uuid 必须是第 1 个形参，否则 AOP 切面的 uuidIndex=0 会取到 keyword。
+     */
+    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
+            identity = UserIdentityEnum.MANAGER,
+            targetPermission = PermissionConst.DISCIPLINARY_COMMITTEE,
+            isHasElseUpper = false,
+            isSuchElseRequire = false)})
+    public List<WorkModel> searchWorks(String uuid, String keyword) {
         return workMapper.selectByPageForManage(null, keyword, 0, 10, "created_at", "DESC");
     }
 
-    /** 搜索用户（按UUID/用户名/昵称），返回最多15条 */
-    public List<UserInfoVo> searchUsers(String keyword) {
+    /** 搜索用户（按UUID/用户名/昵称），返回最多15条；鉴权同 searchWorks */
+    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
+            identity = UserIdentityEnum.MANAGER,
+            targetPermission = PermissionConst.DISCIPLINARY_COMMITTEE,
+            isHasElseUpper = false,
+            isSuchElseRequire = false)})
+    public List<UserInfoVo> searchUsers(String uuid, String keyword) {
         return userArchiveMapper.searchByKeyword(keyword);
     }
 

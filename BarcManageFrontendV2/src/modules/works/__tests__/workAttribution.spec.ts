@@ -18,8 +18,8 @@ describe('work attribution display', () => {
   it('uses the external original author for a collected work without changing platform ownership', () => {
     const work = {
       is_claim: false,
-      author: 'collection-assistant-uuid',
-      author_display: '蔚蓝收录助手',
+      author: 'official-account-uuid',
+      author_display: '官方账号昵称',
       author_nickname: 'guochouchou',
     }
 

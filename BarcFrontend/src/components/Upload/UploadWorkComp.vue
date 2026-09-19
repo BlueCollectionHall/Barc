@@ -303,7 +303,9 @@ const uploadWorkForm = async () => {
     if (data.code === 0) {
       successMessage("作品已提交，正在等待审核");
     } else {
-      infoMessage(data.msg);
+      // 后端的 ErrorR 把人类可读文案放在 data、msg 固定为「失败：Error」，
+      // 因此必须优先展示 data，否则「官方账号未配置」一类的提示会退化成「失败：Error」。
+      infoMessage(data.data || data.msg);
     }
   } catch {
     errorMessage("网络错误！")
