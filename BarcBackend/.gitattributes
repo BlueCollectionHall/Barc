@@ -1,2 +1,6 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
+# Shell 脚本必须以 LF 入库，否则在 Linux 服务器上会因行尾 \r 报 bad interpreter。
+*.sh text eol=lf
+# PowerShell 脚本按 CRLF 检出（5.1 对 LF 文件的 here-string 支持有缺陷）。
+*.ps1 text eol=crlf

@@ -34,7 +34,7 @@ java -jar target/BarcBackend-0.1.15.jar
 - 数据库环境会按启动方式自动选择：IDE、直接运行 `main`、`./mvnw spring-boot:run` 默认启用 `dev`；打包后执行 `java -jar` 默认启用 `prod`。
 - `application.yaml` 的基础数据源是开发数据库；本地且不受 Git 跟踪的 `application-prod.yaml` 会在生产环境把连接地址覆盖为 `127.0.0.1:3306/ba-prod`。修改生产库名时需同步调整该文件 URL 末尾的库名。打包或部署时必须携带该文件；生产 Profile 会校验最终数据源必须指向 `127.0.0.1:3306`，文件缺失或环境冲突时拒绝启动而不会回退到开发库。
 - 生产服务器推荐通过环境变量 `BARC_PROD_DB_USERNAME`、`BARC_PROD_DB_PASSWORD` 提供凭据。也可在打包前替换 `application.yaml` 生产配置中的占位符，但该方式会把明文凭据写入 JAR，必须严格限制制品和备份的访问权限；修改已经生成的 JAR 之外的源码配置不会影响该 JAR。
-- 新生产库首次上线前，必须恢复一份同时包含完整结构与匹配 `flyway_schema_history` 的已验证备份，或由 DBA 执行经验证的建表流程并将 Flyway 基线标记到匹配版本（当前迁移版本为 `11`）。当前历史迁移不能独立从空库创建完整结构；仅导入 `schema.sql` 也会与 V1/V2 等历史迁移冲突，因此禁止直接对空库或仅导入 `schema.sql` 的库启动生产服务。
+- 新生产库首次上线前，必须恢复一份同时包含完整结构与匹配 `flyway_schema_history` 的已验证备份，或由 DBA 执行经验证的建表流程并将 Flyway 基线标记到匹配版本（当前迁移版本为 `11`）。当前历史迁移不能独立从空库创建完整结构；仅导入 `schema.sql` 也会与 V1/V2 等历史迁移冲突，因此禁止直接对空库或仅导入 `schema.sql` 的库启动生产服务。具体操作请使用 `BarcBackend/db/baseline/` 下的导出/导入脚本，并参阅 [数据库初始化指南.md](./数据库初始化指南.md)。
 - 如需临时覆盖自动选择，可显式传入 `--spring.profiles.active=dev` 或 `--spring.profiles.active=prod`；命令行、JVM 系统属性与环境变量的显式配置优先于自动识别。禁止在生产服务器传入 `dev`，否则服务会主动连接开发数据库。若其他配置来源导致 `dev` 与 `prod` 同时激活，服务会直接拒绝启动，避免配置覆盖顺序产生歧义。
 
 ### 1.3 依赖服务
