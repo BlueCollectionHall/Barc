@@ -26,7 +26,7 @@ cd BarcBackend
 
 # 或打包后运行
 ./mvnw package
-java -jar target/BarcBackend-0.1.15.jar
+java -jar target/BarcBackend-0.1.16.jar
 ```
 
 - 启动后访问：`http://localhost:51000`
@@ -361,9 +361,13 @@ export interface RankImpl {
 
 ### 4.1 新增数据库表
 
-在 `schema.sql` 中添加：
+**必须通过 Flyway 迁移新增，不要再修改 `schema.sql`。**
+`schema.sql` 已退役（`spring.sql.init.mode: never`），不再参与建表；结构变更的唯一来源是 `src/main/resources/db/migration/`。
+
+在 `db/migration/` 下新建迁移文件，版本号接续当前最高版本（当前为 `V11`，故下一个是 `V12`）：
 
 ```sql
+-- 文件名示例：V12__add_rank_table.sql
 CREATE TABLE IF NOT EXISTS rank (
     id VARCHAR(36) PRIMARY KEY NOT NULL,
     title VARCHAR(100) NOT NULL,
@@ -373,7 +377,10 @@ CREATE TABLE IF NOT EXISTS rank (
 );
 ```
 
-> **注意**：添加表后需要联系 DBA 执行，或使用数据库迁移工具。
+> **三条纪律**：
+> 1、迁移脚本会被打进 JAR，`java -jar` 启动时会自动应用到目标库，无需人工执行；
+> 2、**已应用到任何环境的迁移不可再修改**（会破坏 Flyway 的 checksum 校验，导致启动失败），需要订正时请新增一个更高版本的迁移；
+> 3、新环境初始化不要手工建表，请使用 `BarcBackend/db/baseline/` 下的基线脚本，详见 [数据库初始化指南.md](./数据库初始化指南.md)。
 
 ### 4.2 修改现有 API
 
@@ -649,9 +656,10 @@ Body: {
 
 ### Q5: 数据库字段改了怎么办？
 
-1. 联系 DBA 直接修改生产数据库
-2. 或编写数据库迁移 SQL 脚本
-3. **不要直接修改 schema.sql 后重新初始化**
+1. 在 `src/main/resources/db/migration/` 新增一个 Flyway 迁移脚本，版本号接续当前最高版本（当前为 `V11`）
+2. 已应用到环境的迁移**不要修改**，需要订正时新增更高版本的迁移
+3. **不要直接修改 `schema.sql`**——它已退役（`spring.sql.init.mode: never`），不再参与建表
+4. 迁移会在下次 `java -jar` 启动时自动应用
 
 ### Q6: 前端 API 请求失败怎么办？
 
@@ -680,7 +688,8 @@ axios.interceptors.response.use(
 | 不要修改 `application.yaml` 中的密钥 | 会导致线上服务不可用 |
 | 不要直接删除用户数据 | 用户数据受保护，需走注销流程 |
 | 不要在代码中硬编码密钥 | 使用配置文件管理 |
-| 不要删除 `schema.sql` 中的表 | 可能有数据依赖 |
+| 不要删除 `schema.sql` 中的表 | 该文件已退役不再执行，但其 DDL 是历史结构参考 |
+| 不要修改已应用到环境的 Flyway 迁移 | 会破坏 checksum 校验导致启动失败，订正请新增更高版本的迁移 |
 | 不要在生产环境测试 | 使用测试环境 |
 
 ### ⚠️ 谨慎操作
