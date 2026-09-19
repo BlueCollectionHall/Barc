@@ -10,8 +10,20 @@ import org.apache.ibatis.annotations.*;
 import java.util.List;
 
 public interface FeedbackMapper {
+    /**
+     * 已废弃：feedback_option 表不再被任何前端或业务逻辑消费，不要新增调用。
+     *
+     * @deprecated 反馈分类改由 FeedbackTypeEnum 与前端本地映射驱动
+     */
+    @Deprecated
     @Select("SELECT * FROM feedback_option WHERE parent_id = #{parent_id}")
     List<FeedbackOptionModel> selectOptionsByParentId(@Param("parent_id") String parentId);
+    /**
+     * 已废弃：feedback_type 表不再被任何前端或业务逻辑消费，不要新增调用。
+     *
+     * @deprecated 反馈分类改由 FeedbackTypeEnum 与前端本地映射驱动
+     */
+    @Deprecated
     @Select("SELECT * FROM feedback_type")
     List<FeedbackTypeModel> selectAllTypes();
 

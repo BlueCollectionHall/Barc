@@ -10,6 +10,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 【已废弃】投诉反馈分类查询接口。
+ *
+ * <p>反馈分类已不再由数据库驱动：后端使用 {@code FeedbackTypeEnum}，
+ * 前端使用 {@code src/utils/feedbackType.ts} 的本地映射，
+ * 两个前端均不再调用 {@code /feedback/all_types} 与 {@code /feedback/options_by_type}。
+ * 对应的 {@code feedback_type} 与 {@code feedback_option} 表已标记废弃，禁止新增使用。</p>
+ *
+ * @deprecated 保留仅为兼容历史调用，请勿在新功能中依赖本控制器
+ */
+@Deprecated
 @IgnoreAuth
 @RestController
 @RequestMapping("/feedback")

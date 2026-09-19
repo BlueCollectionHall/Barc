@@ -9,3 +9,6 @@
 ---
 
 **宪法正文：** 见 [`AGENTS.md`](./AGENTS.md)
+
+**最近一次宪法修改：** 2026-09-19 —— 在「六、数据库表状态」中新增 `feedback` 为活跃表，
+并将 `feedback_type`、`feedback_option`、`feedback_work` 标记为已弃用表。

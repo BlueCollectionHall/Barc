@@ -92,9 +92,18 @@ Barc/
 | 状态 | 表名 | 说明 |
 |------|------|------|
 | ✅ 活跃 | `student`, `club`, `school`, `school_club` | 当前使用（单数形式） |
+| ✅ 活跃 | `feedback` | 投诉反馈统一入口，由 `type` 字段区分业务类型 |
+| ✅ 活跃 | `festival`, `category`, `background_image`, `notice` | 当前使用 |
 | ❌ 弃用 | `students`, `clubs`, `schools`, `school_clubs` | 已弃用，不要使用（复数形式） |
+| ❌ 弃用 | `feedback_type`, `feedback_option` | 已弃用：反馈分类改由 `FeedbackTypeEnum` 与前端本地映射驱动，不再查询这两张表 |
+| ❌ 弃用 | `feedback_work` | 已弃用：作品投诉已统一走 `feedback`（`type = WORK`），不再使用该链路 |
 
 **禁止使用弃用的复数形式表名！**
+
+**禁止使用已弃用表：** `feedback_type`、`feedback_option`、`feedback_work`。
+
+投诉反馈相关问题统一由 `feedback` 表承载，业务类型由 `FeedbackTypeEnum` 区分：
+`BUG` / `WORK` / `COMMENT` / `MESSAGE_BOARD` / `USER` / `SUGGESTION` / `OTHER`。
 
 ### 6.2 字段命名与索引规范
 
@@ -591,6 +600,6 @@ fix(作品): 修复作品列表显示问题
 
 ---
 
-**最后更新：** 2026-09-05
+**最后更新：** 2026-09-19
 
 **维护者：** 项目团队

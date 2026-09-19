@@ -254,6 +254,9 @@ CREATE TABLE IF NOT EXISTS message_board(
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_created_at (created_at)
 );
+# 【已废弃】feedback_type / feedback_option
+# 反馈分类已改由后端 FeedbackTypeEnum 与前端本地映射驱动，
+# 全项目仅剩 FeedbackTypeOfController 的两个无调用方接口在查询它们，禁止再新增使用。
 CREATE TABLE IF NOT EXISTS feedback_type(
     id VARCHAR(50) PRIMARY KEY NOT NULL ,
     name VARCHAR(20) NOT NULL,
@@ -267,6 +270,8 @@ CREATE TABLE IF NOT EXISTS feedback_option(
     INDEX idx_parent_id (parent_id),
     FOREIGN KEY (parent_id) REFERENCES feedback_type(id) ON DELETE CASCADE
 );
+# 【已废弃】feedback_work
+# 作品投诉已统一走通用 feedback 表（type = WORK），禁止再使用该链路。
 CREATE TABLE IF NOT EXISTS feedback_work(
     id VARCHAR(36) PRIMARY KEY NOT NULL ,
     work_id VARCHAR(36) NOT NULL ,
