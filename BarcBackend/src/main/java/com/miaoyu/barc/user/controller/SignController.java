@@ -41,6 +41,10 @@ public class SignController {
         return signService.signInByNaigosService(type, account, password);
     }
     /**注册
+     *
+     * <p>先校验邮箱验证码；校验不通过时直接返回失败响应，
+     * 只有校验通过（checkSignupCode 返回 null）才真正写入账号。</p>
+     *
      * @param email 电子邮箱
      * @param uniqueId 邮箱验证唯一id
      * @param code 邮箱验证码
@@ -52,9 +56,9 @@ public class SignController {
             @RequestParam("code") String code,
             @RequestBody UserBasicModel userBasic
     ) {
-        J j = signService.checkSignupCode(uniqueId, code, email);
-        if (j.getCode() == 1) {
-            return ResponseEntity.ok(j);
+        ResponseEntity<J> checkResult = signService.checkSignupCode(uniqueId, code, email);
+        if (checkResult != null) {
+            return checkResult;
         }
         return signService.signupUserService(userBasic, email);
     }

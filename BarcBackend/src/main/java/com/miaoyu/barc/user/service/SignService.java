@@ -13,6 +13,7 @@ import com.miaoyu.barc.utils.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -141,8 +142,19 @@ public class SignService {
             return ResponseEntity.status(401).body(new ErrorR().normal("请求出错"));
         }
     }
+    /**
+     * 注册：写入账号基础信息与个人信息。
+     *
+     * <p>本方法整体位于同一事务内：基础信息写入成功但个人信息写入失败时，
+     * 必须回滚，避免留下「有账号却没有任何个人信息」的孤儿数据。</p>
+     *
+     * @param userBasic 用户基础信息实体
+     * @param email 邮箱（必须与请求体邮箱一致）
+     * @return 注册结果
+     */
+    @Transactional(rollbackFor = Exception.class)
     public ResponseEntity<J> signupUserService(UserBasicModel userBasic, String email) {
-        if (!userBasic.getEmail().equals(email)) {
+        if (!email.equals(userBasic.getEmail())) {
             return ResponseEntity.ok(new ErrorR().normal("注册邮箱与验证邮箱不一致"));
         }
         if (userBasicMapper.selectByUsername(userBasic.getUsername()) != null) {
@@ -164,26 +176,44 @@ public class SignService {
         userArchive.setNickname("新用户" + System.currentTimeMillis());
         userArchive.setAvatar("https://file.naigos.cn:52011/avatar/dc4d81a09fb2728a3c7d028b035652fa");
         boolean userArchiveInsert = userArchiveMapper.insert(userArchive);
-        if (userArchiveInsert) {
-            return ResponseEntity.ok(new SignR().signUp(true));
+        if (!userArchiveInsert) {
+            // 个人信息写入失败必须让整个注册失败并回滚，不能留下孤儿账号
+            throw new IllegalStateException("注册失败：用户个人信息写入失败，uuid=" + userBasic.getUuid());
         }
-        return ResponseEntity.ok(new SignR().signUp(false));
+        return ResponseEntity.ok(new SignR().signUp(true));
     }
-    public J checkSignupCode(String uniqueId, String code, String email) {
+
+    /**
+     * 校验注册邮箱验证码。
+     *
+     * <p>返回 {@code null} 表示校验通过（此时该验证码已被标记为已使用）；
+     * 返回非空 {@link ResponseEntity} 表示校验失败，调用方应直接把它回传给前端。</p>
+     *
+     * <p>注意：验证码记录不存在时不返回内部的「资源获取失败」文案，
+     * 而是明确告诉用户「验证码会话不存在或已过期」——这是注册失败时最常见的原因，
+     * 原文案会让用户误以为是网络或服务联通问题。</p>
+     *
+     * @param uniqueId 发送验证码时返回的唯一 ID
+     * @param code 用户填写的验证码
+     * @param email 用户填写的邮箱
+     * @return 校验失败时的响应；校验通过返回 null
+     */
+    public ResponseEntity<J> checkSignupCode(String uniqueId, String code, String email) {
         VerificationCodeModel vcDB = verificationCodeMapper.selectByUniqueId(uniqueId);
         if (vcDB == null) {
-            return new ResourceR().resourceSuch(false, null);
+            return ResponseEntity.ok(new ErrorR().normal("验证码会话不存在或已过期，请重新获取验证码"));
         }
-        if (!vcDB.getUsername().equals(email) || !vcDB.getScenario().equals("Signup") || vcDB.getUsed()) {
-            return new ErrorR().normal("验证信息不匹配");
+        if (!Objects.equals(vcDB.getUsername(), email) || !"Signup".equals(vcDB.getScenario())
+                || Boolean.TRUE.equals(vcDB.getUsed())) {
+            return ResponseEntity.ok(new ErrorR().normal("验证信息不匹配"));
         }
-        if (!vcDB.getCode().equals(code)) {
-            return new ErrorR().normal("验证码不匹配");
+        if (!Objects.equals(vcDB.getCode(), code)) {
+            return ResponseEntity.ok(new ErrorR().normal("验证码不匹配"));
         }
-        if (vcDB.getExpiration_at().isBefore(LocalDateTime.now())) {
-            return new ErrorR().normal("验证码已过期");
+        if (vcDB.getExpiration_at() == null || vcDB.getExpiration_at().isBefore(LocalDateTime.now())) {
+            return ResponseEntity.ok(new ErrorR().normal("验证码已过期"));
         }
         verificationCodeMapper.updateUsed(uniqueId);
-        return new SuccessR().normal("验证成功");
+        return null;
     }
 }
