@@ -167,17 +167,11 @@ onMounted(loadItems)
       </span>
     </template>
 
-    <section class="glass-panel page-card">
-      <p class="intro">
-        为官方业务指定平台内使用的账号。例如「未认领收录作品临时归属」决定了搬运收录上传与管理员撤销认领时，
-        作品 <code>author</code> 字段临时指向哪个账号。
-      </p>
-      <p class="intro intro--warning">
-        未配置（或绑定账号已被删除）时，对应业务的写入会被后端直接阻断，不会写入临时 UUID。
-        绑定只能更换，不能解绑。
-      </p>
-    </section>
-
+    <!--
+      这里刻意不放「解释卡片」：
+      业务含义由表格「说明」列逐项给出，未配置的阻断后果由「当前绑定账号」列的红标强提示，
+      再叠一层说明卡片只是重复信息并挤占表格高度。
+    -->
     <section class="glass-panel page-card page-card--table">
       <el-table v-loading="loading" :data="items" row-key="business_key">
         <el-table-column label="业务" min-width="200">
@@ -203,7 +197,8 @@ onMounted(loadItems)
           </template>
         </el-table-column>
 
-        <el-table-column label="说明" min-width="240">
+        <!-- 说明文案由后端枚举下发，必须保持简短（见 OfficialAccountEnum），列宽按「单行完整展示」预留 -->
+        <el-table-column label="说明" min-width="260">
           <template #default="scope">
             <span class="description">{{ scope.row.description }}</span>
           </template>
@@ -294,16 +289,6 @@ onMounted(loadItems)
 
 .page-card--table {
   min-height: 320px;
-}
-
-.intro {
-  margin: 0;
-  color: var(--barc-text-soft);
-  line-height: 1.7;
-}
-
-.intro--warning {
-  color: var(--barc-accent-strong);
 }
 
 .business {

@@ -37,4 +37,15 @@ class OfficialAccountEnumTest {
         // 业务名不应写成某个具体账号的昵称
         assertEquals(false, item.getDisplayName().contains("蔚蓝收录认领助手"));
     }
+
+    @Test
+    @DisplayName("业务说明必须足够短，避免管理端「说明」列换行")
+    void description_ShouldStayShortForSingleLineRendering() {
+        // 管理端「说明」列宽约 400px，中文按 14px 估算单行约容纳 26 字；
+        // 这里以 30 字为硬上限：一旦超限就会在表格里换行，破坏列表可读性。
+        for (OfficialAccountEnum item : OfficialAccountEnum.values()) {
+            assertEquals(true, item.getDescription().length() <= 30,
+                    item.name() + " 的业务说明过长，会在管理端表格内换行：" + item.getDescription());
+        }
+    }
 }

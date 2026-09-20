@@ -14,9 +14,14 @@ import lombok.Getter;
 @Getter
 public enum OfficialAccountEnum {
 
-    /** 未认领收录作品的临时归属账号：搬运收录上传、管理员撤销认领时写入 work.author。 */
+    /**
+     * 未认领收录作品的临时归属账号：搬运收录上传、管理员撤销认领时写入 work.author。
+     *
+     * 说明文案（{@code description}）会直接渲染在管理端表格的「说明」列里，列宽有限，
+     * 因此必须保持简短、一行内展示完整，禁止堆砌实现细节（如 author 字段名）。
+     */
     COLLECTION_ASSISTANT("未认领收录作品临时归属",
-            "未认领收录作品的临时归属账号；搬运收录上传与管理员撤销认领时，作品 author 临时指向该账号。");
+            "搬运收录与撤销认领时，未认领作品临时归属该账号。");
 
     /** 业务名（管理端展示，与绑定账号昵称无关） */
     private final String displayName;

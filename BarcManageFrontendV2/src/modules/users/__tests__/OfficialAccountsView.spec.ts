@@ -55,7 +55,7 @@ function buildItem(overrides: Partial<OfficialAccountItem> = {}): OfficialAccoun
   return {
     business_key: 'COLLECTION_ASSISTANT',
     display_name: '未认领收录作品临时归属',
-    description: '未认领收录作品的临时归属账号；搬运收录上传与撤销认领时写入 author。',
+    description: '搬运收录与撤销认领时，未认领作品临时归属该账号。',
     bound: false,
     dangling: false,
     user_uuid: null,
@@ -129,6 +129,16 @@ describe('OfficialAccountsView', () => {
     expect(wrapper.text()).toContain('馆长')
     expect(wrapper.text()).toContain('更换')
     expect(wrapper.text()).toContain('未配置业务：0 项')
+  })
+
+  it('说明列直接渲染后端下发的短文案，且不再渲染 Title 下的冗余解释卡片', async () => {
+    const wrapper = await mountView([boundItem])
+
+    // 业务说明只在表格「说明」列呈现
+    expect(wrapper.text()).toContain(boundItem.description)
+    // 回归保护：Title 条下方的「解释卡片」已删除，避免重复信息挤占表格
+    expect(wrapper.find('.intro').exists()).toBe(false)
+    expect(wrapper.findAll('.page-card')).toHaveLength(1)
   })
 
   it('绑定账号已被删除时必须提示重新绑定并展示旧 UUID', async () => {
