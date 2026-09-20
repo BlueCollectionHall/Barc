@@ -1,21 +1,20 @@
 <script setup lang="ts">
+/**
+ * 控制台首页
+ *
+ * 说明（2026-09-20 拍板）：
+ * 这里原先平铺展示"可访问模块"入口卡片，与侧边栏导航重复，本身也是第二个长列表，
+ * 因此整体删除；仪表盘现在只保留"当前会话"与"边界约束"两块内容。
+ */
+
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
 
 import RoutePageShell from '@/app/components/RoutePageShell.vue'
-import { adminChildren } from '@/app/router/routes'
 import { useAuthStore } from '@/app/stores/auth'
 import { usePermissionStore } from '@/app/stores/permissions'
 
-const router = useRouter()
 const authStore = useAuthStore()
 const permissionStore = usePermissionStore()
-
-const quickLinks = computed(() =>
-  adminChildren.filter(
-    (route) => route.meta?.menuLabel && !route.meta.hiddenInMenu && permissionStore.canAccessRoute(route.meta, authStore.userArchive),
-  ),
-)
 
 const managerSummary = computed(() => ({
   nickname: authStore.userArchive?.nickname ?? '未登录',
@@ -47,23 +46,6 @@ const managerSummary = computed(() => ({
           <el-descriptions-item label="身份">{{ managerSummary.identity }}</el-descriptions-item>
           <el-descriptions-item label="权限">{{ managerSummary.permission }}</el-descriptions-item>
         </el-descriptions>
-      </section>
-
-      <section class="glass-panel dashboard-card">
-        <div class="dashboard-card__eyebrow">入口</div>
-        <h2 class="dashboard-card__title">可访问模块</h2>
-        <div class="quick-links">
-          <button
-            v-for="item in quickLinks"
-            :key="String(item.name)"
-            class="quick-link"
-            type="button"
-            @click="router.push({ name: item.name })"
-          >
-            <strong>{{ item.meta?.menuLabel }}</strong>
-            <span>{{ item.meta?.subtitle }}</span>
-          </button>
-        </div>
       </section>
 
       <section class="glass-panel dashboard-card">
@@ -116,39 +98,12 @@ const managerSummary = computed(() => ({
   line-height: 1.8;
 }
 
-.quick-links {
-  display: grid;
-  gap: 0.8rem;
-}
-
-.quick-link {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  padding: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.58);
-  text-align: left;
-  cursor: pointer;
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
-}
-
-.quick-link:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--barc-shadow-sm);
-}
-
-.quick-link span,
-.dashboard-list {
-  color: var(--barc-text-soft);
-}
-
 .dashboard-list {
   display: grid;
   gap: 0.8rem;
   margin: 0;
   padding-left: 1.1rem;
+  color: var(--barc-text-soft);
   line-height: 1.8;
 }
 
