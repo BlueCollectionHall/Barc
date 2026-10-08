@@ -26,6 +26,7 @@ const MessagesListView = () => import('@/modules/messages/views/MessagesListView
 const FeedbackManageListView = () => import('@/modules/feedback/views/FeedbackManageListView.vue')
 const BackgroundsListView = () => import('@/modules/backgrounds/views/BackgroundsListView.vue')
 const FestivalsListView = () => import('@/modules/system/views/FestivalsListView.vue')
+const FriendLinksListView = () => import('@/modules/friend-link/views/FriendLinksListView.vue')
 
 export const adminChildren: RouteRecordRaw[] = [
   {
@@ -152,6 +153,25 @@ export const adminChildren: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresManager: true,
       hiddenInMenu: true,
+    },
+  },
+  {
+    // 友情链接：放在「系统」组首位（menuOrder 10），不改动既有项的编号，避免影响侧边栏渲染顺序
+    path: 'system/friend-links',
+    name: 'system-friend-links',
+    component: FriendLinksListView,
+    meta: {
+      title: '友情链接',
+      subtitle: '维护用户端首页展示的友情链接，支持 logo 上传与手动排序。',
+      requiresAuth: true,
+      requiresManager: true,
+      // 1匹配鉴权：仅馆长（ADVANCED_ADMINISTRATOR）权限位可访问
+      minManagerPermissionBit: MANAGER_PERMISSION.ADVANCED_ADMINISTRATOR,
+      menuLabel: '友情链接',
+      menuGroup: 'system',
+      menuGroupLabel: '系统',
+      groupOrder: 60,
+      menuOrder: 10,
     },
   },
   {
