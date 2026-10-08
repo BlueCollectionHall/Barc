@@ -409,9 +409,27 @@ onMounted(loadList)
   color: var(--barc-text-soft);
 }
 
+/**
+ * 日期式下的「月份 + 日」输入行。
+ *
+ * 修复说明：日期式曾出现「起始 / 结束日期的下拉框里看不到任何文字，只剩一个箭头」。
+ * 原因：el-form-item 的内容区 `.el-form-item__content` 本身是 flex 容器，
+ *      本行未显式撑满时会被收缩到内容固有宽度（约 44px/个）；
+ *      而 el-select 的选中文本 `.el-select__placeholder` 是绝对定位元素，不参与固有宽度计算，
+ *      于是 `.el-select__selection` 被压成 0 宽，文字被 overflow 整体裁掉。
+ * 处理：本行显式 flex: 1 撑满内容区，两个下拉各自 flex: 1 平分宽度（flex-basis 覆盖 el-select 的 width: 100%），
+ *      确保「1 月 / 1 日」等选中文本始终可见。
+ */
 .date-row {
   display: flex;
   gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.date-row :deep(.el-select) {
+  flex: 1;
+  min-width: 0;
 }
 
 .range-preview {

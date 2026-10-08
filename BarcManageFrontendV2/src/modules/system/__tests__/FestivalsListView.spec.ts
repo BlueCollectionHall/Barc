@@ -185,6 +185,18 @@ function findSelect(root: Queryable, testId: string): VueWrapper {
   return root.findComponent(`[data-test="${testId}"]`) as unknown as VueWrapper
 }
 
+/**
+ * 读取某个下拉框当前绑定的值（即 el-select 的 modelValue）。
+ *
+ * 为什么不用 wrapper.props('modelValue')：findSelect 返回的是无泛型的 VueWrapper，
+ * 其 props 的键类型被推断为 never，无法直接用字符串索引；
+ * 这里通过一次显式断言换取可读的取值方式。
+ */
+function selectModelValue(root: Queryable, testId: string): unknown {
+  const select = findSelect(root, testId)
+  return (select.vm as unknown as { modelValue?: unknown }).modelValue
+}
+
 /** 取当前弹窗容器（DialogStub 渲染出的 section） */
 function dialog(wrapper: ReturnType<typeof mount>): Queryable {
   return wrapper.find('[data-testid="dialog-stub"]') as unknown as Queryable
@@ -385,6 +397,43 @@ describe('FestivalsListView', () => {
       end_day: FEB_LAST_DAY,
     })
     expect(showSuccess).toHaveBeenCalledWith('节日已更新')
+  })
+
+  /**
+   * 回归测试：管理端「修改节日」把月份式切成日期式时，起止月日必须原样回显。
+   *
+   * 背景：日期式下起始 / 结束日期的下拉框曾整片看不到文字（只剩箭头）。
+   * 数据层本身是正常的，问题出在布局 —— el-form-item 内容区是 flex 容器，
+   * 日期行未撑满时会塌陷到内容固有宽度，把 el-select 的绝对定位选中文本压成 0 宽。
+   * 因此这里同时锁定「值绑定」与「结构契约」两部分。
+   */
+  it('keeps the start/end values when a month-mode festival is switched to date mode', async () => {
+    const wrapper = mount(FestivalsListView, mountOptions)
+    await flushPromises()
+
+    // 修改「新年」（12-01 → 次年 02-29，整月区间 -> 默认按月份式回显）
+    await findButton(wrapper, '修改').trigger('click')
+    await flushPromises()
+
+    const box = dialog(wrapper)
+    expect(selectModelValue(box, 'form-start-month')).toBe(12)
+
+    // 切到日期式：起止月日原样保留，四个下拉框都要有值
+    await componentAt(wrapper, '[data-test="form-mode"]').vm.$emit('update:modelValue', 'date')
+    await flushPromises()
+
+    expect(selectModelValue(box, 'form-start-month')).toBe(12)
+    expect(selectModelValue(box, 'form-start-day')).toBe(1)
+    expect(selectModelValue(box, 'form-end-month')).toBe(2)
+    expect(selectModelValue(box, 'form-end-day')).toBe(FEB_LAST_DAY)
+    expect(box.find('[data-test="form-preview"]').text()).toContain('12月01日 ~ 次年02月29日')
+
+    // 结构契约：日期式必须由 .date-row 承载「月份 + 日」两个下拉。
+    // 注意边界：jsdom 没有布局能力（vitest 也关闭了 CSS 处理），
+    // 因此本用例只能守住「取值绑定 + DOM 结构」，样式可见性自身仍需人工 / 浏览器验证；
+    // 撑满规则见 FestivalsListView.vue 的 <style scoped>，重构时勿删。
+    expect(box.findAll('.date-row')).toHaveLength(2)
+    expect(box.findAll('.date-row .el-select')).toHaveLength(4)
   })
 
   it('closes a festival while keeping the background bindings', async () => {
