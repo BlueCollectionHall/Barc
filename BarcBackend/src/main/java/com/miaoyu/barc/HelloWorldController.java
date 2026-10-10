@@ -1,10 +1,7 @@
 package com.miaoyu.barc;
 
-import com.miaoyu.barc.annotation.IgnoreAuth;
 import com.miaoyu.barc.response.HelloR;
-import com.miaoyu.barc.response.SuccessR;
 import com.miaoyu.barc.utils.J;
-import com.miaoyu.barc.utils.tencent.cos.CosService;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,10 +11,7 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Date;
 
 @RestController
 public class HelloWorldController {
@@ -52,16 +46,5 @@ public class HelloWorldController {
     @GetMapping("/hello/test_permission_anno")
     public ResponseEntity<J> testPermissionAnno(HttpServletRequest request) {
         return helloWorldService.testPermissionAnno(request.getAttribute("uuid").toString());
-    }
-
-    @Autowired
-    private CosService cosService;
-    @GetMapping("/test_cos")
-    @IgnoreAuth
-    public ResponseEntity<J> testCos(
-            @RequestParam("key") String keyName
-    ) {
-        String s = cosService.generateSignedUrl(keyName, new Date(System.currentTimeMillis() + 60 * 1000), null);
-        return ResponseEntity.ok(new SuccessR().normal(s));
     }
 }

@@ -36,6 +36,7 @@ java -jar target/BarcBackend-<版本>.jar    # 版本号以 BarcBackend/pom.xml 
 - 生产服务器推荐通过环境变量 `BARC_PROD_DB_USERNAME`、`BARC_PROD_DB_PASSWORD` 提供凭据。也可在打包前替换 `application.yaml` 生产配置中的占位符，但该方式会把明文凭据写入 JAR，必须严格限制制品和备份的访问权限；修改已经生成的 JAR 之外的源码配置不会影响该 JAR。
 - 新生产库首次上线前，必须恢复一份同时包含完整结构与匹配 `flyway_schema_history` 的已验证备份，或由 DBA 执行经验证的建表流程并将 Flyway 基线标记到匹配版本（当前迁移版本以 `BarcBackend/src/main/resources/db/migration/` 下最大编号为准）。当前历史迁移不能独立从空库创建完整结构；仅导入 `schema.sql` 也会与 V1/V2 等历史迁移冲突，因此禁止直接对空库或仅导入 `schema.sql` 的库启动生产服务。具体操作请使用 `BarcBackend/db/baseline/` 下的导出/导入脚本，并参阅 [数据库初始化指南.md](./数据库初始化指南.md)。
 - 如需临时覆盖自动选择，可显式传入 `--spring.profiles.active=dev` 或 `--spring.profiles.active=prod`；命令行、JVM 系统属性与环境变量的显式配置优先于自动识别。禁止在生产服务器传入 `dev`，否则服务会主动连接开发数据库。若其他配置来源导致 `dev` 与 `prod` 同时激活，服务会直接拒绝启动，避免配置覆盖顺序产生歧义。
+- **对象存储（COS）同样按此规则区分环境**：基础配置 `application.yaml` 放开发桶（`dev-miaoyu-barc-image-1309572720`、`dev-miaoyu-barc-avatar-1309572720`，且 `custom_domain` 留空以使用腾讯云官方端点）；生产桶（`miaoyu-barc-*` + 自定义域名 `image-cos-9c98ec3e.barc.work` / `avatar-cos-3ef160ef.barc.work`）必须在 `application-prod.yaml` 覆写 `bucket-name` 与 `custom_domain` 两个键。生产 Profile 启动时会校验 `tencent.cos.image.bucket-name` 必须以 `miaoyu-barc-image-` 开头，漏配覆写段即拒绝启动。详见 [数据库初始化指南.md](./数据库初始化指南.md) §1.4 与 [结构文档.md](./结构文档.md)「COS 的开发 / 生产环境区分」。
 
 ### 1.3 依赖服务
 
@@ -43,7 +44,7 @@ java -jar target/BarcBackend-<版本>.jar    # 版本号以 BarcBackend/pom.xml 
 |------|------|------|
 | MySQL（开发） | jdbc:mysql://miaoyu.asia:51001/ba | IDE、main、Maven 启动使用 |
 | MySQL（生产） | jdbc:mysql://127.0.0.1:51001/ba-prod | `java -jar` 启动使用；与开发库同实例、仅库名不同 |
-| 腾讯云 COS | 需配置 | 统一文件存储（私有桶 + 签名 URL） |
+| 腾讯云 COS | 需配置 | 统一文件存储（私有桶 + 签名 URL）；开发/生产使用不同桶与访问域名，详见 [数据库初始化指南.md](./数据库初始化指南.md) §1.4 |
 
 ---
 

@@ -123,14 +123,79 @@ class BarcBackendApplicationTest {
      */
     @Test
     void shouldAcceptLocalProductionDatasource() {
-        MockEnvironment environment = new MockEnvironment()
-                .withProperty("spring.datasource.url", "jdbc:mysql://127.0.0.1:51001/ba-prod");
-        environment.setActiveProfiles(BarcBackendApplication.PRODUCTION_PROFILE);
+        MockEnvironment environment = productionEnvironmentWithCosBucket(
+                "jdbc:mysql://127.0.0.1:51001/ba-prod",
+                "miaoyu-barc-image-1309572720"
+        );
 
         assertDoesNotThrow(() -> BarcBackendApplication.validateProductionConfiguration(
                 environment,
                 productionConfigurationUrl()
         ));
+    }
+
+    /**
+     * 生产 Profile 若误用开发镜像桶，必须在启动阶段直接拒绝：
+     * 基础配置放的是开发桶，生产完全依赖 application-prod.yaml 覆写，漏配即会写入开发桶。
+     */
+    @Test
+    void shouldRejectProductionProfileWithDevelopmentImageBucket() {
+        MockEnvironment environment = productionEnvironmentWithCosBucket(
+                "jdbc:mysql://127.0.0.1:51001/ba-prod",
+                "dev-miaoyu-barc-image-1309572720"
+        );
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> BarcBackendApplication.validateProductionConfiguration(environment, productionConfigurationUrl())
+        );
+    }
+
+    /**
+     * 生产 Profile 缺少对象存储桶配置时必须拒绝启动，不能静默回落到开发桶。
+     */
+    @Test
+    void shouldRejectProductionProfileWithoutImageBucket() {
+        MockEnvironment environment = productionEnvironmentWithCosBucket(
+                "jdbc:mysql://127.0.0.1:51001/ba-prod",
+                null
+        );
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> BarcBackendApplication.validateProductionConfiguration(environment, productionConfigurationUrl())
+        );
+    }
+
+    /**
+     * 开发 Profile 不参与对象存储校验：即便 image 桶是开发桶也应放行。
+     */
+    @Test
+    void shouldNotValidateCosBucketForDevelopmentProfile() {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("tencent.cos.image.bucket-name", "dev-miaoyu-barc-image-1309572720");
+        environment.setActiveProfiles(BarcBackendApplication.DEVELOPMENT_PROFILE);
+
+        assertDoesNotThrow(() -> BarcBackendApplication.validateProductionConfiguration(
+                environment,
+                productionConfigurationUrl()
+        ));
+    }
+
+    /**
+     * 构造带对象存储桶配置的生产环境；桶名为 null 时表示未配置该键。
+     *
+     * @param datasourceUrl 生产数据源地址
+     * @param imageBucketName 生产 image 桶名，null 表示不配置
+     * @return 已激活生产 Profile 的环境
+     */
+    private MockEnvironment productionEnvironmentWithCosBucket(String datasourceUrl, String imageBucketName) {
+        MockEnvironment environment = new MockEnvironment().withProperty("spring.datasource.url", datasourceUrl);
+        if (imageBucketName != null) {
+            environment.withProperty("tencent.cos.image.bucket-name", imageBucketName);
+        }
+        environment.setActiveProfiles(BarcBackendApplication.PRODUCTION_PROFILE);
+        return environment;
     }
 
     /**

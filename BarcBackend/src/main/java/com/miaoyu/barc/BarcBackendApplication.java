@@ -23,6 +23,11 @@ public class BarcBackendApplication {
     // 仅库名不同，因此只有把库名一并纳入校验，才能防止生产环境静默连到开发库。
     // 变更生产库地址或库名时，必须同步修改此常量与 application-prod.yaml。
     static final String PRODUCTION_DATASOURCE_PREFIX = "jdbc:mysql://127.0.0.1:51001/ba-prod";
+    // 生产镜像桶指纹：与数据源指纹同样的思路——把「生产误连开发资源」从人工审查变成启动即拒绝。
+    // 只锁定 image 桶的原因：全部上传链路与全部签名 URL 链路使用的都是 image 桶，
+    // 一旦误连开发桶影响面最大；avatar 桶当前暂无消费方，不做强校验以免过度约束配置。
+    // 变更生产 image 桶时必须同步修改此常量与 application-prod.yaml。
+    static final String PRODUCTION_IMAGE_BUCKET_PREFIX = "miaoyu-barc-image-";
     private static final String ACTIVE_PROFILE_ARGUMENT = "--spring.profiles.active=";
 
     /**
@@ -53,11 +58,11 @@ public class BarcBackendApplication {
     }
 
     /**
-     * 校验最终生效的 Profile 与数据库地址，防止配置缺失或冲突时连接错误数据库。
+     * 校验最终生效的 Profile、数据库地址与对象存储桶，防止配置缺失或冲突时连错环境。
      *
      * @param environment 已完成 Config Data 加载的 Spring 环境
      * @param productionConfigurationUrl classpath 中的生产配置资源地址
-     * @throws IllegalStateException 环境冲突、配置文件缺失或生产数据源指纹不匹配时抛出
+     * @throws IllegalStateException 环境冲突、配置文件缺失、生产数据源指纹或生产 COS 桶指纹不匹配时抛出
      */
     static void validateProductionConfiguration(Environment environment, URL productionConfigurationUrl) {
         boolean developmentActive = Arrays.asList(environment.getActiveProfiles()).contains(DEVELOPMENT_PROFILE);
@@ -77,6 +82,16 @@ public class BarcBackendApplication {
             // 直接复用常量，避免错误提示与实际校验规则出现两处不一致。
             throw new IllegalStateException(
                     "生产数据源配置错误：spring.datasource.url 必须以 " + PRODUCTION_DATASOURCE_PREFIX + " 开头"
+            );
+        }
+
+        // 对象存储同样按指纹校验：base 配置放的是开发桶，生产完全依赖 application-prod.yaml 覆写，
+        // 一旦漏配覆写段就会静默写入开发桶，因此这里必须拦在启动阶段。
+        String imageBucketName = environment.getProperty("tencent.cos.image.bucket-name");
+        if (imageBucketName == null || !imageBucketName.startsWith(PRODUCTION_IMAGE_BUCKET_PREFIX)) {
+            throw new IllegalStateException(
+                    "生产对象存储配置错误：tencent.cos.image.bucket-name 必须以 "
+                            + PRODUCTION_IMAGE_BUCKET_PREFIX + " 开头（请在 application-prod.yaml 覆写生产桶）"
             );
         }
     }
