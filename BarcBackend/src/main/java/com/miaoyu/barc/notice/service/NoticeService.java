@@ -29,9 +29,30 @@ public class NoticeService {
     @Autowired
     private NoticeMapper noticeMapper;
 
+    /**
+     * 获取最新公告（带天数范围的回退兜底）
+     *
+     * 变更说明（公告超期不再显示“暂无公告”）：
+     * 原逻辑只按 day 天内的 updated_at 过滤，最新公告一旦超出 day 天就会被判定为“没有公告”，
+     * 前端首页公告组件（传 day=30）因此显示“暂无数据”。
+     * 现改为两级查询：
+     * 1、先取 day 天内的最新一条公告（保持原语义，优先展示新公告）；
+     * 2、若第 1 步没有结果，则回退取全表最近的一条历史公告（不限时间）。
+     * 这样只要 notice 表中有公告，前端首页就永远有内容可展示；只有表中确实没有任何公告时才返回空列表。
+     * 返回结构保持不变（仍为列表，0 或 1 条），双端前端无需改动。
+     *
+     * @param day 优先查询的日期范围（天）
+     * @return 公告列表（命中或回退时为 1 条，表中无公告时为 0 条）
+     */
     public ResponseEntity<J> latestNoticeService(Integer day) {
+        // 第一级：按天数范围查询范围内最新的一条公告
         NoticeModel latest = noticeMapper.latest(day);
         if (latest == null) {
+            // 第二级（回退兜底）：天数范围内没有公告时，取全表最近的一条历史公告，避免前端显示“暂无公告”
+            latest = noticeMapper.latestWithoutDayLimit();
+        }
+        if (latest == null) {
+            // 表中没有任何公告：仍返回空列表，由前端展示“暂无数据”
             return ResponseEntity.ok(new ResourceR().resourceSuch(true, new ArrayList<>()));
         }
         List<NoticeModel> list = new ArrayList<>();

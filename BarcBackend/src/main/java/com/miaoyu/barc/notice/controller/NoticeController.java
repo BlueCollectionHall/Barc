@@ -18,8 +18,12 @@ public class NoticeController {
 
     /**
      * 获取最新的公告
-     * @param day 日期范围
-     * @return 公告内容
+     *
+     * 说明：优先返回 day 天内的最新公告；若 day 天内没有任何公告，则回退返回全表最近的一条公告，
+     * 保证前端首页公告组件不会因为公告超过天数而显示“暂无公告”。
+     *
+     * @param day 优先查询的日期范围（天）
+     * @return 公告列表（0 或 1 条），返回结构与改动前保持一致
      * */
     @IgnoreAuth
     @GetMapping("/latest")
