@@ -577,7 +577,34 @@ feat(文件): 对象存储按开发/生产环境区分桶与访问域名
 2. **「`custom_domain` 为空时端点构建器为 null」的初始假设不成立**：COS SDK 的 `ClientConfig` 在未设置自定义端点时会自带 `RegionEndpointBuilder`（由区域推导官方域名），并非 null。因此测试断言改为「**不是** `CustomEndpointBuilder`，且其构建出的主机含 `myqcloud.com`」——与「走腾讯云官方端点」的语义严格一致。
 3. **`test` 桶与顶层兜底两项仍然可达**：`/api/file/delete`（Q14=B 不修）经 `CosService.resolveBucket` 的 `default` 分支与 `test` 桶，因此这两项**必须保留**；只有删除该链路才会让它们变成死配置（见 §8.4 K1）。
 
-### 9.4 尚未执行项（需用户明确许可）
+### 9.4 开发桶真实上传联调（2026-10-10 已执行完毕）
 
-- **开发桶真实上传联调**（Q6=A 的第二步）：需用户许可后执行「dev 起服务 → 上传一张测试图 → 断言返回 key 不含域名前缀 → 签名 URL 域名为 `dev-miaoyu-barc-image-1309572720.cos.ap-shanghai.myqcloud.com`」；**严禁在生产环境测试**。
+Q6=A 的第二步已完成：用**真实 `application.yaml` 配置**走 `CosService.uploadFile` 上传到开发桶，并用同一个 key 生成签名 URL、真实 HTTP GET 校验。测试内置硬保险（当前 image 桶必须以 `dev-miaoyu-barc-` 开头，否则直接失败退出），因此不可能误写生产桶。
+
+实测输出：
+
+| 检查项 | 实测结果 |
+|---|---|
+| 生效桶名 | `dev-miaoyu-barc-image-1309572720` |
+| 生效 `custom_domain` | 空串（未配置） |
+| 上传返回 | `code=0`「文件上传成功」 |
+| 落库 objectKey | `/dev-environment-split-verification/2026-10-10/1791619566679-barc-cos-verification.png.png`（**纯 key，不含域名**） |
+| 签名 URL 域名 | `https://dev-miaoyu-barc-image-1309572720.cos.ap-shanghai.myqcloud.com/...`（即由「桶名 + region」推导的官方域名，与预期逐字一致） |
+| GET 签名 URL | **200**，返回 70 字节，与上传的 PNG 字节完全一致 |
+| GET 不存在的 key | **404**（证明为私有桶，签名是必要环节） |
+
+留在开发桶的验证痕迹（用户已同意保留）：
+
+| 项 | 值 |
+|---|---|
+| 桶 | `dev-miaoyu-barc-image-1309572720` |
+| 对象 key | `dev-environment-split-verification/2026-10-10/1791619566679-barc-cos-verification.png.png` |
+| 大小 | 70 字节（1×1 PNG） |
+
+> 联调用例为临时文件（会在 `mvn test` 时真实联网上传），验证通过后已删除，不入库。
+
+**联调中发现的既存缺陷（与本次改动无关，未修）**：`CosService.uploadFile`（`CosService.java:53-61`）把 `getOriginalFilename()`（已含扩展名）再拼一次 `"." + extension`，导致落库 key 出现双扩展名（`xxx.png.png`）。文件仍可正常访问，仅影响 key 可读性；受影响的链路是走 `uploadFile` 的作品封面 / 图集与 `/api/file/upload`，走 `uploadFileWithKey` 的背景图与友链 logo 不受影响。修复另立项。
+
+### 9.5 尚未执行项
+
 - 生产自定义域名的端到端行为只能由用户在真实部署时确认（§2.7 R2）。
