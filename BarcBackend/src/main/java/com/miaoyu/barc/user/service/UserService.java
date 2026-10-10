@@ -8,6 +8,7 @@ import com.miaoyu.barc.user.mapper.VerificationCodeMapper;
 import com.miaoyu.barc.user.model.UserArchiveModel;
 import com.miaoyu.barc.user.model.UserBasicModel;
 import com.miaoyu.barc.user.model.VerificationCodeModel;
+import com.miaoyu.barc.user.model.vo.UserBasicVo;
 import com.miaoyu.barc.user.model.vo.UserInfoVo;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.PasswordHash;
@@ -88,9 +89,48 @@ public class UserService {
         return ResponseEntity.ok(new SuccessR().normal(userArchiveMapper.selectByUuid(uuid)));
     }
 
+    /**
+     * 获取本账号基础信息（脱敏返回）。
+     *
+     * <p>安全修复（2026-10）：原先直接返回 {@link UserBasicModel} 行对象，
+     * 会把 {@code password}（口令哈希）与 {@code password_version} 一并下发给前端。
+     * 现改为统一经 {@link #toUserBasicVo(UserBasicModel)} 转换后返回 {@link UserBasicVo}，
+     * 只保留双端实际消费的字段。</p>
+     *
+     * <p>为什么不去改 Mapper 的 SQL：{@code userBasicMapper.selectByUuid} 还被登录校验、
+     * 封号、通知、认领富化等多条链路复用，它们需要完整的行对象（含口令哈希做比对），
+     * 因此脱敏必须落在「对外出口」这一层，而不是查询层。</p>
+     */
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
     public ResponseEntity<J> getMeBasicService(String uuid) {
-        return ResponseEntity.ok(new SuccessR().normal(userBasicMapper.selectByUuid(uuid)));
+        UserBasicModel userBasic = userBasicMapper.selectByUuid(uuid);
+        // 档案表与基础表是两张表，理论上存在 user_archive 有记录而 user_basic 缺失的情况，这里显式兜底
+        if (Objects.isNull(userBasic)) {
+            return ResponseEntity.ok(new UserR().noSuchUser());
+        }
+        return ResponseEntity.ok(new SuccessR().normal(toUserBasicVo(userBasic)));
+    }
+
+    /**
+     * 用户基础信息行对象 → 对外脱敏视图。
+     *
+     * <p>这里逐字段显式拷贝（而不是用 BeanUtils 整对象复制）是刻意的：
+     * 一旦 {@link UserBasicModel} 未来新增敏感列，显式映射不会把它顺手带出去。</p>
+     *
+     * @param model 数据库查询到的用户基础信息行对象
+     * @return 只含可对外字段的视图对象
+     */
+    private UserBasicVo toUserBasicVo(UserBasicModel model) {
+        UserBasicVo vo = new UserBasicVo();
+        vo.setUuid(model.getUuid());
+        vo.setUsername(model.getUsername());
+        vo.setEmail(model.getEmail());
+        vo.setEmail_verified(model.getEmail_verified());
+        vo.setTelephone(model.getTelephone());
+        vo.setSafe_level(model.getSafe_level());
+        vo.setCreated_at(model.getCreated_at());
+        vo.setUpdated_at(model.getUpdated_at());
+        return vo;
     }
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
