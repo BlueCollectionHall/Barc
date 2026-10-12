@@ -106,20 +106,6 @@ public class WorkManageController {
         return workManageService.getClaimHistory(uuid(r), workId);
     }
 
-    // ==================== 投诉处理 ====================
-    @GetMapping("/complaints")
-    public ResponseEntity<J> getComplaintsManage(HttpServletRequest r) {
-        return workManageService.getComplaintsList(uuid(r));
-    }
-
-    @PostMapping("/complaint/process")
-    public ResponseEntity<J> processComplaintManage(HttpServletRequest r, @RequestBody Map<String, Object> body) {
-        return workManageService.processComplaint(uuid(r),
-                body.get("complaint_id").toString(),
-                body.get("action").toString(),
-                body.get("remark") != null ? body.get("remark").toString() : null);
-    }
-
     // ==================== 操作日志 ====================
     @PostMapping("/logs")
     public ResponseEntity<J> getOperationLogsManage(HttpServletRequest r, @RequestBody PageRequestDto dto) {

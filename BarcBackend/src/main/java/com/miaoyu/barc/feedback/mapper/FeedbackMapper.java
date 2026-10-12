@@ -3,29 +3,15 @@ package com.miaoyu.barc.feedback.mapper;
 import com.miaoyu.barc.feedback.enumeration.FeedbackStatusEnum;
 import com.miaoyu.barc.feedback.enumeration.FeedbackTypeEnum;
 import com.miaoyu.barc.feedback.model.FeedbackFormModel;
-import com.miaoyu.barc.feedback.model.FeedbackOptionModel;
-import com.miaoyu.barc.feedback.model.FeedbackTypeModel;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 
 public interface FeedbackMapper {
-    /**
-     * 已废弃：feedback_option 表不再被任何前端或业务逻辑消费，不要新增调用。
-     *
-     * @deprecated 反馈分类改由 FeedbackTypeEnum 与前端本地映射驱动
-     */
-    @Deprecated
-    @Select("SELECT * FROM feedback_option WHERE parent_id = #{parent_id}")
-    List<FeedbackOptionModel> selectOptionsByParentId(@Param("parent_id") String parentId);
-    /**
-     * 已废弃：feedback_type 表不再被任何前端或业务逻辑消费，不要新增调用。
-     *
-     * @deprecated 反馈分类改由 FeedbackTypeEnum 与前端本地映射驱动
-     */
-    @Deprecated
-    @Select("SELECT * FROM feedback_type")
-    List<FeedbackTypeModel> selectAllTypes();
+    // 说明（2026-10 下线）：原先这里还有两个 @Deprecated 方法
+    // selectOptionsByParentId / selectAllTypes，分别读已废弃的 feedback_option 与 feedback_type 表。
+    // 二者唯一的调用方是 FeedbackTypeOfController 与 WorkFeedbackService，均已随旧链路删除，
+    // 故一并移除。反馈分类改由 FeedbackTypeEnum 与前端本地映射驱动。
 
     @Select("SELECT * FROM feedback WHERE type = #{type} ORDER BY updated_at DESC")
     List<FeedbackFormModel> selectByType(@Param("type")FeedbackTypeEnum typeEnum);

@@ -25,8 +25,6 @@ import com.miaoyu.barc.api.work.model.WorkImageModel;
 import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.api.work.model.WorkOperationLogModel;
 import com.miaoyu.barc.email.utils.SendEmailUtils;
-import com.miaoyu.barc.feedback.mapper.WorkFeedbackMapper;
-import com.miaoyu.barc.feedback.model.WorkFeedbackModel;
 import com.miaoyu.barc.permission.PermissionConst;
 import com.miaoyu.barc.response.ChangeR;
 import com.miaoyu.barc.response.ErrorR;
@@ -75,7 +73,6 @@ public class WorkManageService {
     public static final String OP_CLAIM_APPROVE = "CLAIM_APPROVE";
     public static final String OP_CLAIM_REVOKE = "CLAIM_REVOKE";
     public static final String OP_CLAIM_ASSIGN = "CLAIM_ASSIGN";
-    public static final String OP_COMPLAINT_PROCESS = "COMPLAINT_PROCESS";
     public static final String OP_REVIEW_APPROVE = "REVIEW_APPROVE";
     public static final String OP_REVIEW_REJECT = "REVIEW_REJECT";
 
@@ -83,7 +80,6 @@ public class WorkManageService {
     @Autowired private WorkClaimMapper workClaimMapper;
     @Autowired private WorkOperationLogMapper workOperationLogMapper;
     @Autowired private WorkReviewMapper workReviewMapper;
-    @Autowired private WorkFeedbackMapper workFeedbackMapper;
     @Autowired private UserBasicMapper userBasicMapper;
     @Autowired private UserArchiveMapper userArchiveMapper;
     @Autowired private SendEmailUtils sendEmailUtils;
@@ -408,35 +404,12 @@ public class WorkManageService {
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, workClaimMapper.selectByWorkId(workId)));
     }
 
-    // ==================== 投诉处理 ====================
-
-    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
-    public ResponseEntity<J> getComplaintsList(String uuid) {
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workFeedbackMapper.selectAll()));
-    }
-
-    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
-    @Transactional
-    public ResponseEntity<J> processComplaint(String uuid, String complaintId, String action, String remark) {
-        WorkFeedbackModel complaint = workFeedbackMapper.selectById(complaintId);
-        if (complaint == null) return ResponseEntity.ok(new ErrorR().normal("投诉不存在"));
-        if (Boolean.TRUE.equals(complaint.getStatus())) return ResponseEntity.ok(new ErrorR().normal("投诉已处理"));
-
-        complaint.setStatus(true);
-        workFeedbackMapper.update(complaintId, remark);
-
-        if (!"IGNORE".equals(action)) {
-            WorkStatusEnum newStatus = switch (action) { case "BAN" -> WorkStatusEnum.BAN; case "OFF" -> WorkStatusEnum.OFF; case "DELETE" -> WorkStatusEnum.DELETED; default -> null; };
-            if (newStatus != null) {
-                WorkModel work = workMapper.selectById(complaint.getWork_id());
-                if (work != null) { work.setStatus(newStatus); workMapper.update(work); notifyAuthor(work, "BAN".equals(action) ? OP_BAN : "OFF".equals(action) ? OP_OFF : OP_DELETE, "因投诉处理：" + (remark != null ? remark : "")); }
-            }
-        }
-
-        recordLog(complaint.getWork_id(), uuid, OP_COMPLAINT_PROCESS, Map.of("complaint_id", complaintId, "action", action, "remark", remark != null ? remark : ""));
-        if (complaint.getEmail() != null && !complaint.getEmail().isEmpty()) sendEmailUtils.customEmail(complaint.getEmail(), "投诉反馈已处理完成", "您对作品的投诉已经完成处理。处理结果：" + action + "。" + (remark != null ? "处理备注：" + remark : ""));
-        return ResponseEntity.ok(new ChangeR().udu(true, 3));
-    }
+    // 说明（2026-10 下线）：原「投诉处理」区块的 getComplaintsList / processComplaint 两个方法
+    // 直接读写已废弃表 feedback_work（见 AGENTS.md 第六章：作品投诉统一走 feedback 表、type = WORK），
+    // 管理端前端也已迁移到 GET /feedback/feedbacks_by_type 与 PUT /feedback/update，
+    // 因此连同对应的 Controller 端点、Mapper、Model 一并整块移除。
+    //
+    // 新的作品投诉处理链路：FeedbackController / FeedbackService（作用于 feedback 表）。
 
     // ==================== 操作日志 ====================
 

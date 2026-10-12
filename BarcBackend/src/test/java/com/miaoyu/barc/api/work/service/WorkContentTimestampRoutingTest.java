@@ -16,7 +16,6 @@ import com.miaoyu.barc.api.work.mapper.WorkReviewMapper;
 import com.miaoyu.barc.api.work.model.WorkCoverImageModel;
 import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.email.utils.SendEmailUtils;
-import com.miaoyu.barc.feedback.mapper.WorkFeedbackMapper;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
 import com.miaoyu.barc.user.mapper.UserBasicMapper;
 import com.miaoyu.barc.utils.J;
@@ -64,7 +63,6 @@ class WorkContentTimestampRoutingTest {
 
     @Mock private WorkClaimMapper workClaimMapper;
     @Mock private WorkOperationLogMapper workOperationLogMapper;
-    @Mock private WorkFeedbackMapper workFeedbackMapper;
     @Mock private UserBasicMapper userBasicMapper;
     @Mock private SendEmailUtils sendEmailUtils;
 
