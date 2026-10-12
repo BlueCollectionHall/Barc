@@ -41,10 +41,13 @@ public class MessageBoardService {
     @Autowired
     private MessageNotificationService notificationService;
 
-    public ResponseEntity<J> getAllBoardMessagesService() {
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, messageBoardMapper.selectAll()));
-    }
-
+    /**
+     * 获取最新的若干条留言（按创建时间倒序）。
+     *
+     * <p>2026-10 说明：原先还有一个 {@code getAllBoardMessagesService}（全表、无排序、无上限），
+     * 与本法同表同投影，已随 {@code GET /comment/message_board/all} 一并删除。
+     * 「全量」语义现在由本方法承担 —— 传入足够大的 limit 即等价于全量（当前没有上限校验）。</p>
+     */
     public ResponseEntity<J> getNewBoardMessagesService(Integer limit) {
         if (Objects.isNull(limit)) {
             return ResponseEntity.status(403).body(new ResourceR().resourceSuch(false, null));

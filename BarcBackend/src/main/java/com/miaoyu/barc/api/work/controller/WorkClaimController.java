@@ -15,17 +15,12 @@ import org.springframework.web.bind.annotation.*;
 public class WorkClaimController {
     @Autowired
     private WorkClaimService workClaimService;
-    /**
-     * 获取全部作品认领信息
-     * @return ListL类型中包含全部作品认领信息*/
-    @GetMapping("/all_claims")
-    public ResponseEntity<J> getAllWorkClaimsControl(HttpServletRequest request) {
-        return workClaimService.getAllClaimsControl(request.getAttribute("uuid").toString());
-    }
-    @GetMapping("/claims_by_work")
-    public ResponseEntity<J> getClaimsByWorkControl(HttpServletRequest request, @RequestParam("work_id") String workId) {
-        return workClaimService.getClaimsByWorkControl(request.getAttribute("uuid").toString(), workId);
-    }
+
+    // 说明（2026-10 清理）：原 GET /all_claims 与 GET /claims_by_work 已删除。
+    // 它们分别与 /api/work/manage/claims、/api/work/manage/claim/history 调同一个 Mapper 方法
+    // （workClaimMapper.selectAll / selectByWorkId），属重复入口。
+    // 认领查看统一走管理端两条，其权限位已放宽为「二级管理员位 或 风纪委员位」，风纪委员入口不受影响。
+    // 下方 /claim_check 与 /upload 是认领的审核与提交入口，按业务要求保留。
 
     @PostMapping("/claim_check")
     @SuchWorkClaimAnno(index = 1)

@@ -17,14 +17,9 @@ export const useAccountWorkItemPinia = defineStore('account_work_list', () => {
   const pageResult = ref<PageResultImpl<WorkImpl> | null>(null);
 
   const fetchWorks = async (username: string) => {
-    // try {
-    //   const response = await baseHttp.get("/api/work/works_by_username", {params: {status: "PUBLIC", username: username}});
-    //   const data: ResponseImpl = response.data;
-    //   if (data.code === 0) workList.value = data.data;
-    //   else infoMessage(data.msg);
-    // } catch {
-    //   errorMessage("网络错误！");
-    // }
+    // 2026-10：原直连 /api/work/works_by_username 的注释代码已清理。
+    // 该接口与 /api/work/works_by_page 完全同构（username 形参早已被注释掉，方法体直接转发到通用分页），
+    // 属重复入口，已随重复接口清理删除；这里统一走下方的分页请求。
 
     // 整合分页请求时的params
     let fetchType: string | undefined = route.query.type as string | undefined;

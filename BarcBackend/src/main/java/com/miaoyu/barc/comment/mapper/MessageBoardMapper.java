@@ -10,8 +10,12 @@ import java.util.List;
 import java.util.Map;
 
 public interface MessageBoardMapper {
-    @Select("SELECT * FROM message_board")
-    List<MessageBoardModel> selectAll();
+    /**
+     * 按创建时间倒序取前 limit 条。
+     *
+     * <p>2026-10：原 {@code selectAll}（全表、无排序）已随 {@code /comment/message_board/all} 删除，
+     * 「全量」语义改由本方法传足够大的 limit 表达。</p>
+     */
     @Select("SELECT * FROM message_board ORDER BY created_at DESC LIMIT #{limit}")
     List<MessageBoardModel> selectByLimit(int limit);
     @Select("SELECT * FROM message_board WHERE id = #{message_id}")

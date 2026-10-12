@@ -20,12 +20,9 @@ public class MessageBoardController {
     @Autowired
     private MessageBoardService messageBoardService;
 
-    @IgnoreAuth
-    @GetMapping("/all")
-    public ResponseEntity<J> getAllBoardMessagesControl() {
-        return messageBoardService.getAllBoardMessagesService();
-    }
-
+    // 说明（2026-10 清理）：原 @IgnoreAuth 的 GET /comment/message_board/all 已删除。
+    // 它与下面的 /new 同表、同投影（MessageBoardModel 全字段），却无排序也无条数上限；
+    // 「全量」语义改由 /new 传足够大的 limit 表达。
     @IgnoreAuth
     @GetMapping("/new")
     public ResponseEntity<J> getNewBoardMessagesControl(@RequestParam("limit") Integer limit) {

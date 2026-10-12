@@ -30,49 +30,16 @@ public class WorkClaimService {
     @Autowired
     private WorkClaimMapper workClaimMapper;
 
-    /**
-     * 获取全部作品认领申请。
-     *
-     * <p>安全修复（2026-10）：原实现是手写判断
-     * {@code if (!(identity == MANAGER) && !(permission == DISCIPLINARY_COMMITTEE))}。
-     * 每边各带一个否定再用 {@code &&} 连接，语义退化成「或」——只要 permission 命中就放行，
-     * 与 identity 毫无关系。而 {@code PermissionConst.USER} 与
-     * {@code PermissionConst.DISCIPLINARY_COMMITTEE} 同为 1，注册时
-     * {@code INSERT INTO user_archive (uuid, nickname, avatar)} 并不写 permission、
-     * 表默认值又正是 1，于是**任意普通会员**都能读到全部认领申请（含申请人 uuid）。</p>
-     *
-     * <p>现改回项目统一下发的注解鉴权：身份必须是 MANAGER，且权限位命中风纪委员（1匹配），
-     * 与同类的 {@link #checkWorkClaimService(String, String)} 保持同一范式。</p>
-     *
-     * <p>⚠️ {@code uuid} 形参在方法体内已不再使用，但**绝不能删**：
-     * AOP 切面按 {@code uuidIndex}（默认 0）从第 1 个形参取操作者 uuid，
-     * 删掉或调换形参顺序会让鉴权静默失效（见 RequireUserAndPermissionAspect）。</p>
-     */
-    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
-            isHasElseUpper = true,
-            isSuchElseRequire = false,
-            identity = UserIdentityEnum.MANAGER,
-            targetPermission = PermissionConst.DISCIPLINARY_COMMITTEE)})
-    public ResponseEntity<J> getAllClaimsControl(String uuid) {
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workClaimMapper.selectAll()));
-    }
-
-    /**
-     * 按作品查询认领申请。
-     *
-     * <p>与 {@link #getAllClaimsControl(String)} 属同一处安全修复：原手写判断的
-     * {@code &&} 写法同样会放过任意普通会员，现统一交给注解鉴权（MANAGER + 风纪委员位）。</p>
-     *
-     * <p>⚠️ {@code uuid} 必须是第 1 个形参，原因同上。</p>
-     */
-    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
-            isHasElseUpper = true,
-            isSuchElseRequire = false,
-            identity = UserIdentityEnum.MANAGER,
-            targetPermission = PermissionConst.DISCIPLINARY_COMMITTEE)})
-    public ResponseEntity<J> getClaimsByWorkControl(String uuid, String workId) {
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workClaimMapper.selectByWorkId(workId)));
-    }
+    // 说明（2026-10 清理）：原 getAllClaimsControl(uuid) 与 getClaimsByWorkControl(uuid, workId) 已删除。
+    // 二者分别与 WorkManageService.getClaimsList / getClaimHistory 调同一个 Mapper 方法
+    // （workClaimMapper.selectAll / selectByWorkId），属重复入口；认领查看统一走管理端两条，
+    // 其权限位已放宽为「二级管理员位 或 风纪委员位」，风纪委员入口不受影响。
+    //
+    // 这两条接口此前还存在越权缺陷（手写判断用 && 连接两个否定，且 USER 与 DISCIPLINARY_COMMITTEE 同为 1，
+    // 导致任意会员可读全部认领申请），现已随方法一并移除，无需再修。
+    //
+    // 保留：下方 getClaimsByUuidControl（按申请人查自己的认领记录，暂无 Controller 入口，属待启用能力）、
+    // checkWorkClaimService（认领审核）、uploadWorkClaimService（认领提交）。
 
     public ResponseEntity<J> getClaimsByUuidControl(String uuid) {
         UserArchiveModel userArchive = userArchiveMapper.selectByUuid(uuid);

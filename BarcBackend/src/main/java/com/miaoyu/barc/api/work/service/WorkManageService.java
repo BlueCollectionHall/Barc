@@ -310,7 +310,16 @@ public class WorkManageService {
 
     // ==================== 认领管理 ====================
 
-    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
+    // 2026-10：权限位由「仅 SEC_MAINTAINER」放宽为「SEC_MAINTAINER 或 DISCIPLINARY_COMMITTEE」。
+    // 原因：用户端两条只读认领接口（/api/work/claim/all_claims、/claims_by_work）已随重复清理删除，
+    // 而它们原本允许风纪委员查看认领申请；不放宽的话，风纪委员会永久失去认领查看入口。
+    // 实现依据：ComparePermission.has(your, target) 即 (your & target) != 0，
+    // 因此 target 传两个权限位的「按位或」，天然就是 OR 语义（持有 4 或持有 1 均通过）。
+    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
+            identity = UserIdentityEnum.MANAGER,
+            targetPermission = PermissionConst.SEC_MAINTAINER | PermissionConst.DISCIPLINARY_COMMITTEE,
+            isHasElseUpper = true,
+            isSuchElseRequire = false)})
     public ResponseEntity<J> getClaimsList(String uuid) {
         List<WorkClaimModel> claims = workClaimMapper.selectAll();
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -399,7 +408,12 @@ public class WorkManageService {
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
     }
 
-    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
+    // 与 getClaimsList 同一处放宽：风纪委员也要能按作品查认领历史（原用户端 claims_by_work 的等价能力）
+    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
+            identity = UserIdentityEnum.MANAGER,
+            targetPermission = PermissionConst.SEC_MAINTAINER | PermissionConst.DISCIPLINARY_COMMITTEE,
+            isHasElseUpper = true,
+            isSuchElseRequire = false)})
     public ResponseEntity<J> getClaimHistory(String uuid, String workId) {
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, workClaimMapper.selectByWorkId(workId)));
     }

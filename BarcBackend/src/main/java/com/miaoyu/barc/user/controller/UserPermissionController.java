@@ -39,12 +39,9 @@ public class UserPermissionController {
         return userPermissionService.getUserPermissionCnService(identity, permission);
     }
 
-    @GetMapping("/permission_near_max")
-    @IgnoreAuth
-    public ResponseEntity<J> getUserPermissionNearMaxControl(@RequestParam("uuid") String uuid) {
-        return userPermissionService.getUserPermissionNearMaxService(uuid);
-    }
-
+    // 说明（2026-10 清理）：原 GET /user/permission/permission_near_max?uuid= 已删除
+    // —— 它与下面的 me_permission_near_max 调同一个 getUserPermissionNearMaxService，
+    // 且它是 @IgnoreAuth，任何人可查任意 uuid 的权限文案；调用方一律用 token 版本，故移除公开变体。
     @GetMapping("/me_permission_near_max")
     public ResponseEntity<J> getMePermissionNearMaxControl(HttpServletRequest request) {
         return userPermissionService.getUserPermissionNearMaxService(request.getAttribute("uuid").toString());

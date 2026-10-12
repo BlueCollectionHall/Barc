@@ -143,17 +143,6 @@ public class WorkController {
         filters.put("student", student);
         return filters;
     }
-    /**根据已知Username获取符合发布者条件的work实体
-     * @return List类型中包含所有符合条件的work实体*/
-    @IgnoreAuth
-    @PostMapping("/works_by_username")
-    public ResponseEntity<J> getWorksByUsernameControl(
-            @RequestParam("status") WorkStatusEnum statusEnum,
-//            @RequestParam("username") String username,
-            @RequestBody PageRequestDto pageRequestDto
-    ) {
-        return workService.getWorkByPageService(statusEnum, pageRequestDto);
-    }
     /**根据work_id获取唯一符合条件的work实体
      * @param workId work_id
      * @return 唯一符合条件的work实体*/
