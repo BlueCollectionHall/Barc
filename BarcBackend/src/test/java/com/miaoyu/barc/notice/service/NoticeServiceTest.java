@@ -2,6 +2,8 @@ package com.miaoyu.barc.notice.service;
 
 import com.miaoyu.barc.notice.mapper.NoticeMapper;
 import com.miaoyu.barc.notice.model.NoticeModel;
+import com.miaoyu.barc.user.mapper.UserArchiveMapper;
+import com.miaoyu.barc.user.model.UserArchiveModel;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.dto.PageRequestDto;
 import com.miaoyu.barc.utils.dto.PageResultDto;
@@ -30,7 +32,7 @@ import static org.mockito.Mockito.when;
  * 公告服务单元测试
  *
  * 覆盖重点：
- * 1、/notice/latest 的两级查询与回退兜底（改动核心：公告超期后前端不再显示“暂无公告”）；
+ * 1、/notice/latest 一次查询兼顾近期公告与历史兜底；
  * 2、公告分页查询的总页数计算；
  * 3、公告详情查询、新增、修改、删除的成败分支。
  */
@@ -39,6 +41,8 @@ class NoticeServiceTest {
 
     @Mock
     private NoticeMapper noticeMapper;
+    @Mock
+    private UserArchiveMapper userArchiveMapper;
 
     @InjectMocks
     private NoticeService noticeService;
@@ -46,10 +50,10 @@ class NoticeServiceTest {
     // ============ 最新公告（改动核心） ============
 
     @Test
-    @DisplayName("最新公告 - day 天内有公告时返回范围内最新一条，且不触发回退查询")
+    @DisplayName("最新公告 - 近期公告用一次查询返回")
     void latestNotice_WhenInRange_ShouldReturnRangeLatestWithoutFallback() {
         NoticeModel inRange = notice("n-in-range", "近 30 天的公告");
-        when(noticeMapper.latest(30)).thenReturn(inRange);
+        when(noticeMapper.latestWithoutDayLimit()).thenReturn(inRange);
 
         ResponseEntity<J> response = noticeService.latestNoticeService(30);
 
@@ -58,15 +62,14 @@ class NoticeServiceTest {
         List<NoticeModel> list = castList(response.getBody().getData());
         assertEquals(1, list.size());
         assertEquals("n-in-range", list.get(0).getId());
-        // 命中天数范围时属于第一级查询，绝不能再去查全表最新（保持原语义、避免多余查询）
-        verify(noticeMapper, never()).latestWithoutDayLimit();
+        // 保持原业务结果，只发起一次最新查询。
+        verify(noticeMapper).latestWithoutDayLimit();
     }
 
     @Test
     @DisplayName("最新公告 - day 天内无公告时回退返回全表最近一条，前端不再显示暂无公告")
     void latestNotice_WhenOutOfRange_ShouldFallbackToLatestOverall() {
         NoticeModel fallback = notice("n-old", "超过 30 天的历史公告");
-        when(noticeMapper.latest(30)).thenReturn(null);
         when(noticeMapper.latestWithoutDayLimit()).thenReturn(fallback);
 
         ResponseEntity<J> response = noticeService.latestNoticeService(30);
@@ -76,15 +79,13 @@ class NoticeServiceTest {
         List<NoticeModel> list = castList(response.getBody().getData());
         assertEquals(1, list.size());
         assertEquals("n-old", list.get(0).getId());
-        // 回退时两个查询都应真实发生
-        verify(noticeMapper).latest(30);
+        // 历史兜底也只需同一次查询。
         verify(noticeMapper).latestWithoutDayLimit();
     }
 
     @Test
     @DisplayName("最新公告 - 表中完全没有公告时返回空列表，前端展示暂无数据")
     void latestNotice_WhenNoNoticeAtAll_ShouldReturnEmptyList() {
-        when(noticeMapper.latest(30)).thenReturn(null);
         when(noticeMapper.latestWithoutDayLimit()).thenReturn(null);
 
         ResponseEntity<J> response = noticeService.latestNoticeService(30);
@@ -96,10 +97,10 @@ class NoticeServiceTest {
     }
 
     @Test
-    @DisplayName("最新公告 - day 参数为 null 时同样走第一级查询并可按结果回退")
+    @DisplayName("最新公告 - 不传 day 也返回最近一条")
     void latestNotice_WhenDayIsNull_ShouldStillFallback() {
         NoticeModel fallback = notice("n-null-day", "未传天数范围时的兜底公告");
-        // 不桩 latest(isNull())：Mockito 默认返回 null，正好模拟「未传天数范围时查不到公告」
+        // 兼容无 day 参数，与传入 day 时具有同样的返回契约。
         when(noticeMapper.latestWithoutDayLimit()).thenReturn(fallback);
 
         ResponseEntity<J> response = noticeService.latestNoticeService(null);
@@ -213,9 +214,11 @@ class NoticeServiceTest {
     @Test
     @DisplayName("公告修改 - 更新成功时返回成功标记")
     void updateNotice_WhenSuccess_ShouldReturnSuccess() {
+        when(noticeMapper.selectById("n-1")).thenReturn(notice("n-1", "旧标题"));
+        when(userArchiveMapper.selectByUuid("author-uuid")).thenReturn(new UserArchiveModel());
         when(noticeMapper.update(any(NoticeModel.class))).thenReturn(true);
 
-        ResponseEntity<J> response = noticeService.updateNoticeService("uuid", "author-uuid", notice("n-1", "改名公告"));
+        ResponseEntity<J> response = noticeService.updateNoticeService("author-uuid", notice("n-1", "改名公告"));
 
         assertNotNull(response.getBody());
         assertEquals(0, response.getBody().getCode());
@@ -224,9 +227,11 @@ class NoticeServiceTest {
     @Test
     @DisplayName("公告修改 - 更新抛异常时捕获并返回失败标记")
     void updateNotice_WhenException_ShouldReturnFail() {
+        when(noticeMapper.selectById("n-1")).thenReturn(notice("n-1", "旧标题"));
+        when(userArchiveMapper.selectByUuid("author-uuid")).thenReturn(new UserArchiveModel());
         when(noticeMapper.update(any(NoticeModel.class))).thenThrow(new RuntimeException("更新失败"));
 
-        ResponseEntity<J> response = noticeService.updateNoticeService("uuid", "author-uuid", notice("n-1", "改名公告"));
+        ResponseEntity<J> response = noticeService.updateNoticeService("author-uuid", notice("n-1", "改名公告"));
 
         assertNotNull(response.getBody());
         assertEquals(1, response.getBody().getCode());

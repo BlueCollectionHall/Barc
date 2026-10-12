@@ -37,6 +37,8 @@ const router = useRouter();
 
 const {userArchive, userBasic} = storeToRefs(userPinia);
 const workList = ref<Array<WorkImpl>>([]);
+const currentPage = ref(1);
+const totalWorks = ref(0);
 const menuStatus = ref<string>("PUBLIC");
 const sectionLabel = (section: string): string => ({
   PUBLIC: "公开作品",
@@ -55,17 +57,19 @@ const appealContent = ref<string>("");
 const appealEmail = ref<string>("");
 
 const fetchWorkList = async (status: string) => {
+  if (menuStatus.value !== status) currentPage.value = 1;
   menuStatus.value = status;
   if (!userArchive.value?.uuid) return;
   try {
     const params = buildOwnerWorkListParams(status as OwnerWorkListSection, filterState.value);
-    const response = await baseHttp("/api/work/works_by_me", {
-      params,
-      headers: {Authorization: window.localStorage.getItem("token") || ""},
-    })
-    const data: ResponseImpl = response.data;
+    // 使用服务端分页，切换筛选时重置页码，避免无限返回/签名本人全部作品。
+    const response = await baseHttp.post("/api/work/mine/page", {
+      page_num: currentPage.value, page_size: 20, params,
+    }, {params: {status: params.status, review_status: params.review_status}});
+    const data: ResponseImpl<{ list: WorkImpl[]; total: number }> = response.data;
     if (data.code === 0) {
-      workList.value = data.data;
+      workList.value = data.data.list;
+      totalWorks.value = data.data.total;
     } else infoMessage(data.msg);
   } catch {
     errorMessage("网络错误");
@@ -73,11 +77,13 @@ const fetchWorkList = async (status: string) => {
 }
 
 const searchCurrentStatus = async () => {
+  currentPage.value = 1;
   // 搜索只作用于当前状态列表，避免切换公开/私有时误带旧状态。
   await fetchWorkList(menuStatus.value);
 }
 
 const resetSearch = async () => {
+  currentPage.value = 1;
   filterState.value.value = "";
   await fetchWorkList(menuStatus.value);
 }
@@ -152,7 +158,7 @@ const submitAppeal = async () => {
       email: appealEmail.value.trim() || userBasic.value?.email || null,
     });
     const response = await baseHttp.post("/feedback/upload", feedbackForm);
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<string> = response.data;
     if (data.code === 0) {
       successMessage(data.data || "申诉已提交，等待管理员复核");
       appealOpen.value = false;
@@ -306,6 +312,8 @@ onMounted(async () => {
       </div>
     </el-main>
   </el-container>
+  <el-pagination v-model:current-page="currentPage" :total="totalWorks" :page-size="20"
+    layout="prev, pager, next, total" @current-change="fetchWorkList(menuStatus)" />
 </template>
 
 <style scoped>

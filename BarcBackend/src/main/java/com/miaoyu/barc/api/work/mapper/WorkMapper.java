@@ -11,20 +11,6 @@ import java.util.List;
 import java.util.Map;
 
 public interface WorkMapper {
-    @Select("SELECT w.*, wr.status AS review_status, wr.rejection_reason AS review_reason, " +
-            "wr.reviewer_uuid, wr.submitted_at AS review_submitted_at, wr.reviewed_at " +
-            "FROM work w JOIN work_review wr ON wr.work_id = w.id " +
-            "WHERE w.status = #{status} AND wr.status = 'APPROVED'")
-    List<WorkEntity> selectAll(@Param("status") WorkStatusEnum statusEnum);
-
-    // 公开新鲜度按内容更新时间计算；历史空值回退到创建时间，避免浏览/点赞等行更新时间影响内容新鲜度。
-    @Select("SELECT w.*, wr.status AS review_status, wr.rejection_reason AS review_reason, " +
-            "wr.reviewer_uuid, wr.submitted_at AS review_submitted_at, wr.reviewed_at " +
-            "FROM work w JOIN work_review wr ON wr.work_id = w.id " +
-            "WHERE COALESCE(w.content_updated_at, w.created_at) >= DATE_SUB(now(), INTERVAL #{day} DAY) " +
-            "AND w.status = #{status} AND wr.status = 'APPROVED'")
-    List<WorkEntity> selectByDay(@Param("day") Integer day, @Param("status") WorkStatusEnum status);
-
     List<WorkModel> selectByPage(
             @Param("status") WorkStatusEnum statusEnum,
             @Param("offset") Integer offset,
@@ -35,42 +21,6 @@ public interface WorkMapper {
             @Param("status") WorkStatusEnum statusEnum,
             @Param("condition") Map<String, Object> condition);
 
-    List<WorkModel> selectByPageOnCategory(
-            @Param("category_id") String categoryId,
-            @Param("status") WorkStatusEnum statusEnum,
-            @Param("offset") Integer offset,
-            @Param("page_size") Integer pageSize,
-            @Param("condition") Map<String, Object> condition);
-
-    Long countByPageOnCategory(
-            @Param("category_id") String categoryId,
-            @Param("status") WorkStatusEnum statusEnum,
-            @Param("condition") Map<String, Object> condition);
-
-    @Select("SELECT w.*, wr.status AS review_status, wr.rejection_reason AS review_reason, " +
-            "wr.reviewer_uuid, wr.submitted_at AS review_submitted_at, wr.reviewed_at " +
-            "FROM work w JOIN work_review wr ON wr.work_id = w.id JOIN student stu ON w.student = stu.id " +
-            "WHERE stu.school = #{school_id} AND w.status = #{status} AND wr.status = 'APPROVED'")
-    List<WorkEntity> selectBySchoolId(@Param("school_id") String schoolId, @Param("status") WorkStatusEnum statusEnum);
-
-    @Select("SELECT w.*, wr.status AS review_status, wr.rejection_reason AS review_reason, " +
-            "wr.reviewer_uuid, wr.submitted_at AS review_submitted_at, wr.reviewed_at " +
-            "FROM work w JOIN work_review wr ON wr.work_id = w.id JOIN student stu ON w.student = stu.club " +
-            "WHERE stu.club = #{club_id} AND w.status = #{status} AND wr.status = 'APPROVED'")
-    List<WorkEntity> selectByClubId(@Param("club_id") String clubId, @Param("status") WorkStatusEnum statusEnum);
-
-    @Select("SELECT w.*, wr.status AS review_status, wr.rejection_reason AS review_reason, " +
-            "wr.reviewer_uuid, wr.submitted_at AS review_submitted_at, wr.reviewed_at " +
-            "FROM work w JOIN work_review wr ON wr.work_id = w.id " +
-            "WHERE w.student = #{student_id} AND w.status = #{status} AND wr.status = 'APPROVED'")
-    List<WorkEntity> selectByStudentId(@Param("student_id") String studentId, @Param("status") WorkStatusEnum statusEnum);
-
-    @Select("SELECT w.*, wr.status AS review_status, wr.rejection_reason AS review_reason, " +
-            "wr.reviewer_uuid, wr.submitted_at AS review_submitted_at, wr.reviewed_at " +
-            "FROM work w JOIN work_review wr ON wr.work_id = w.id " +
-            "WHERE w.author = #{uuid} AND w.status = #{status} AND wr.status = 'APPROVED'")
-    List<WorkEntity> selectByUuid(@Param("uuid") String uuid, @Param("status") WorkStatusEnum statusEnum);
-
     /** 作者本人内容管理查询，可查看待审与驳回作品。 */
     List<WorkEntity> selectByUuidWithFilters(
             @Param("uuid") String uuid,
@@ -78,28 +28,8 @@ public interface WorkMapper {
             @Param("review_status") WorkReviewStatusEnum reviewStatus,
             @Param("condition") Map<String, Object> condition);
 
-    /** 对外作者作品查询，SQL 固定要求审核通过，不能由调用方绕过。 */
-    List<WorkEntity> selectPublicByUuidWithFilters(
-            @Param("uuid") String uuid,
-            @Param("status") WorkStatusEnum statusEnum,
-            @Param("condition") Map<String, Object> condition);
-
-    @Select("SELECT w.*, wr.status AS review_status, wr.rejection_reason AS review_reason, " +
-            "wr.reviewer_uuid, wr.submitted_at AS review_submitted_at, wr.reviewed_at " +
-            "FROM work w JOIN work_review wr ON wr.work_id = w.id JOIN user_basic ub ON w.author = ub.uuid " +
-            "WHERE ub.username = #{username} AND w.status = #{status} AND wr.status = 'APPROVED'")
-    List<WorkEntity> selectByUsername(@Param("username") String username, @Param("status") WorkStatusEnum statusEnum);
-
-    // 获取当前分类ID下属所有分类中的内容
-    @Select("WITH RECURSIVE category_tree AS " +
-            "( SELECT c1.* FROM category c1 WHERE c1.id = #{id} UNION ALL " +
-            "SELECT c2.* FROM category c2 JOIN category_tree ct ON c2.parent_id = ct.id)" +
-            "SELECT DISTINCT w.*, wr.status AS review_status, wr.rejection_reason AS review_reason, " +
-            "wr.reviewer_uuid, wr.submitted_at AS review_submitted_at, wr.reviewed_at " +
-            "FROM work w JOIN work_review wr ON wr.work_id = w.id JOIN work_category wc ON w.id = wc.work_id " +
-            "JOIN category_tree ct ON wc.category_id = ct.id WHERE w.status = #{status, typeHandler=org.apache.ibatis.type.EnumTypeHandler} " +
-            "AND wr.status = 'APPROVED'")
-    List<WorkEntity> selectByCategoryId(@Param("id") String id, @Param("status") WorkStatusEnum statusEnum);
+    Long countByUuidWithFilters(@Param("uuid") String uuid, @Param("status") WorkStatusEnum status,
+            @Param("review_status") WorkReviewStatusEnum reviewStatus, @Param("condition") Map<String, Object> condition);
 
     @Select("SELECT w.*, wr.status AS review_status, wr.rejection_reason AS review_reason, " +
             "wr.reviewer_uuid, wr.submitted_at AS review_submitted_at, wr.reviewed_at " +
@@ -121,6 +51,30 @@ public interface WorkMapper {
     boolean update(WorkModel workModel);
     @Delete("DELETE FROM work WHERE id = #{id}")
     boolean delete(@Param("id") String id);
+
+    /** 归属判断与软删除使用同一事务内行锁，防止在授权后被并发指派。 */
+    @Select("SELECT w.*, wr.status AS review_status, wr.rejection_reason AS review_reason, " +
+            "wr.reviewer_uuid, wr.submitted_at AS review_submitted_at, wr.reviewed_at " +
+            "FROM work w LEFT JOIN work_review wr ON wr.work_id = w.id WHERE w.id = #{id} FOR UPDATE")
+    WorkModel selectByIdForUpdate(@Param("id") String id);
+
+    /** 仅改变删除状态，不覆盖正文、归属或计数，也不删除关联资源。 */
+    @Update("UPDATE work SET restore_status = CASE WHEN status IN ('PUBLIC','PRIVATE') THEN status ELSE restore_status END, " +
+            "status = 'DELETED' WHERE id = #{id} AND status != 'DELETED'")
+    boolean softDelete(@Param("id") String id);
+
+    /** 状态命令只写状态列；调用方持有作品行锁，保留处置前可见性。 */
+    @Update("UPDATE work SET status = #{status}, restore_status = #{restore_status} WHERE id = #{id}")
+    boolean updateStatus(@Param("id") String id, @Param("status") WorkStatusEnum status,
+                         @Param("restore_status") WorkStatusEnum restoreStatus);
+
+    /** 认领命令只写归属，不覆盖并发更新的正文/计数/可见性。 */
+    @Update("UPDATE work SET author = #{author}, is_claim = #{claimed} WHERE id = #{id}")
+    boolean updateAttribution(@Param("id") String id, @Param("author") String author, @Param("claimed") boolean claimed);
+
+    /** 正文、图片和分类共用同一版本号；调用方必须先锁作品并与提审同事务。 */
+    @Update("UPDATE work SET content_revision = content_revision + 1, content_updated_at = CURRENT_TIMESTAMP WHERE id = #{id}")
+    boolean touchContent(@Param("id") String id);
 
     // ===== 管理端专用查询方法 =====
 
@@ -151,7 +105,7 @@ public interface WorkMapper {
 
     /** 管理端纯文字更新（不改封面/Banner/作者/收录者，图片在独立表中管理），内容更新时间仅在文字内容变更时刷新。 */
     @Update("UPDATE work SET title = #{title}, description = #{description}, content = #{content}, " +
-            "author_nickname = #{author_nickname}, is_claim = #{is_claim}, student = #{student}, " +
+            "author_nickname = #{author_nickname}, student = #{student}, " +
             "content_updated_at = CURRENT_TIMESTAMP WHERE id = #{id}")
     boolean updateText(WorkModel workModel);
 }

@@ -8,15 +8,12 @@ interface SignInPayload<TType extends string> {
 }
 
 export function signIn(payload: SignInPayload<BarcLoginType>): Promise<string> {
-  return http.get<string>('/user/sign/in', {
-    params: payload,
-  })
+  // 凭据只放请求体，不进入 URL 或访问日志。
+  return http.post<string>('/user/sign/in', payload)
 }
 
 export function signInByNaigos(payload: SignInPayload<NaigosLoginType>): Promise<string> {
-  return http.get<string>('/user/sign/in_by_naigos', {
-    params: payload,
-  })
+  return http.post<string>('/user/sign/in_by_naigos', payload)
 }
 
 export function fetchCurrentMe(): Promise<UserArchive> {

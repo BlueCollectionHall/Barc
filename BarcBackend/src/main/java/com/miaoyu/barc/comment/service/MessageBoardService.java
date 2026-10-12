@@ -2,7 +2,6 @@ package com.miaoyu.barc.comment.service;
 
 import com.miaoyu.barc.annotation.RequireSelfOrPermissionAnno;
 import com.miaoyu.barc.comment.service.MessageNotificationService;
-import com.miaoyu.barc.email.utils.SendEmailUtils;
 import com.miaoyu.barc.response.SuccessR;
 import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
 import com.miaoyu.barc.user.mapper.UserBasicMapper;
@@ -17,6 +16,8 @@ import com.miaoyu.barc.comment.mapper.MessageBoardMapper;
 import com.miaoyu.barc.comment.model.MessageBoardAdminVo;
 import com.miaoyu.barc.comment.model.MessageBoardModel;
 import com.miaoyu.barc.permission.PermissionConst;
+import com.miaoyu.barc.permission.PermissionPolicy;
+import com.miaoyu.barc.utils.RequestInput;
 import com.miaoyu.barc.response.ChangeR;
 import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
@@ -37,28 +38,27 @@ public class MessageBoardService {
     @Autowired
     private UserBasicMapper userBasicMapper;
     @Autowired
-    private SendEmailUtils sendEmailUtils;
-    @Autowired
     private MessageNotificationService notificationService;
 
-    /**
-     * 获取最新的若干条留言（按创建时间倒序）。
-     *
-     * <p>2026-10 说明：原先还有一个 {@code getAllBoardMessagesService}（全表、无排序、无上限），
-     * 与本法同表同投影，已随 {@code GET /comment/message_board/all} 一并删除。
-     * 「全量」语义现在由本方法承担 —— 传入足够大的 limit 即等价于全量（当前没有上限校验）。</p>
-     */
+    /** 最新若干条保留数组合同，容量固定上限 100。 */
     public ResponseEntity<J> getNewBoardMessagesService(Integer limit) {
-        if (Objects.isNull(limit)) {
-            return ResponseEntity.status(403).body(new ResourceR().resourceSuch(false, null));
-        }
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, messageBoardMapper.selectByLimit(limit)));
+        var init = new PageInitPojo(1, limit);
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, messageBoardMapper.selectByLimit(init.getPageSize())));
+    }
+
+    /** 公开留言页，用稳定顺序读取历史并返回真实总数。 */
+    public ResponseEntity<J> getPage(Integer page, Integer size) {
+        var init = new PageInitPojo(page, size);
+        long total = messageBoardMapper.countAll();
+        return ResponseEntity.ok(new SuccessR().normal(new PageResultDto<>(total,
+                messageBoardMapper.selectPage(init.getOffset(), init.getPageSize()), init.getPageNum(), init.getPageSize(),
+                Math.max(1, (int) Math.ceil((double) total / init.getPageSize())))));
     }
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
     public ResponseEntity<J> uploadBoardMessageService(String uuid, String content) {
         MessageBoardModel messageBoard = new MessageBoardModel();
-        messageBoard.setContent(content);
+        messageBoard.setContent(RequestInput.required(content, "留言", 2000));
         messageBoard.setAuthor(uuid);
         messageBoard.setId(new GenerateUUID().getUuid36l());
         boolean insert = messageBoardMapper.insert(messageBoard);
@@ -68,16 +68,15 @@ public class MessageBoardService {
         return ResponseEntity.ok(new ChangeR().udu(false, 1));
     }
 
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<J> deleteBoardMessageService(String uuid, String messageId) {
-        MessageBoardModel messageBoard = messageBoardMapper.selectById(messageId);
+        MessageBoardModel messageBoard = messageBoardMapper.selectByIdForUpdate(messageId);
         if (messageBoard == null) {
             return ResponseEntity.ok(new ChangeR().udu(false, 1));
         }
         UserArchiveModel userArchive = userArchiveMapper.selectByUuid(uuid);
         boolean isAuthor = messageBoard.getAuthor().equals(uuid);
-        boolean isAdmin = userArchive != null
-                && userArchive.getIdentity().equals(UserIdentityEnum.MANAGER)
-                && (userArchive.getPermission() & PermissionConst.FIR_MAINTAINER) != 0;
+        boolean isAdmin = PermissionPolicy.canModerateDiscussion(userArchive);
         if (!isAuthor && !isAdmin) {
             return ResponseEntity.ok(new ChangeR().udu(false, 1));
         }
@@ -93,12 +92,11 @@ public class MessageBoardService {
     }
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
-        isSuchElseRequire = false,
-        identity = UserIdentityEnum.MANAGER,
-        targetPermission = PermissionConst.FIR_MAINTAINER,
-        isHasElseUpper = true
+        isSuchElseRequire = true
     )})
     public ResponseEntity<J> adminQueryBoardMessagesService(String uuid, PageRequestDto dto) {
+        requireModerator(uuid);
+        if (dto == null) dto = new PageRequestDto();
         PageInitPojo init = new PageInitPojo(dto);
         @SuppressWarnings({"unchecked", "rawtypes"})
         List<MessageBoardAdminVo> models = (List) messageBoardMapper.selectAdminByPage(
@@ -115,13 +113,15 @@ public class MessageBoardService {
     }
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
-        isSuchElseRequire = false,
-        identity = UserIdentityEnum.MANAGER,
-        targetPermission = PermissionConst.FIR_MAINTAINER,
-        isHasElseUpper = true
+        isSuchElseRequire = true
     )})
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<J> adminUpdateBoardMessageService(String uuid, String messageId, String content, String reason) {
-        MessageBoardModel messageBoard = messageBoardMapper.selectById(messageId);
+        requireModerator(uuid);
+        messageId = RequestInput.required(messageId, "留言编号", 64);
+        content = RequestInput.required(content, "留言", 2000);
+        RequestInput.optional(reason, "处理原因", 2000);
+        MessageBoardModel messageBoard = messageBoardMapper.selectByIdForUpdate(messageId);
         if (messageBoard == null) {
             return ResponseEntity.ok(new ChangeR().udu(false, 3));
         }
@@ -134,29 +134,33 @@ public class MessageBoardService {
     }
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(
-        isSuchElseRequire = false,
-        identity = UserIdentityEnum.MANAGER,
-        targetPermission = PermissionConst.FIR_MAINTAINER,
-        isHasElseUpper = true
+        isSuchElseRequire = true
     )})
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<J> adminBatchDeleteBoardMessagesService(String uuid, List<String> messageIds, String reason) {
-        // 先查出所有要被删除的留言（用于邮件通知）
+        requireModerator(uuid);
+        RequestInput.optional(reason, "处理原因", 2000);
+        if (messageIds == null || messageIds.isEmpty() || messageIds.size() > 100)
+            throw RequestInput.invalid("请选择 1 至 100 条留言");
+        var uniqueIds = new java.util.TreeSet<String>();
+        for (String id : messageIds) if (!uniqueIds.add(RequestInput.required(id, "留言编号", 64)))
+            throw RequestInput.invalid("留言编号不能重复");
+        // 固定锁顺序避免相互交叉的批量请求死锁；所有目标存在后才写入。
         List<MessageBoardModel> messages = new java.util.ArrayList<>();
-        for (String id : messageIds) {
-            MessageBoardModel msg = messageBoardMapper.selectById(id);
-            if (msg != null) {
-                messages.add(msg);
-            }
+        for (String id : uniqueIds) {
+            var model = messageBoardMapper.selectByIdForUpdate(id);
+            if (model == null) throw RequestInput.invalid("留言已变化，请刷新");
+            messages.add(model);
         }
-        boolean deleted = messageBoardMapper.batchDelete(messageIds);
-        if (deleted) {
-            for (MessageBoardModel msg : messages) {
-                if (!msg.getAuthor().equals(uuid)) {
-                    notificationService.notifyMessageDeleted(msg, uuid);
-                }
-            }
-            return ResponseEntity.ok(new ChangeR().udu(true, 2));
-        }
-        return ResponseEntity.ok(new ChangeR().udu(false, 2));
+        if (messageBoardMapper.batchDelete(new java.util.ArrayList<>(uniqueIds)) != uniqueIds.size())
+            throw RequestInput.invalid("批量删除失败");
+        for (var model : messages) if (!model.getAuthor().equals(uuid)) notificationService.notifyMessageDeleted(model, uuid);
+        return ResponseEntity.ok(new ChangeR().udu(true, 2));
+    }
+
+    /** 身份与角色位同时校验，评论和留言治理保持一致。 */
+    private void requireModerator(String uuid) {
+        if (!PermissionPolicy.canModerateDiscussion(userArchiveMapper.selectByUuid(uuid)))
+            throw new com.miaoyu.barc.exception.ApiException(new com.miaoyu.barc.response.UserR().insufficientAccountPermission());
     }
 }

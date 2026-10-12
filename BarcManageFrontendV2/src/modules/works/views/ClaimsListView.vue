@@ -1,21 +1,21 @@
 <template>
   <div class="claims-list-view">
     <el-tabs v-model="activeTab">
-      <el-tab-pane label="待审批" name="pending">
+      <el-tab-pane label="申请与历史" name="pending">
         <ClaimListComp ref="claimListRef" @approve="row => handleClaim(row, true)" @reject="row => handleClaim(row, false)" @preview="handlePreview" />
       </el-tab-pane>
-      <el-tab-pane label="指派作者" name="assign">
+      <el-tab-pane v-if="canAssign" label="指派作者" name="assign">
         <div style="margin-top:16px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
           <el-select v-model="assignForm.workId" placeholder="搜索作品ID或标题" filterable remote reserve-keyword
             :remote-method="searchWorkOptions" :loading="workSearchLoading" clearable style="width:280px">
             <el-option v-for="w in workOptions" :key="w.id" :label="w.title" :value="w.id" />
           </el-select>
-          <el-button v-if="assignForm.workId" size="small" @click="previewVisible = true">预览作品</el-button>
+          <el-button v-if="assignForm.workId" size="small" @click="previewWork(assignForm.workId)">预览作品</el-button>
           <el-select v-model="assignForm.authorUuid" placeholder="搜索用户UUID/用户名/昵称" filterable remote reserve-keyword
             :remote-method="searchUserOptions" :loading="userSearchLoading" clearable style="width:280px">
             <el-option v-for="u in userOptions" :key="u.uuid" :value="u.uuid">
               <div style="display:flex;align-items:center;gap:8px">
-                <el-avatar :size="24" :src="u.avatar" />
+                <el-avatar :size="24" :src="u.avatar || undefined" />
                 <span>{{ u.nickname }}</span>
                 <span style="color:#999;font-size:12px">@{{ u.username }}</span>
               </div>
@@ -24,7 +24,7 @@
           <el-button type="primary" @click="handleAssign" :disabled="!assignForm.workId || !assignForm.authorUuid">指派</el-button>
         </div>
       </el-tab-pane>
-      <el-tab-pane label="撤销认领" name="revoke">
+      <el-tab-pane v-if="canAssign" label="撤销认领" name="revoke">
         <el-form :inline="true" style="margin-top: 16px">
           <el-form-item label="作品ID"><el-input v-model="revokeWorkId" placeholder="输入作品ID" /></el-form-item>
           <el-form-item><el-button type="danger" @click="handleRevoke">撤销认领</el-button></el-form-item>
@@ -34,31 +34,36 @@
 
     <!-- 作品预览弹窗 -->
     <el-dialog v-model="previewVisible" title="作品预览" width="960px" destroy-on-close>
-      <WorkDetailComp v-if="previewVisible && assignForm.workId" :workId="assignForm.workId" />
+      <WorkDetailComp v-if="previewVisible && previewWorkId" :workId="previewWorkId" claim-mode />
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
+import { useAuthStore } from '@/app/stores/auth'
+import { hasManagerPermissionBit, MANAGER_PERMISSION } from '@/shared/constants/permissions'
 import { ElMessage } from 'element-plus'
 import ClaimListComp from '../components/ClaimListComp.vue'
 import WorkDetailComp from '../components/WorkDetailComp.vue'
-import { approveClaim, assignAuthor, revokeClaim, searchWorks, searchUsers } from '../api/workManage'
+import { approveClaim, assignAuthor, revokeClaim, searchWorks, searchUsers, type ClaimRecord, type WorkSearchRecord, type UserSearchRecord } from '../api/workManage'
 
 const activeTab = ref('pending')
-const router = useRouter()
-const claimListRef = ref()
+const auth = useAuthStore()
+// 查看与审核按1匹配开放给风纪委员；指派/撤销仍需二级管理员位。
+const canAssign = computed(() => hasManagerPermissionBit(auth.userArchive?.permission, MANAGER_PERMISSION.SEC_MAINTAINER))
+const claimListRef = ref<{refresh: () => Promise<void>}>()
 const revokeWorkId = ref('')
 const assignForm = ref({ workId: '', authorUuid: '' })
-const workOptions = ref<any[]>([])
-const userOptions = ref<any[]>([])
+const workOptions = ref<WorkSearchRecord[]>([])
+const userOptions = ref<UserSearchRecord[]>([])
 const workSearchLoading = ref(false)
 const userSearchLoading = ref(false)
 const previewVisible = ref(false)
+const previewWorkId = ref('')
+const previewWork = (workId: string) => { previewWorkId.value = workId; previewVisible.value = true }
 
-const handleClaim = async (row: any, approved: boolean) => {
+const handleClaim = async (row: ClaimRecord, approved: boolean) => {
   try {
     await approveClaim(row.id, approved)
     ElMessage.success(approved ? '认领已通过' : '认领已拒绝')
@@ -66,9 +71,7 @@ const handleClaim = async (row: any, approved: boolean) => {
   } catch { ElMessage.error('操作失败') }
 }
 
-const handlePreview = (row: any) => {
-  router.push({ name: 'works-detail', params: { workId: row.work_id } })
-}
+const handlePreview = (row: ClaimRecord) => { previewWork(row.work_id) }
 
 const handleRevoke = async () => {
   if (!revokeWorkId.value) { ElMessage.warning('请输入作品ID'); return }

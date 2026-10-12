@@ -105,7 +105,7 @@ const fetchEditDetail = async () => {
       params: {work_id: workId.value},
       headers: authHeaders(),
     });
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<Parameters<typeof normalizeEditDetail>[0]> = response.data;
     if (data.code !== 0) {
       infoMessage(data.msg);
       return;
@@ -224,7 +224,7 @@ const fetchStudentsByKeyword = async () => {
   }
   try {
     const response = await baseHttp("/api/student/list", {params: {keyword: studentKeyword.value.trim()}});
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<{ list: StudentImpl[] }> = response.data;
     if (data.code === 0) studentList.value = data.data.list;
     else infoMessage(data.msg);
   } catch {
@@ -380,11 +380,9 @@ onMounted(async () => {
             <el-form-item label="作品简述：">
               <el-input v-model="workForm.description" />
             </el-form-item>
-            <el-form-item label="作品类型：" required>
-              <el-radio-group v-model="workForm.is_claim">
-                <el-radio :value="true">自创</el-radio>
-                <el-radio :value="false">收录</el-radio>
-              </el-radio-group>
+            <!-- 归属在投稿/认领链路确定，文字编辑不能切换类型。 -->
+            <el-form-item label="作品类型：">
+              <span>{{ workForm.is_claim ? '自创或已认领' : '收录（待认领）' }}</span>
             </el-form-item>
             <el-form-item label="作品作者：" v-if="!workForm.is_claim" required>
               <el-input v-model="workForm.author_nickname" placeholder="请输入该作品的作者在其他主流平台的昵称" />

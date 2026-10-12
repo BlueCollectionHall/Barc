@@ -14,7 +14,7 @@ const club = ref<ClubImpl | null>(null);
 const fetchStudent = async (studentId: string) => {
   try {
     const response = await baseHttp.get(`/api/student/${studentId}`);
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<StudentImpl> = response.data;
     if (data.code === 0) {
       student.value = data.data;
       if (!student.value) {
@@ -22,7 +22,7 @@ const fetchStudent = async (studentId: string) => {
         return;
       }
       const responseSchool = await baseHttp.get(`/api/school/${student.value.school}`)
-      const dataSchool: ResponseImpl = responseSchool.data;
+      const dataSchool: ResponseImpl<SchoolImpl> = responseSchool.data;
       if (dataSchool.code === 0) {
         school.value = dataSchool.data;
         if (!school.value) {
@@ -30,7 +30,7 @@ const fetchStudent = async (studentId: string) => {
           return;
         }
         const responseClub = await baseHttp.get(`/api/club/${student.value.club}`);
-        const dataClub: ResponseImpl = responseClub.data;
+        const dataClub: ResponseImpl<ClubImpl> = responseClub.data;
         if (dataClub.code === 0) {
           club.value = dataClub.data;
         } else infoMessage(dataClub.msg);

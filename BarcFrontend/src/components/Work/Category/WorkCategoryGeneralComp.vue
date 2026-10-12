@@ -2,7 +2,7 @@
 import {onBeforeMount, onMounted, ref, watch} from "vue";
 import type {WorkImpl} from "@/interfaces/WorkImpl.ts";
 import type {PageRequestImpl, PageResultImpl} from "@/interfaces/PageImpl.ts";
-import {type LocationQuery, useRoute, useRouter} from "vue-router";
+import {useRoute, useRouter} from "vue-router";
 import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import {errorMessage, infoMessage} from "@/utils/MessageAlert.ts";
@@ -25,13 +25,12 @@ const loadVisibleCommentCounts = async () => {
 
 const fetchWorks = async () => {
   try {
-    const response = await baseHttp.post("/api/work/works_by_category", pageRequest.value, {
-      params: {
-        status: "PUBLIC",
-        category_id: route.params.category_id,
-      }
-    });
-    const data: ResponseImpl = response.data;
+    // 分类页与普通作品页共用筛选接口；category_id仍表示精确分类。
+    const response = await baseHttp.post("/api/work/works_by_page", {
+      ...pageRequest.value,
+      params: {...pageRequest.value.params, category_id: route.params.category_id},
+    }, {params: {status: "PUBLIC"}});
+    const data: ResponseImpl<PageResultImpl<WorkImpl>> = response.data;
     if (data.code === 0) {
       pageResult.value = data.data;
       workItems.value = pageResult.value?.list || [];
@@ -51,7 +50,7 @@ const handleWorkListAuthorNickname = async () => {
     if (workItems.value[i].is_claim) {
       await baseHttp.get("/user/current_by_uuid", {params: {uuid: workItems.value[i].author}})
         .then(res => {
-          const data: ResponseImpl = res.data;
+          const data: ResponseImpl<UserArchiveImpl> = res.data;
           if (data.code === 0) {
             const userArchive: UserArchiveImpl = data.data;
             workItems.value[i].author_nickname = userArchive.nickname;

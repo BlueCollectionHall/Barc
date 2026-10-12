@@ -34,19 +34,20 @@ class WorkCommentCountTest {
     @Mock
     private WorkCommentReplyMapper workCommentReplyMapper;
 
+    @Mock private com.miaoyu.barc.api.work.mapper.WorkMapper workMapper;
+
     @InjectMocks
     private WorkCommentService workCommentService;
 
     @Test
     @DisplayName("作品评论计数应等于主评论数加所有回复数")
     void countByWork_ShouldReturnMainCommentCountPlusAllReplyCount() {
-        WorkCommentModel firstComment = new WorkCommentModel();
-        firstComment.setId("comment-1");
-        WorkCommentModel secondComment = new WorkCommentModel();
-        secondComment.setId("comment-2");
-        when(workCommentMapper.selectByWorkId("work-1")).thenReturn(List.of(firstComment, secondComment));
-        when(workCommentReplyMapper.selectByParentId("comment-1")).thenReturn(List.of(new WorkCommentReplyModel(), new WorkCommentReplyModel()));
-        when(workCommentReplyMapper.selectByParentId("comment-2")).thenReturn(List.of(new WorkCommentReplyModel()));
+        // 可见性先于聚合，计数不再按每条主评论读取回复。
+        var work = new com.miaoyu.barc.api.work.model.WorkModel();
+        work.setStatus(com.miaoyu.barc.api.work.enumeration.WorkStatusEnum.PUBLIC);
+        work.setReview_status(com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum.APPROVED);
+        when(workMapper.selectById("work-1")).thenReturn(work);
+        when(workCommentMapper.countWithReplies("work-1")).thenReturn(5L);
 
         ResponseEntity<J> response = ReflectionTestUtils.invokeMethod(
                 workCommentService,
@@ -58,7 +59,8 @@ class WorkCommentCountTest {
         J body = response.getBody();
         assertNotNull(body);
         assertEquals(0, body.getCode());
-        assertEquals(5, body.getData());
+        assertEquals(5L, body.getData());
+        org.mockito.Mockito.verifyNoInteractions(workCommentReplyMapper);
     }
 
     @Test

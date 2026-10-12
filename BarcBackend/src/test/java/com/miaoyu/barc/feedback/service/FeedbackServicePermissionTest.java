@@ -6,6 +6,8 @@ import com.miaoyu.barc.feedback.enumeration.FeedbackStatusEnum;
 import com.miaoyu.barc.feedback.enumeration.FeedbackTypeEnum;
 import com.miaoyu.barc.feedback.mapper.FeedbackMapper;
 import com.miaoyu.barc.feedback.model.FeedbackFormModel;
+import com.miaoyu.barc.feedback.model.FeedbackUpdateRequest;
+import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
 import com.miaoyu.barc.permission.ComparePermission;
 import com.miaoyu.barc.permission.PermissionConst;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
@@ -53,7 +55,7 @@ class FeedbackServicePermissionTest {
         J body = response.getBody();
         assertNotNull(body);
         assertEquals(1, body.getCode());
-        verify(feedbackMapper, never()).selectByType(FeedbackTypeEnum.USER);
+        verify(feedbackMapper, never()).selectPage(FeedbackTypeEnum.USER, null, null, 0, 100);
     }
 
     @Test
@@ -61,15 +63,14 @@ class FeedbackServicePermissionTest {
     void getFeedbacksByTypeWithManagerService_UserFeedback_ShouldAllowThirdMaintainer() {
         UserArchiveModel manager = managerWithPermission(PermissionConst.THI_MAINTAINER);
         lenient().when(userArchiveMapper.selectByUuid("manager-1")).thenReturn(manager);
-        lenient().when(comparePermission.has(PermissionConst.THI_MAINTAINER, PermissionConst.THI_MAINTAINER)).thenReturn(true);
-        when(feedbackMapper.selectByType(FeedbackTypeEnum.USER)).thenReturn(List.of(new FeedbackFormModel()));
+        when(feedbackMapper.selectPage(FeedbackTypeEnum.USER, null, null, 0, 100)).thenReturn(List.of(new FeedbackFormModel()));
 
         ResponseEntity<J> response = feedbackService.getFeedbacksByTypeWithManagerService("manager-1", FeedbackTypeEnum.USER);
 
         J body = response.getBody();
         assertNotNull(body);
         assertEquals(0, body.getCode());
-        verify(feedbackMapper).selectByType(FeedbackTypeEnum.USER);
+        verify(feedbackMapper).selectPage(FeedbackTypeEnum.USER, null, null, 0, 100);
     }
 
     @Test
@@ -83,7 +84,7 @@ class FeedbackServicePermissionTest {
         J body = response.getBody();
         assertNotNull(body);
         assertEquals(1, body.getCode());
-        verify(feedbackMapper, never()).selectByType(FeedbackTypeEnum.BUG);
+        verify(feedbackMapper, never()).selectPage(FeedbackTypeEnum.BUG, null, null, 0, 100);
     }
 
     @Test
@@ -117,7 +118,7 @@ class FeedbackServicePermissionTest {
         when(feedbackMapper.selectById("feedback-1")).thenReturn(feedback);
         when(userArchiveMapper.selectByUuid("manager-1")).thenReturn(manager);
 
-        ResponseEntity<J> response = feedbackService.updateFeedbackService("manager-1", feedback);
+        ResponseEntity<J> response = feedbackService.updateFeedbackService("manager-1", new FeedbackUpdateRequest(feedback.getId(), feedback.getEcho(), feedback.getStatus(), null));
 
         J body = response.getBody();
         assertNotNull(body);
@@ -138,11 +139,10 @@ class FeedbackServicePermissionTest {
         stored.setType(FeedbackTypeEnum.USER);
         stored.setStatus(FeedbackStatusEnum.PENDING);
         when(userArchiveMapper.selectByUuid("manager-1")).thenReturn(manager);
-        lenient().when(comparePermission.has(PermissionConst.SEC_MAINTAINER, PermissionConst.SEC_MAINTAINER)).thenReturn(true);
         lenient().when(feedbackMapper.selectById("feedback-1")).thenReturn(stored);
         lenient().when(feedbackMapper.update(request)).thenReturn(true);
 
-        ResponseEntity<J> response = feedbackService.updateFeedbackService("manager-1", request);
+        ResponseEntity<J> response = feedbackService.updateFeedbackService("manager-1", new FeedbackUpdateRequest(request.getId(), request.getEcho(), request.getStatus(), null));
 
         J body = response.getBody();
         assertNotNull(body);
@@ -154,6 +154,7 @@ class FeedbackServicePermissionTest {
     private UserArchiveModel managerWithPermission(Integer permission) {
         UserArchiveModel manager = new UserArchiveModel();
         manager.setPermission(permission);
+        manager.setIdentity(UserIdentityEnum.MANAGER);
         return manager;
     }
 }

@@ -6,6 +6,20 @@ import org.apache.ibatis.annotations.*;
 import java.util.List;
 
 public interface StudentMapper {
+    /** 首页最近更新学生先在数据库去重，再限制返回容量，避免逐作品查询学生。 */
+    @Select("SELECT s.* FROM student s JOIN (SELECT w.student, MAX(COALESCE(w.content_updated_at,w.created_at)) AS fresh " +
+            "FROM work w JOIN work_review wr ON wr.work_id=w.id WHERE w.status='PUBLIC' AND wr.status='APPROVED' " +
+            "AND COALESCE(w.content_updated_at,w.created_at) >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL #{day} DAY) " +
+            "GROUP BY w.student) recent ON recent.student=s.id WHERE s.deleted_at IS NULL ORDER BY recent.fresh DESC,s.id ASC LIMIT 100")
+    List<StudentModel> selectByRecentWork(@Param("day") int day);
+    /** 写事务锁定实体，防止并发迁移、编辑和删除相互覆盖。 */
+    @Select("SELECT * FROM student WHERE id=#{id} AND deleted_at IS NULL FOR UPDATE")
+    StudentModel selectByIdForUpdate(@Param("id") String id);
+
+    /** 主键占用包含软删除行，禁止把已占用标识误报为可用。 */
+    @Select("SELECT COUNT(*) FROM student WHERE id = #{id}")
+    int countIncludingDeleted(@Param("id") String id);
+
 
     @Select("SELECT * FROM student WHERE deleted_at IS NULL")
     List<StudentModel> selectAll();
@@ -24,7 +38,7 @@ public interface StudentMapper {
             "<if test='keyword != null and keyword != \"\"'>" +
             "  AND (cn_name LIKE CONCAT('%',#{keyword},'%') OR jp_name LIKE CONCAT('%',#{keyword},'%') OR kr_name LIKE CONCAT('%',#{keyword},'%') OR en_name LIKE CONCAT('%',#{keyword},'%'))" +
             "</if>" +
-            " LIMIT #{offset}, #{size}" +
+            " ORDER BY id ASC LIMIT #{offset}, #{size}" +
             "</script>")
     List<StudentModel> selectByPage(@Param("club_id") String clubId, @Param("keyword") String keyword, @Param("offset") int offset, @Param("size") int size);
 
@@ -41,7 +55,7 @@ public interface StudentMapper {
             "<if test='keyword != null and keyword != \"\"'>" +
             "  AND (cn_name LIKE CONCAT('%',#{keyword},'%') OR jp_name LIKE CONCAT('%',#{keyword},'%') OR kr_name LIKE CONCAT('%',#{keyword},'%') OR en_name LIKE CONCAT('%',#{keyword},'%'))" +
             "</if>" +
-            " LIMIT #{offset}, #{size}" +
+            " ORDER BY id ASC LIMIT #{offset}, #{size}" +
             "</script>")
     List<StudentModel> selectAllByPage(@Param("keyword") String keyword, @Param("offset") int offset, @Param("size") int size);
 

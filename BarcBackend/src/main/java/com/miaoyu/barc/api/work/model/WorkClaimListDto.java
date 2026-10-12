@@ -17,4 +17,10 @@ public class WorkClaimListDto {
     private String applicant_nickname; // 申请人昵称
     private String applicant_username; // 申请人用户名
     private String created_at;       // 申请时间
+    /** 结果与说明用于待审、历史和本人进度共用展示。 */
+    private String status;
+    private String statement;
+    private String reviewer_uuid;
+    private String processed_at;
+    private String result_reason;
 }

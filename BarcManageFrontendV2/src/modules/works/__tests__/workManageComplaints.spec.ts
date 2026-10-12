@@ -23,8 +23,8 @@ describe('work complaint manage API', () => {
 
     await getComplaintsList()
 
-    expect(get).toHaveBeenCalledWith('/feedback/feedbacks_by_type', {
-      params: { type: 'WORK', is_manager: true },
+    expect(get).toHaveBeenCalledWith('/feedback/page', {
+      params: { type: 'WORK', is_manager: true, page: 1, size: 20, status: undefined },
     })
     expect(get).not.toHaveBeenCalledWith('/api/work/manage/complaints')
   })

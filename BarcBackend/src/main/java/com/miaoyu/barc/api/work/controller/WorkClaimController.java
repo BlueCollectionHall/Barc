@@ -28,11 +28,21 @@ public class WorkClaimController {
         return workClaimService.checkWorkClaimService(request.getAttribute("uuid").toString(), workClaimId);
     }
 
+    /** 当前用户自己的申请记录，身份只取认证上下文。 */
+    @GetMapping("/mine")
+    public ResponseEntity<J> mine(HttpServletRequest request,
+            @RequestParam(value = "work_id", required = false) String workId,
+            @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @RequestParam(value = "size", defaultValue = "20") Integer size) {
+        return workClaimService.getMyClaims(request.getAttribute("uuid").toString(), workId, page, size);
+    }
+
+    /** 客户端只能提供作品及说明，申请人/状态/处理信息由服务端产生。 */
+    public record ClaimRequest(String work_id, String statement) { }
+
     @PostMapping("/upload")
-    public ResponseEntity<J> uploadWorkClaimControl(
-            HttpServletRequest request,
-            @RequestBody WorkClaimModel model
-    ) {
+    public ResponseEntity<J> uploadWorkClaimControl(HttpServletRequest request, @RequestBody ClaimRequest body) {
+        WorkClaimModel model = new WorkClaimModel(); model.setWork_id(body.work_id()); model.setStatement(body.statement());
         return workClaimService.uploadWorkClaimService(request.getAttribute("uuid").toString(), model);
     }
 }

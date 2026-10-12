@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {useUserPinia} from "@/stores/UserPinia.ts";
 import {onMounted, watch} from "vue";
-import {storeToRefs} from "pinia";
 const userPinia = useUserPinia();
 
 onMounted(() => {

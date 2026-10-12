@@ -181,7 +181,7 @@ describe('ComplaintsListView', () => {
   it.each([
     ['BAN', 'BAN', '管理员已封禁作品并完成投诉'],
     ['OFF', 'OFF', '管理员已下架作品并完成投诉'],
-    ['RESTORE', 'PUBLIC', '管理员已恢复作品公开状态'],
+    ['RESTORE', 'PUBLIC', '管理员已恢复作品原可见性'],
   ])('changes work status before completing feedback for %s', async (action, workStatus, defaultEcho) => {
     const wrapper = mountView()
 

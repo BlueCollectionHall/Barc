@@ -18,7 +18,7 @@ const accountUsername = ref<string | null>(null);
 const fetchAccountArchive = async (username: string) => {
   try {
     const responseArchive = await baseHttp.get("/user/current_by_username", {params: {username: username}});
-    const dataArchive: ResponseImpl = responseArchive.data;
+    const dataArchive: ResponseImpl<UserArchiveImpl> = responseArchive.data;
     if (dataArchive.code === 0) accountArchive.value = dataArchive.data;
     else infoMessage(dataArchive.msg);
   } catch {

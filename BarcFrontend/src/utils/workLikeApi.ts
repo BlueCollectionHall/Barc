@@ -22,10 +22,10 @@ export async function toggleWorkLike(workId: string, token: string): Promise<Wor
 
   if (res.data.code === 0) {
     if (!isWorkLikeToggleResult(res.data.data)) {
-      throw new Error("点赞响应格式异常");
+      throw new Error(String("点赞响应格式异常"));
     }
     return res.data.data;
   }
 
-  throw new Error(res.data.msg || res.data.data || "点赞失败");
+  throw new Error(String(res.data.msg || res.data.data || "点赞失败"));
 }

@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import {useUserPinia} from "@/stores/UserPinia.ts";
 import {storeToRefs} from "pinia";
-import {ref} from "vue";
 
 const userPinia = useUserPinia();
 
 const {userArchive} = storeToRefs(userPinia);
 
-const newAvatarData = ref<File | null>(null);
 
 </script>
 

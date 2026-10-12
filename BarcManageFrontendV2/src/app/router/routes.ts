@@ -292,7 +292,7 @@ export const adminChildren: RouteRecordRaw[] = [
       subtitle: '审批认领申请、撤销认领、指派作者。',
       requiresAuth: true,
       requiresManager: true,
-      minManagerPermissionBit: MANAGER_PERMISSION.SEC_MAINTAINER,
+      minManagerPermissionBit: MANAGER_PERMISSION.SEC_MAINTAINER | MANAGER_PERMISSION.DISCIPLINARY_COMMITTEE,
       menuLabel: '认领管理',
       menuGroup: 'works',
       menuGroupLabel: '作品管理',

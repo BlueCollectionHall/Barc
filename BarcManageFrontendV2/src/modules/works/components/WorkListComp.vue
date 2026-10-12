@@ -68,12 +68,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getWorkListManage } from '../api/workManage'
+import { getWorkListManage, type WorkRecord } from '../api/workManage'
 import WorkStatusBadge from './WorkStatusBadge.vue'
 import { getWorkCreatorDisplay, getWorkCreatorSourceLabel } from '../utils/workAttribution'
 
-const emit = defineEmits<{ edit: [row: any]; ban: [row: any]; off: [row: any]; restore: [row: any]; delete: [row: any] }>()
-const workList = ref<any[]>([])
+const emit = defineEmits<{ edit: [row: WorkRecord]; ban: [row: WorkRecord]; off: [row: WorkRecord]; restore: [row: WorkRecord]; delete: [row: WorkRecord] }>()
+const workList = ref<WorkRecord[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const loading = ref(false)

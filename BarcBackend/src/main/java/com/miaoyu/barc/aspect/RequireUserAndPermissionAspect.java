@@ -1,7 +1,8 @@
 package com.miaoyu.barc.aspect;
 
 import com.miaoyu.barc.annotation.RequireUserAndPermissionAnno;
-import com.miaoyu.barc.permission.ComparePermission;
+import com.miaoyu.barc.exception.ApiException;
+import com.miaoyu.barc.permission.PermissionPolicy;
 import com.miaoyu.barc.response.ErrorR;
 import com.miaoyu.barc.response.UserR;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
@@ -10,63 +11,31 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
+/** 按顺序检查全部条件，通过全部检查后才执行一次业务方法。 */
 @Aspect
 @Component
 public class RequireUserAndPermissionAspect {
     @Autowired
     private UserArchiveMapper userArchiveMapper;
-    @Autowired
-    private ComparePermission comparePermission;
+
     @Around("@annotation(anno)")
-    public Object requireSuchAndPermissionAspect(
-            ProceedingJoinPoint pj,
-            RequireUserAndPermissionAnno anno
-    ) throws Throwable {
-        Object [] args = pj.getArgs();
-        for (RequireUserAndPermissionAnno.Check check: anno.value()) {
-            if (check.uuidIndex() < 0 || args.length <= check.uuidIndex()) {
-                return ResponseEntity.ok(new ErrorR().normal("索引越界！"));
+    public Object requireSuchAndPermissionAspect(ProceedingJoinPoint joinPoint, RequireUserAndPermissionAnno anno) throws Throwable {
+        Object[] args = joinPoint.getArgs();
+        if (anno.value().length == 0) throw new ApiException(new ErrorR().normal("鉴权条件不能为空"));
+        for (RequireUserAndPermissionAnno.Check check : anno.value()) {
+            int index = check.uuidIndex();
+            if (index < 0 || index >= args.length || !(args[index] instanceof String uuid) || uuid.isBlank()) {
+                throw new ApiException(new ErrorR().normal("鉴权用户参数无效"));
             }
-            String uuid = args[check.uuidIndex()].toString();
-            UserArchiveModel userArchive = userArchiveMapper.selectByUuid(uuid);
-            // 验证用户是否存在
-            if (userArchive == null) {
-                return ResponseEntity.ok(new UserR().noSuchUser());
+            UserArchiveModel user = userArchiveMapper.selectByUuid(uuid);
+            if (user == null) throw new ApiException(new UserR().noSuchUser());
+            // 多个 Check 是 AND；同一身份的 OR 权限应写为单个 Check 的按位或掩码。
+            if (!check.isSuchElseRequire() && !PermissionPolicy.matches(user, check.identity(), check.targetPermission(), check.isHasElseUpper())) {
+                throw new ApiException(new UserR().insufficientAccountPermission());
             }
-            // 检测是否鉴权分支
-            if (check.isSuchElseRequire()) {
-                return pj.proceed();
-            }
-            // 验证身份匹配
-            if (userArchive.getIdentity() == check.identity()) {
-                // 若是Has式二进制鉴权
-                if (check.isHasElseUpper()) {
-                    return (
-                            comparePermission.has(
-                                    userArchive.getPermission(), check.targetPermission())?
-                                    pj.proceed():
-                                    ResponseEntity.ok(new UserR().insufficientAccountPermission()
-                                    ));
-                }
-                // 若是Upper式二进制鉴权
-                else {
-                    return (
-                            comparePermission.compare(
-                                    userArchive.getPermission(), check.targetPermission())?
-                                    pj.proceed():
-                                    ResponseEntity.ok(new UserR().insufficientAccountPermission())
-                            );
-                }
-            }
-            return ResponseEntity.ok(new UserR().insufficientAccountPermission());
         }
-        // 若是数组参数长度为空
-        if (args.length == 0) {
-            return ResponseEntity.ok(new ErrorR().normal("参数低于最小界！"));
-        }
-        return pj.proceed();
+        return joinPoint.proceed();
     }
 }

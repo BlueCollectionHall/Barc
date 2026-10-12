@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# 测试生成的覆盖率报告不入库；门禁配置与测试源码保留。
+coverage/
 *.tsbuildinfo
 .DS_Store
 

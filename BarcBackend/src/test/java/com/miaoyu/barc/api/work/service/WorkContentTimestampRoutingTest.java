@@ -20,7 +20,6 @@ import com.miaoyu.barc.user.mapper.UserArchiveMapper;
 import com.miaoyu.barc.user.mapper.UserBasicMapper;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.JwtService;
-import com.miaoyu.barc.utils.minio.MinioObjects;
 import com.miaoyu.barc.utils.tencent.cos.CosBucketConfigEnum;
 import com.miaoyu.barc.utils.tencent.cos.CosService;
 import org.junit.jupiter.api.DisplayName;
@@ -51,7 +50,6 @@ class WorkContentTimestampRoutingTest {
     @Mock private StudentMapper studentMapper;
     @Mock private SchoolMapper schoolMapper;
     @Mock private ClubMapper clubMapper;
-    @Mock private MinioObjects minioObjects;
     @Mock private WorkImageMapper workImageMapper;
     @Mock private WorkCoverImageMapper workCoverImageMapper;
     @Mock private CosService cosService;
@@ -64,7 +62,7 @@ class WorkContentTimestampRoutingTest {
     @Mock private WorkClaimMapper workClaimMapper;
     @Mock private WorkOperationLogMapper workOperationLogMapper;
     @Mock private UserBasicMapper userBasicMapper;
-    @Mock private SendEmailUtils sendEmailUtils;
+    @Mock private com.miaoyu.barc.email.service.MailOutbox mailOutbox;
 
     @InjectMocks
     private WorkService workService;
@@ -80,9 +78,11 @@ class WorkContentTimestampRoutingTest {
         requestModel.setId("work-1");
         requestModel.setTitle("新的标题");
 
-        when(workMapper.selectById("work-1")).thenReturn(existingWork);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(existingWork);
         when(workMapper.updateText(requestModel)).thenReturn(true);
+        when(workMapper.touchContent("work-1")).thenReturn(true);
 
+        when(workReviewMapper.insertPending("work-1")).thenReturn(true);
         ResponseEntity<J> response = workService.updateOwnerWorkContent("owner-1", requestModel);
 
         assertSuccess(response);
@@ -91,17 +91,17 @@ class WorkContentTimestampRoutingTest {
     }
 
     @Test
-    @DisplayName("作者侧公开私有切换应继续走通用 update，而不是内容修改 updateText")
-    void updateOwnerWorkVisibility_ShouldCallUpdateOnly() {
+    @DisplayName("作者侧公开私有切换只更新状态列，而不是内容修改 updateText")
+    void updateOwnerWorkVisibility_ShouldCallStatusOnly() {
         WorkModel existingWork = ownerWork("work-1", WorkStatusEnum.PUBLIC);
-        when(workMapper.selectById("work-1")).thenReturn(existingWork);
-        when(workMapper.update(existingWork)).thenReturn(true);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(existingWork);
+        when(workMapper.updateStatus("work-1", WorkStatusEnum.PRIVATE, null)).thenReturn(true);
 
         ResponseEntity<J> response = workService.updateOwnerWorkVisibility("owner-1", "work-1", WorkStatusEnum.PRIVATE);
 
         assertSuccess(response);
         assertEquals(WorkStatusEnum.PRIVATE, existingWork.getStatus());
-        verify(workMapper).update(existingWork);
+        verify(workMapper).updateStatus("work-1", WorkStatusEnum.PRIVATE, null);
         verify(workMapper, never()).updateText(any(WorkModel.class));
     }
 
@@ -112,9 +112,12 @@ class WorkContentTimestampRoutingTest {
         requestModel.setId("work-1");
         requestModel.setTitle("管理员修正文案");
 
-        when(workMapper.selectById("work-1")).thenReturn(new WorkModel());
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(new WorkModel());
         when(workMapper.updateText(requestModel)).thenReturn(true);
+        when(workMapper.touchContent("work-1")).thenReturn(true);
 
+        when(workOperationLogMapper.insert(any())).thenReturn(1);
+        org.springframework.test.util.ReflectionTestUtils.setField(workManageService, "workService", workService);
         ResponseEntity<J> response = workManageService.updateWorkContent("manager-1", requestModel);
 
         assertSuccess(response);
@@ -123,22 +126,23 @@ class WorkContentTimestampRoutingTest {
     }
 
     @Test
-    @DisplayName("管理端状态修改应继续走通用 update，避免误走内容更新时间刷新路径")
-    void updateWorkStatus_ForManage_ShouldCallUpdateOnly() {
+    @DisplayName("管理端状态修改只更新状态列，避免误走内容更新时间刷新路径")
+    void updateWorkStatus_ForManage_ShouldCallStatusOnly() {
         WorkModel work = new WorkModel();
         work.setId("work-1");
         work.setTitle("测试作品");
         work.setAuthor("author-1");
         work.setStatus(WorkStatusEnum.PUBLIC);
 
-        when(workMapper.selectById("work-1")).thenReturn(work);
-        when(workMapper.update(work)).thenReturn(true);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(work);
+        when(workMapper.updateStatus("work-1", WorkStatusEnum.BAN, WorkStatusEnum.PUBLIC)).thenReturn(true);
+        when(workOperationLogMapper.insert(any())).thenReturn(1);
 
         ResponseEntity<J> response = workManageService.updateWorkStatus("manager-1", "work-1", WorkStatusEnum.BAN, "违规说明");
 
         assertSuccess(response);
         assertEquals(WorkStatusEnum.BAN, work.getStatus());
-        verify(workMapper).update(work);
+        verify(workMapper).updateStatus("work-1", WorkStatusEnum.BAN, WorkStatusEnum.PUBLIC);
         verify(workMapper, never()).updateText(any(WorkModel.class));
     }
 

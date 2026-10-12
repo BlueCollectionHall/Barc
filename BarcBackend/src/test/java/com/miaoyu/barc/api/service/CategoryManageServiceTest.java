@@ -1,5 +1,7 @@
 package com.miaoyu.barc.api.service;
 
+import static org.mockito.Mockito.lenient;
+
 import com.miaoyu.barc.api.mapper.CategoryMapper;
 import com.miaoyu.barc.api.model.CategoryManageItem;
 import com.miaoyu.barc.api.pojo.CategoryPojo;
@@ -40,6 +42,13 @@ class CategoryManageServiceTest {
 
     @Mock
     private CategoryMapper categoryMapper;
+
+    @Mock private com.miaoyu.barc.api.mapper.CatalogMutationMapper catalogMutationMapper;
+
+    @org.junit.jupiter.api.BeforeEach void successfulNestedWrites() {
+        lenient().when(categoryMapper.updateLevel(anyString(), any())).thenReturn(1);
+        lenient().when(categoryMapper.updateSort(anyString(), any())).thenReturn(1);
+    }
 
     @InjectMocks
     private CategoryManageService categoryManageService;
@@ -465,7 +474,7 @@ class CategoryManageServiceTest {
     @Test
     @DisplayName("删除 - 分类不存在返回资源失败")
     void delete_missing() {
-        when(categoryMapper.selectById("ghost")).thenReturn(null);
+        when(categoryMapper.selectByIdForUpdate("ghost")).thenReturn(null);
 
         ResponseEntity<J> response = categoryManageService.deleteService("admin-uuid", "ghost");
 
@@ -475,7 +484,7 @@ class CategoryManageServiceTest {
     @Test
     @DisplayName("删除 - 有子分类时拒绝，并提示数量")
     void delete_rejectedWhenHasChildren() {
-        when(categoryMapper.selectById("beautify")).thenReturn(pojo("beautify", null, "美化", 1, 2));
+        when(categoryMapper.selectByIdForUpdate("beautify")).thenReturn(pojo("beautify", null, "美化", 1, 2));
         when(categoryMapper.countChildren("beautify")).thenReturn(2);
 
         ResponseEntity<J> response = categoryManageService.deleteService("admin-uuid", "beautify");
@@ -488,7 +497,7 @@ class CategoryManageServiceTest {
     @Test
     @DisplayName("删除 - 有作品关联时拒绝，并提示数量")
     void delete_rejectedWhenHasWorks() {
-        when(categoryMapper.selectById("game")).thenReturn(pojo("game", null, "游戏", 1, 4));
+        when(categoryMapper.selectByIdForUpdate("game")).thenReturn(pojo("game", null, "游戏", 1, 4));
         when(categoryMapper.countChildren("game")).thenReturn(0);
         when(categoryMapper.countWorks("game")).thenReturn(3);
 
@@ -502,7 +511,7 @@ class CategoryManageServiceTest {
     @Test
     @DisplayName("删除 - 无关联分类可删除")
     void delete_success() {
-        when(categoryMapper.selectById("mouse_theme")).thenReturn(pojo("mouse_theme", "beautify", "鼠标指针", 2, 1));
+        when(categoryMapper.selectByIdForUpdate("mouse_theme")).thenReturn(pojo("mouse_theme", "beautify", "鼠标指针", 2, 1));
         when(categoryMapper.countChildren("mouse_theme")).thenReturn(0);
         when(categoryMapper.countWorks("mouse_theme")).thenReturn(0);
         when(categoryMapper.deleteById("mouse_theme")).thenReturn(1);
@@ -517,7 +526,7 @@ class CategoryManageServiceTest {
     @Test
     @DisplayName("删除 - 落库未生效时返回错误")
     void delete_persistFails() {
-        when(categoryMapper.selectById("mouse_theme")).thenReturn(pojo("mouse_theme", "beautify", "鼠标指针", 2, 1));
+        when(categoryMapper.selectByIdForUpdate("mouse_theme")).thenReturn(pojo("mouse_theme", "beautify", "鼠标指针", 2, 1));
         when(categoryMapper.countChildren("mouse_theme")).thenReturn(0);
         when(categoryMapper.countWorks("mouse_theme")).thenReturn(0);
         when(categoryMapper.deleteById("mouse_theme")).thenReturn(0);

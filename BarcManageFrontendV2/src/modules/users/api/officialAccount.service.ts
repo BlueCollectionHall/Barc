@@ -12,7 +12,7 @@ import type {
  * 接口约定（后端 com.miaoyu.barc.user.controller.OfficialAccountController，馆长 1匹配鉴权）：
  * 1、GET  /user/official/list        全部业务项与绑定状态（含未绑定项）
  * 2、POST /user/official/bind        绑定 / 更换；更换时后端在同一事务内迁移未认领作品
- * 3、GET  /user/official/search_user 账号选择器搜索
+ * 3、GET  /user/query/search 账号选择器搜索
  *
  * 注意：没有 unbind 接口 —— 绑定只能更换，不能解绑。
  */
@@ -33,7 +33,7 @@ export function bindOfficialAccount(
 export function searchOfficialAccountCandidates(
   keyword: string,
 ): Promise<OfficialAccountCandidate[]> {
-  return http.get<OfficialAccountCandidate[]>('/user/official/search_user', {
+  return http.get<OfficialAccountCandidate[]>('/user/query/search', {
     params: { keyword },
   })
 }

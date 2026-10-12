@@ -1,219 +1,146 @@
 package com.miaoyu.barc.user.service;
 
-import com.miaoyu.barc.email.utils.SendEmailUtils;
+import com.miaoyu.barc.exception.ApiException;
 import com.miaoyu.barc.response.*;
-import com.miaoyu.barc.user.enumeration.BanTypeEnum;
+import com.miaoyu.barc.security.AccountInput;
+import com.miaoyu.barc.security.RequestLimits;
+import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
 import com.miaoyu.barc.user.mapper.BarcNaigosUuidMapper;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
-import com.miaoyu.barc.user.mapper.UserBanRecordMapper;
 import com.miaoyu.barc.user.mapper.UserBasicMapper;
-import com.miaoyu.barc.user.mapper.VerificationCodeMapper;
 import com.miaoyu.barc.user.model.*;
+import com.miaoyu.barc.user.model.dto.SignupRequest;
 import com.miaoyu.barc.utils.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.io.IOException;
-import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 
+/** 账号创建只接受白名单字段；注册验证码和两张账号表写入在同一事务提交。 */
 @Service
 public class SignService {
-    @Autowired
-    private SendEmailUtils sendEmailUtils;
-    @Autowired
-    private JwtService jwtService;
-    @Autowired
-    private PasswordHash passwordHash;
-    @Autowired
-    private VerificationCodeMapper verificationCodeMapper;
-    @Autowired
-    private UserBasicMapper userBasicMapper;
-    @Autowired
-    private BarcNaigosUuidMapper barcNaigosUuidMapper;
-    @Autowired
-    private UserArchiveMapper userArchiveMapper;
-    @Autowired
-    private UserBanRecordMapper userBanRecordMapper;
+    @Autowired private JwtService jwtService;
+    @Autowired private PasswordHash passwordHash;
+    @Autowired private UserBasicMapper userBasicMapper;
+    @Autowired private BarcNaigosUuidMapper barcNaigosUuidMapper;
+    @Autowired private UserArchiveMapper userArchiveMapper;
+    @Autowired private NaigosService naigosService;
+    @Autowired private VerificationService verificationService;
+    @Autowired private RequestLimits limits;
 
+    @Transactional
     public ResponseEntity<J> signInUserService(String type, String account, String password) {
-        UserBasicModel userBasic;
-        switch (type) {
-            case "username": {
-                userBasic = userBasicMapper.selectByUsername(account);
-                break;
-            } case "email": {
-                userBasic = userBasicMapper.selectByEmail(account);
-                break;
-            } default: {
-                return ResponseEntity.ok(new ErrorR().normal("参数错误！"));
+        if (account == null || account.isBlank() || account.length() > 255 || password == null || password.length() > 128) return rejectedLogin();
+        limits.require("login:" + account.trim().toLowerCase(Locale.ROOT), 20, 15 * 60 * 1000L);
+        UserBasicModel user = switch (Objects.toString(type, "")) {
+            case "username" -> userBasicMapper.selectByUsername(account);
+            case "email" -> userBasicMapper.selectByEmail(AccountInput.email(account));
+            default -> null;
+        };
+        if (!active(user) || Boolean.FALSE.equals(user.getLocal_password_enabled())) return rejectedLogin();
+        // 只阻断历史外部账号的自动默认口令；其他旧口令验证成功后渐进升级，不批量重置账号。
+        if (passwordHash.needsUpgrade(user.getPassword()) && barcNaigosUuidMapper.selectByUuid(user.getUuid()) != null
+                && passwordHash.matches("123456", user.getPassword())) {
+            return ResponseEntity.ok(new ErrorR().normal("请使用 Naigos 登录后，通过绑定邮箱设置本地密码"));
+        }
+        if (!passwordHash.matches(password, user.getPassword())) return rejectedLogin();
+        if (passwordHash.needsUpgrade(user.getPassword())) {
+            if (!userBasicMapper.upgradePassword(user.getUuid(), user.getPassword(), passwordHash.encode(password))) {
+                return ResponseEntity.ok(new ErrorR().normal("账号凭据已变化，请重新登录"));
             }
         }
-        if (userBasic == null) {
-            return ResponseEntity.ok(new UserR().noSuchUser());
-        }
-        String s = passwordHash.passwordHash256(password);
-        if (s == null) {
-            return ResponseEntity.ok(new SignR().signIn(false));
-        }
-        if (!s.equals(userBasic.getPassword())) {
-            return ResponseEntity.ok(new ErrorR().normal("密码错误"));
-        }
-        // 封号用户登录拦截
-        if (userBasic.getSafe_level() != null && userBasic.getSafe_level() < 0) {
-            String banStatus = BanTypeEnum.getStatusBySafeLevel(userBasic.getSafe_level());
-            // 临时封号显示解封时间
-            if (userBasic.getSafe_level() == BanTypeEnum.TEMPORARY_BAN.getSafeLevelValue()) {
-                UserBanRecordModel latestBan = userBanRecordMapper.selectLatestByUserId(userBasic.getUuid());
-                if (latestBan != null && latestBan.getBannedAt() != null && latestBan.getBanDurationDays() != null) {
-                    LocalDateTime unbanTime = latestBan.getBannedAt().plusDays(latestBan.getBanDurationDays());
-                    return ResponseEntity.ok(new ErrorR().normal("账号已被" + banStatus + "，解封时间：" + unbanTime.toString()));
-                }
-            }
-            return ResponseEntity.ok(new ErrorR().normal("账号已被" + banStatus + "，无法登录"));
-        }
-        String token = jwtService.jwtSigned(userBasic.getUuid());
-        return ResponseEntity.ok(new SuccessR().normal(token));
+        return ResponseEntity.ok(new SuccessR().normal(jwtService.jwtSigned(user.getUuid())));
     }
-    @Autowired
-    private NaigosService naigosService;
+
+    @Transactional(rollbackFor = Exception.class)
     public ResponseEntity<J> signInByNaigosService(String type, String account, String password) {
+        if ((!"uid".equals(type) && !"email".equals(type)) || account == null || account.isBlank()
+                || account.length() > 255 || password == null || password.length() > 128) return rejectedLogin();
+        limits.require("naigos-login:" + account.trim().toLowerCase(Locale.ROOT), 20, 15 * 60 * 1000L);
         try {
             String token = naigosService.getNaigosToken(type, account, password);
-            // 未取到Naigos服务token令牌
-            if (Objects.isNull(token)) {
-                return ResponseEntity.ok(new ErrorR().normal("Naigos服务登录失败！账号或密码不正确！"));
+            if (token == null) return rejectedLogin();
+            NaigosUserArchiveModel remote = naigosService.getNaigosArchive(token);
+            if (remote == null || remote.getGroup_real_user_id() == null || remote.getQq_id() == null) return rejectedLogin();
+            BarcNaigosUuidModel mapping = barcNaigosUuidMapper.selectByNaigosUuid(remote.getGroup_real_user_id());
+            String uuid;
+            if (mapping == null) {
+                String username = remote.getQq_id().toString();
+                String email = remote.getEmail();
+                if (email == null || email.contains("绑定") || email.contains("未知")) email = username + "@qq.com";
+                email = AccountInput.email(email);
+                checkAvailable(username, email);
+                UserBasicModel user = new UserBasicModel();
+                uuid = new GenerateUUID().getUuid32u();
+                user.setUuid(uuid); user.setUsername(username); user.setEmail(email);
+                // 不信任推导邮箱为已验证，更不能设置任何可预测的本地口令。
+                user.setEmail_verified(false); user.setPassword_version(2); user.setLocal_password_enabled(false);
+                user.setPassword(passwordHash.encode(UUID.randomUUID().toString()));
+                if (!userBasicMapper.insert(user)) throw writeFailure();
+                UserArchiveModel archive = initialArchive(uuid, remote.getNickname(), remote.getAvatar());
+                if (!userArchiveMapper.insert(archive)) throw writeFailure();
+                mapping = new BarcNaigosUuidModel(); mapping.setUuid(uuid); mapping.setNaigos_uuid(remote.getGroup_real_user_id());
+                if (!barcNaigosUuidMapper.insert(mapping)) throw writeFailure();
+            } else {
+                uuid = mapping.getUuid();
+                if (!active(userBasicMapper.selectByUuid(uuid))) return rejectedLogin();
             }
-            // 未取到Naigos服务用户信息
-            NaigosUserArchiveModel naigosArchive = naigosService.getNaigosArchive(token);
-            if (Objects.isNull(naigosArchive)) {
-                return ResponseEntity.ok(new UserR().noSuchUser());
-            }
-            BarcNaigosUuidModel barcNaigosUuid = barcNaigosUuidMapper.selectByNaigosUuid(naigosArchive.getGroup_real_user_id());
-            // 未得到交换表中记录
-            if (Objects.isNull(barcNaigosUuid)) {
-                // 向基础信息表新建记录
-                UserBasicModel userBasic = new UserBasicModel();
-                userBasic.setUuid(new GenerateUUID().getUuid32u());
-                userBasic.setUsername(naigosArchive.getQq_id().toString());
-                userBasic.setEmail(naigosArchive.getEmail().contains("绑定") || naigosArchive.getEmail().contains("未知")? naigosArchive.getQq_id() + "@qq.com": naigosArchive.getEmail());
-                userBasic.setPassword(passwordHash.passwordHash256("123456"));
-                userBasic.setEmail_verified(true);
-                boolean insert = userBasicMapper.insert(userBasic);
-                if (insert) {
-                    // 向交换表新建记录
-                    barcNaigosUuid = new BarcNaigosUuidModel();
-                    barcNaigosUuid.setUuid(userBasic.getUuid());
-                    barcNaigosUuid.setNaigos_uuid(naigosArchive.getGroup_real_user_id());
-                    boolean barcNaigosInsert = barcNaigosUuidMapper.insert(barcNaigosUuid);
-                    if (barcNaigosInsert) {
-                        // 向个人信息表新建记录
-                        UserArchiveModel userArchive = new UserArchiveModel();
-                        userArchive.setUuid(userBasic.getUuid());
-                        userArchive.setAvatar(naigosArchive.getAvatar());
-                        userArchive.setNickname(naigosArchive.getNickname());
-                        boolean userArchiveInsert = userArchiveMapper.insert(userArchive);
-                        if (userArchiveInsert) {
-                            return ResponseEntity.ok(new SuccessR().normal(jwtService.jwtSigned(userBasic.getUuid())));
-                        }
-                    }
-                    return ResponseEntity.ok(new SignR().signIn(false));
-                }
-                return ResponseEntity.ok(new SignR().signIn(false));
-            }
-            // 得到交换表记录，检查是否被封号
-            UserBasicModel naigosUser = userBasicMapper.selectByUuid(barcNaigosUuid.getUuid());
-            if (naigosUser != null && naigosUser.getSafe_level() != null && naigosUser.getSafe_level() < 0) {
-                String banStatus = BanTypeEnum.getStatusBySafeLevel(naigosUser.getSafe_level());
-                // 临时封号显示解封时间
-                if (naigosUser.getSafe_level() == BanTypeEnum.TEMPORARY_BAN.getSafeLevelValue()) {
-                    UserBanRecordModel latestBan = userBanRecordMapper.selectLatestByUserId(naigosUser.getUuid());
-                    if (latestBan != null && latestBan.getBannedAt() != null && latestBan.getBanDurationDays() != null) {
-                        LocalDateTime unbanTime = latestBan.getBannedAt().plusDays(latestBan.getBanDurationDays());
-                        return ResponseEntity.ok(new ErrorR().normal("账号已被" + banStatus + "，解封时间：" + unbanTime.toString()));
-                    }
-                }
-                return ResponseEntity.ok(new ErrorR().normal("账号已被" + banStatus + "，无法登录"));
-            }
-            return ResponseEntity.ok(new SuccessR().normal(jwtService.jwtSigned(barcNaigosUuid.getUuid())));
-        } catch (IOException | InterruptedException e) {
-            return ResponseEntity.status(401).body(new ErrorR().normal("请求出错"));
+            return ResponseEntity.ok(new SuccessR().normal(jwtService.jwtSigned(uuid)));
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(new ErrorR().normal("外部登录请求已中断"));
+        } catch (IOException failure) {
+            throw new ApiException(new ErrorR().normal("外部登录服务暂不可用"));
         }
     }
-    /**
-     * 注册：写入账号基础信息与个人信息。
-     *
-     * <p>本方法整体位于同一事务内：基础信息写入成功但个人信息写入失败时，
-     * 必须回滚，避免留下「有账号却没有任何个人信息」的孤儿数据。</p>
-     *
-     * @param userBasic 用户基础信息实体
-     * @param email 邮箱（必须与请求体邮箱一致）
-     * @return 注册结果
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public ResponseEntity<J> signupUserService(UserBasicModel userBasic, String email) {
-        if (!email.equals(userBasic.getEmail())) {
-            return ResponseEntity.ok(new ErrorR().normal("注册邮箱与验证邮箱不一致"));
-        }
-        if (userBasicMapper.selectByUsername(userBasic.getUsername()) != null) {
-            return ResponseEntity.ok(new SignR().usernameClash());
-        }
-        userBasic.setEmail_verified(true);
-        String calcPwd = passwordHash.passwordHash256(userBasic.getPassword());
-        if (Objects.isNull(calcPwd)) {
-            return ResponseEntity.ok(new SignR().signUp(false));
-        }
-        userBasic.setPassword(calcPwd);
-        userBasic.setUuid(new GenerateUUID().getUuid32u());
-        boolean insert = userBasicMapper.insert(userBasic);
-        if (!insert) {
-            return ResponseEntity.ok(new SignR().signUp(false));
-        }
-        UserArchiveModel userArchive = new UserArchiveModel();
-        userArchive.setUuid(userBasic.getUuid());
-        userArchive.setNickname("新用户" + System.currentTimeMillis());
-        userArchive.setAvatar("https://file.naigos.cn:52011/avatar/dc4d81a09fb2728a3c7d028b035652fa");
-        boolean userArchiveInsert = userArchiveMapper.insert(userArchive);
-        if (!userArchiveInsert) {
-            // 个人信息写入失败必须让整个注册失败并回滚，不能留下孤儿账号
-            throw new IllegalStateException("注册失败：用户个人信息写入失败，uuid=" + userBasic.getUuid());
-        }
+
+    @Transactional
+    public ResponseEntity<J> register(SignupRequest request) {
+        String email = AccountInput.email(request.email());
+        AccountInput.username(request.username()); AccountInput.password(request.password());
+        checkAvailable(request.username(), email);
+        verificationService.consume(request.unique_id(), email, "Signup", request.code());
+        UserBasicModel input = new UserBasicModel(); input.setUsername(request.username()); input.setEmail(email);
+        input.setPassword(request.password()); input.setTelephone(request.telephone());
+        return createAccount(input, true);
+    }
+
+    /** 管理端代建账号也复用创建逻辑，但不能声称用户已证明邮箱所有权。 */
+    @Transactional
+    public ResponseEntity<J> signupUserService(UserBasicModel input, String email) {
+        if (input == null || !Objects.equals(email, input.getEmail())) return ResponseEntity.ok(new ErrorR().normal("注册邮箱与验证邮箱不一致"));
+        AccountInput.username(input.getUsername()); AccountInput.password(input.getPassword());
+        String normalized = AccountInput.email(email);
+        checkAvailable(input.getUsername(), normalized);
+        input.setEmail(normalized);
+        return createAccount(input, false);
+    }
+
+    private ResponseEntity<J> createAccount(UserBasicModel input, boolean emailVerified) {
+        if (input.getTelephone() != null && input.getTelephone().length() > 20) throw new ApiException(new ErrorR().normal("电话号码过长"));
+        UserBasicModel user = new UserBasicModel(); user.setUuid(new GenerateUUID().getUuid32u());
+        user.setUsername(input.getUsername()); user.setEmail(input.getEmail()); user.setTelephone(input.getTelephone());
+        user.setPassword(passwordHash.encode(input.getPassword())); user.setPassword_version(2);
+        user.setEmail_verified(emailVerified); user.setLocal_password_enabled(true);
+        if (!userBasicMapper.insert(user)) throw writeFailure();
+        if (!userArchiveMapper.insert(initialArchive(user.getUuid(), "新用户", ""))) throw writeFailure();
         return ResponseEntity.ok(new SignR().signUp(true));
     }
 
-    /**
-     * 校验注册邮箱验证码。
-     *
-     * <p>返回 {@code null} 表示校验通过（此时该验证码已被标记为已使用）；
-     * 返回非空 {@link ResponseEntity} 表示校验失败，调用方应直接把它回传给前端。</p>
-     *
-     * <p>注意：验证码记录不存在时不返回内部的「资源获取失败」文案，
-     * 而是明确告诉用户「验证码会话不存在或已过期」——这是注册失败时最常见的原因，
-     * 原文案会让用户误以为是网络或服务联通问题。</p>
-     *
-     * @param uniqueId 发送验证码时返回的唯一 ID
-     * @param code 用户填写的验证码
-     * @param email 用户填写的邮箱
-     * @return 校验失败时的响应；校验通过返回 null
-     */
-    public ResponseEntity<J> checkSignupCode(String uniqueId, String code, String email) {
-        VerificationCodeModel vcDB = verificationCodeMapper.selectByUniqueId(uniqueId);
-        if (vcDB == null) {
-            return ResponseEntity.ok(new ErrorR().normal("验证码会话不存在或已过期，请重新获取验证码"));
-        }
-        if (!Objects.equals(vcDB.getUsername(), email) || !"Signup".equals(vcDB.getScenario())
-                || Boolean.TRUE.equals(vcDB.getUsed())) {
-            return ResponseEntity.ok(new ErrorR().normal("验证信息不匹配"));
-        }
-        if (!Objects.equals(vcDB.getCode(), code)) {
-            return ResponseEntity.ok(new ErrorR().normal("验证码不匹配"));
-        }
-        if (vcDB.getExpiration_at() == null || vcDB.getExpiration_at().isBefore(LocalDateTime.now())) {
-            return ResponseEntity.ok(new ErrorR().normal("验证码已过期"));
-        }
-        verificationCodeMapper.updateUsed(uniqueId);
-        return null;
+    private void checkAvailable(String username, String email) {
+        if (userBasicMapper.selectByUsername(username) != null) throw new ApiException(new SignR().usernameClash());
+        if (userBasicMapper.selectByEmail(email) != null) throw new ApiException(new ErrorR().normal("邮箱已被使用"));
     }
+    private UserArchiveModel initialArchive(String uuid, String nickname, String avatar) {
+        UserArchiveModel archive = new UserArchiveModel(); archive.setUuid(uuid); archive.setIdentity(UserIdentityEnum.USER); archive.setPermission(1);
+        archive.setNickname(nickname == null || nickname.isBlank() ? "新用户" : nickname);
+        archive.setAvatar(avatar == null ? "" : avatar); return archive;
+    }
+    private boolean active(UserBasicModel user) { return user != null && (user.getSafe_level() == null || user.getSafe_level() >= 0); }
+    private ResponseEntity<J> rejectedLogin() { return ResponseEntity.ok(new ErrorR().normal("账号或密码不正确，或账号当前不可登录")); }
+    private ApiException writeFailure() { return new ApiException(new ErrorR().normal("账号创建失败，请重试")); }
 }

@@ -9,7 +9,8 @@ public interface CosGcMapper {
     @Insert("INSERT INTO cos_garbage_key(bucket, object_key) VALUES(#{bucket}, #{object_key})")
     int enqueue(@Param("bucket") String bucket, @Param("object_key") String object_key);
 
-    @Select("SELECT * FROM cos_garbage_key WHERE processed_at IS NULL ORDER BY created_at LIMIT #{limit}")
+    // 保留七天恢复/保存窗口；失败项最多自动重试十次，之后留存待检查，不静默删除记录。
+    @Select("SELECT * FROM cos_garbage_key WHERE processed_at IS NULL AND retry_count < 10 AND created_at < DATE_SUB(NOW(), INTERVAL 7 DAY) ORDER BY created_at LIMIT #{limit}")
     List<CosGcItem> selectPending(@Param("limit") int limit);
 
     @Update("UPDATE cos_garbage_key SET processed_at = NOW() WHERE id = #{id}")

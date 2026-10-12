@@ -125,7 +125,7 @@ public class WorkLikeService {
                         true,
                         new PageResultDto<>(
                                 safeTotal,
-                                signatureWorks,
+                                signatureWorks.stream().map(com.miaoyu.barc.api.work.model.PublicWorkView::from).toList(),
                                 pageNum,
                                 pageSize,
                                 totalPage == 0 ? 1 : totalPage

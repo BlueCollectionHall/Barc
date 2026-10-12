@@ -45,11 +45,12 @@ describe('work upload review management', () => {
   it('submits silent reject reasons through the review endpoint', async () => {
     vi.mocked(http.post).mockResolvedValueOnce('修改成功')
 
-    await reviewWork('work-1', false, '封面不符合要求')
+    await reviewWork('work-1', false, 7, '封面不符合要求')
 
     expect(http.post).toHaveBeenCalledWith('/api/work/manage/review', {
       work_id: 'work-1',
       approved: false,
+      expected_revision: 7,
       reason: '封面不符合要求',
     })
   })

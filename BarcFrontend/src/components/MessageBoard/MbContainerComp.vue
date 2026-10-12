@@ -8,7 +8,8 @@ import {
   infoMessage,
   successMessage
 } from "@/utils/MessageAlert.ts";
-import {onMounted, ref, watch} from "vue";
+import {onMounted, ref} from "vue";
+import { fetchBoardPage, postBoardMessage } from "@/utils/messageBoardApi";
 import type {MessageBoardWithUserImpl} from "@/interfaces/MessageBoardImpl.ts";
 import type {UserArchiveImpl} from "@/interfaces/UserImpl.ts";
 import type {FeedBackImpl} from "@/interfaces/FeedbackImpl.ts";
@@ -24,20 +25,23 @@ const feedbackForm = ref<FeedBackImpl>({
   id: "", target_id: "", ipv4: null, ipv6: null, author: null, email: null, content: "", echo: null, type: "MESSAGE_BOARD", status: "PENDING", created_at: new Date(), updated_at: new Date()
 });
 
-const fetchMessage = async (limit: number) => {
-  await baseHttp({
-    url: "/comment/message_board/new",
-    method: "GET",
-    params: {limit}
-  }).then(res => {
-    const data: ResponseImpl = res.data;
-    if (data.code === 0) {
-      messageList.value = data.data;
-      messageList.value = messageList.value?.map(msg => ({...msg, userInfo: undefined}));
-      messageList.value.forEach(message => {fetchUserInfo(message.author)});
-    } else errorMessage(data.msg);
-  }).catch(() => {errorCatchMessage();})
-}
+// 服务端分页让旧留言仍然可读，发布成功后重新回到最新一页。
+const currentPage = ref(0);
+const total = ref(0);
+const loading = ref(false);
+const fetchMessage = async (append = false) => {
+  if (loading.value) return;
+  loading.value = true;
+  try {
+    const page = append ? currentPage.value + 1 : 1;
+    const result = await fetchBoardPage(page);
+    messageList.value = append ? [...messageList.value, ...result.list] : result.list;
+    currentPage.value = page;
+    total.value = result.total;
+    await Promise.all([...new Set(result.list.map(item => item.author))].map(fetchUserInfo));
+  } catch { errorCatchMessage(); }
+  finally { loading.value = false; }
+};
 const fetchUserInfo = async (uuid: string): Promise<void> => {
   try {
     const response = await baseHttp("/user/current_by_uuid", {
@@ -68,17 +72,10 @@ const uploadNewMessage = async (): Promise<void> => {
     return;
   }
   try {
-    const response = await baseHttp("/comment/message_board/upload", {
-      method: "GET",
-      headers: {Authorization: token},
-      params: {content: message.value}
-    });
-    const data: ResponseImpl = response.data;
-    if (data.code === 0) {
-      successMessage(data.data);
-      await fetchMessage(3);
-    }
-    else errorMessage(data.msg);
+    await postBoardMessage(message.value, token);
+    successMessage("留言成功");
+    message.value = "";
+    await fetchMessage();
   } catch (error) {
     console.error(error);
     errorCatchMessage();
@@ -91,12 +88,11 @@ const showModal = async (message: MessageBoardWithUserImpl) => {
   open.value = true;
 };
 
-const handleOk = async (e: MouseEvent) => {
-  console.log(e);
+const handleOk = async () => {
   if (feedbackForm.value.content !== "") {
     try {
       const response = await baseHttp.post("/feedback/upload", feedbackForm.value);
-      const data: ResponseImpl = response.data;
+      const data: ResponseImpl<string> = response.data;
       if (data.code === 0) {
         successMessage(data.data);
         feedbackForm.value.content = "";
@@ -112,7 +108,7 @@ const handleOk = async (e: MouseEvent) => {
   }
 };
 onMounted(async () => {
-  await fetchMessage(50);
+  await fetchMessage();
 })
 
 
@@ -132,7 +128,7 @@ onMounted(async () => {
   <div class="container">
     <div class="input_bar">
       <img class="momotalk_logo" src="https://static.kivo.wiki/images/gallery/D2.%E6%B8%B8%E6%88%8F%E5%86%85%E6%9D%82%E9%A1%B9/Category/FX_TEX_CH0071_Prop_03.png" alt="logo"/>
-      <input class="input" type="text" placeholder="30字以内"/>
+      <input v-model="message" class="input" type="text" maxlength="30" placeholder="30字以内"/>
       <button class="button" @click="uploadNewMessage"><ArrowRightOutlined /></button>
     </div>
     <div class="messages" v-if="messageList">
@@ -144,6 +140,9 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+    <button v-if="messageList.length < total" :disabled="loading" @click="fetchMessage(true)">
+      {{ loading ? '加载中...' : '加载更多留言' }}
+    </button>
   </div>
 </template>
 

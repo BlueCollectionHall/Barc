@@ -10,16 +10,17 @@ import java.util.List;
 import java.util.Map;
 
 public interface MessageBoardMapper {
-    /**
-     * 按创建时间倒序取前 limit 条。
-     *
-     * <p>2026-10：原 {@code selectAll}（全表、无排序）已随 {@code /comment/message_board/all} 删除，
-     * 「全量」语义改由本方法传足够大的 limit 表达。</p>
-     */
-    @Select("SELECT * FROM message_board ORDER BY created_at DESC LIMIT #{limit}")
+    /** 兼容最近若干条，容量由服务端限制；完整历史走分页。 */
+    @Select("SELECT * FROM message_board ORDER BY created_at DESC,id DESC LIMIT #{limit}")
     List<MessageBoardModel> selectByLimit(int limit);
+    @Select("SELECT * FROM message_board ORDER BY created_at DESC,id DESC LIMIT #{offset},#{limit}")
+    List<MessageBoardModel> selectPage(@Param("offset") int offset, @Param("limit") int limit);
+    @Select("SELECT COUNT(*) FROM message_board")
+    long countAll();
     @Select("SELECT * FROM message_board WHERE id = #{message_id}")
     MessageBoardModel selectById(@Param("message_id") String messageId);
+    @Select("SELECT * FROM message_board WHERE id=#{message_id} FOR UPDATE")
+    MessageBoardModel selectByIdForUpdate(@Param("message_id") String messageId);
     @Insert("INSERT INTO message_board (id, author, content) VALUES (#{id}, #{author}, #{content})")
     boolean insert(MessageBoardModel model);
     @Delete("DELETE FROM message_board WHERE id = #{messageId}")
@@ -35,5 +36,5 @@ public interface MessageBoardMapper {
 
     boolean updateById(@Param("id") String id, @Param("content") String content);
 
-    boolean batchDelete(@Param("ids") List<String> ids);
+    int batchDelete(@Param("ids") List<String> ids);
 }

@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import {onMounted, ref, watch} from "vue";
+import {onMounted, ref} from "vue";
 import {useUserPinia} from "@/stores/UserPinia.ts";
 import {storeToRefs} from "pinia";
 const userPinia = useUserPinia();
 import {useRouter, useRoute} from "vue-router";
 import type {FeedBackImpl} from "@/interfaces/FeedbackImpl.ts";
-import type {MessageBoardWithUserImpl} from "@/interfaces/MessageBoardImpl.ts";
-import {errorMessage, infoMessage, successMessage} from "@/utils/MessageAlert.ts";
+import {errorMessage, successMessage} from "@/utils/MessageAlert.ts";
 import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import type {UserArchiveImpl} from "@/interfaces/UserImpl.ts";

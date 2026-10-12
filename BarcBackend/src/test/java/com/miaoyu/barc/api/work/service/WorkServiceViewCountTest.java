@@ -15,7 +15,6 @@ import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.JwtService;
-import com.miaoyu.barc.utils.minio.MinioObjects;
 import com.miaoyu.barc.utils.tencent.cos.CosBucketConfigEnum;
 import com.miaoyu.barc.utils.tencent.cos.CosService;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,8 +52,6 @@ class WorkServiceViewCountTest {
     private SchoolMapper schoolMapper;
     @Mock
     private ClubMapper clubMapper;
-    @Mock
-    private MinioObjects minioObjects;
     @Mock
     private WorkImageMapper workImageMapper;
     @Mock
@@ -95,7 +92,7 @@ class WorkServiceViewCountTest {
 
         ResponseEntity<J> response = workService.getWorksByIdService(request, "work-1");
 
-        WorkModel data = successfulWork(response);
+        com.miaoyu.barc.api.work.model.PublicWorkView data = successfulWork(response);
         assertEquals("https://signed.example/cover.png", data.getCover_image());
         verify(workViewService).recordViewIfNeeded(eq(request), any(WorkModel.class));
     }
@@ -126,7 +123,7 @@ class WorkServiceViewCountTest {
 
         ResponseEntity<J> response = workService.getWorksByIdService(request, "work-1");
 
-        WorkModel data = successfulWork(response);
+        com.miaoyu.barc.api.work.model.PublicWorkView data = successfulWork(response);
         assertEquals("https://signed.example/cover.png", data.getCover_image());
         verify(workViewService).recordViewIfNeeded(eq(request), any(WorkModel.class));
     }
@@ -151,10 +148,10 @@ class WorkServiceViewCountTest {
                 .thenReturn("https://signed.example/cover.png");
     }
 
-    private WorkModel successfulWork(ResponseEntity<J> response) {
+    private com.miaoyu.barc.api.work.model.PublicWorkView successfulWork(ResponseEntity<J> response) {
         J body = response.getBody();
         assertNotNull(body);
         assertEquals(0, body.getCode());
-        return (WorkModel) body.getData();
+        return (com.miaoyu.barc.api.work.model.PublicWorkView) body.getData();
     }
 }

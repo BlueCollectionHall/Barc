@@ -6,7 +6,10 @@ import com.miaoyu.barc.annotation.SuchWorkAnno;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
 import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.model.WorkModel;
+import com.miaoyu.barc.api.work.model.WorkCommands;
 import com.miaoyu.barc.api.work.service.WorkService;
+import com.miaoyu.barc.api.work.service.WorkDeletionService;
+import com.miaoyu.barc.api.work.service.WorkCompatibilityService;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.dto.PageRequestDto;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,6 +27,8 @@ import java.util.Map;
 public class WorkController {
     @Autowired
     private WorkService workService;
+    @Autowired private WorkDeletionService workDeletionService;
+    @Autowired private WorkCompatibilityService workCompatibilityService;
 
     /**获取最新作品信息
      * @param day 最新天数
@@ -42,9 +47,11 @@ public class WorkController {
     @IgnoreAuth
     @GetMapping("/all")
     public ResponseEntity<J> getWorksAllControl(
-            @RequestParam("status") WorkStatusEnum statusEnum
+            @RequestParam("status") WorkStatusEnum statusEnum,
+            @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @RequestParam(value = "size", defaultValue = "100") Integer size
     ) {
-        return workService.getWorksAllService(statusEnum);
+        return workService.getPublicLegacyList(statusEnum, Map.of(), page, size);
     }
     /**
      * 分页获取符合条件的work实体
@@ -79,9 +86,11 @@ public class WorkController {
     @GetMapping("/works_by_school")
     public ResponseEntity<J> getWorksBySchoolControl(
             @RequestParam("status") WorkStatusEnum statusEnum,
-            @RequestParam("school_id") String schoolId
+            @RequestParam("school_id") String schoolId,
+            @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @RequestParam(value = "size", defaultValue = "100") Integer size
     ) {
-        return workService.getWorksBySchoolService(schoolId, statusEnum);
+        return workService.getPublicLegacyList(statusEnum, Map.of("school_id", schoolId), page, size);
     }
     /**根据club_id获取所有符合条件的work实体
      * @param clubId club_id
@@ -90,9 +99,11 @@ public class WorkController {
     @GetMapping("/works_by_club")
     public ResponseEntity<J> getWorksByClubControl(
             @RequestParam("status") WorkStatusEnum statusEnum,
-            @RequestParam("club_id") String clubId
+            @RequestParam("club_id") String clubId,
+            @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @RequestParam(value = "size", defaultValue = "100") Integer size
     ) {
-        return workService.getWorksByClubService(clubId, statusEnum);
+        return workService.getPublicLegacyList(statusEnum, Map.of("club_id", clubId), page, size);
     }
     /**根据student_id获取所有符合条件的work实体
      * @param studentId student_id
@@ -101,9 +112,11 @@ public class WorkController {
     @GetMapping("/works_by_student")
     public ResponseEntity<J> getWorksByStudentControl(
             @RequestParam("status") WorkStatusEnum statusEnum,
-            @RequestParam("student_id") String studentId
+            @RequestParam("student_id") String studentId,
+            @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @RequestParam(value = "size", defaultValue = "100") Integer size
     ) {
-        return workService.getWorksByStudentService(studentId, statusEnum);
+        return workService.getPublicLegacyList(statusEnum, Map.of("student_id", studentId), page, size);
     }
     /**根据已登录的用户UUID获取符合发布者条件的work实体
      * @return List类型中包含所有符合条件的work实体*/
@@ -119,6 +132,15 @@ public class WorkController {
     ) {
         return workService.getWorksByMeService(request.getAttribute("uuid").toString(), statusEnum, reviewStatus, buildOwnerListFilters(keyword, school, club, student));
     }
+    /** 本人作品分页，状态与筛选可组合，但身份固定由令牌提供。 */
+    @PostMapping("/mine/page")
+    public ResponseEntity<J> myPage(HttpServletRequest request,
+            @RequestParam(value = "status", required = false) WorkStatusEnum status,
+            @RequestParam(value = "review_status", required = false) WorkReviewStatusEnum review,
+            @RequestBody PageRequestDto dto) {
+        return workService.getMyWorkPage(request.getAttribute("uuid").toString(), status, review, dto);
+    }
+
     /**根据已知UUID获取符合发布者条件的work实体
      * @param uuid uuid
      * @return List类型中包含所有符合条件的work实体*/
@@ -180,20 +202,20 @@ public class WorkController {
     @PutMapping("/edit-update")
     public ResponseEntity<J> updateOwnerWorkContentControl(
             HttpServletRequest request,
-            @RequestBody WorkModel requestModel
+            @RequestBody WorkCommands.Content requestModel
     ) {
-        return workService.updateOwnerWorkContent(request.getAttribute("uuid").toString(), requestModel);
+        return workService.updateOwnerWorkContent(request.getAttribute("uuid").toString(), requestModel.toModel());
     }
 
     /** 审核未通过的作品由作者修改完成后显式再次提审。 */
     @PostMapping("/review/resubmit")
     public ResponseEntity<J> resubmitRejectedWorkControl(
             HttpServletRequest request,
-            @RequestBody Map<String, String> body
+            @RequestBody WorkCommands.WorkId body
     ) {
         return workService.resubmitRejectedWork(
                 request.getAttribute("uuid").toString(),
-                body.get("work_id"));
+                body.work_id());
     }
 
     /**
@@ -202,12 +224,12 @@ public class WorkController {
     @PutMapping("/visibility")
     public ResponseEntity<J> updateOwnerWorkVisibilityControl(
             HttpServletRequest request,
-            @RequestBody Map<String, String> body
+            @RequestBody WorkCommands.Status body
     ) {
         return workService.updateOwnerWorkVisibility(
                 request.getAttribute("uuid").toString(),
-                body.get("work_id"),
-                WorkStatusEnum.valueOf(body.get("status")));
+                body.work_id(),
+                body.status());
     }
 
     /** 作者侧封面替换：只更新 work_cover_image 表 */
@@ -239,20 +261,19 @@ public class WorkController {
      * @param requestModel 作品的实体
      * @return 上传是否成功*/
     @PutMapping("/update")
-    @SuchWorkAnno(selectType = "model")
     public ResponseEntity<J> updateWorkControl(
             HttpServletRequest request,
-            @RequestBody WorkModel requestModel
+            @RequestBody WorkCommands.Content requestModel
     ) {
-        return workService.updateWorkService(request.getAttribute("uuid").toString(), requestModel);
+        return workCompatibilityService.update(request.getAttribute("uuid").toString(), requestModel.toModel());
     }
 
     /**删除作品
      * @param workId 作品ID
      * @return 删除是否成功*/
     @DeleteMapping("/delete")
-    @SuchWorkAnno(selectType = "id", index = 0)
-    public ResponseEntity<J> deleteWorkControl(@RequestParam("work_id") String workId) {
-        return workService.deleteWorkService(workId);
+    public ResponseEntity<J> deleteWorkControl(HttpServletRequest request, @RequestParam("work_id") String workId) {
+        // 操作者只取认证上下文；服务层校验真实归属并统一软删除。
+        return workDeletionService.delete(request.getAttribute("uuid").toString(), workId);
     }
 }

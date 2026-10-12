@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {LeftCircleOutlined, RightCircleOutlined} from "@ant-design/icons-vue";
+// 轮播控件使用组件内置导航。
 </script>
 
 <template>

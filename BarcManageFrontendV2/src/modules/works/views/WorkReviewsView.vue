@@ -76,7 +76,7 @@ async function approve(row: WorkRecord): Promise<void> {
       '通过审核',
       { confirmButtonText: '确认通过', cancelButtonText: '取消', type: 'success' },
     )
-    await reviewWork(row.id, true)
+    await reviewWork(row.id, true, row.content_revision ?? 0)
     ElMessage.success('审核已通过')
     await loadReviews()
   } catch (error) {
@@ -100,7 +100,7 @@ async function confirmReject(): Promise<void> {
 
   submitting.value = true
   try {
-    await reviewWork(rejectingWork.value.id, false, reason)
+    await reviewWork(rejectingWork.value.id, false, rejectingWork.value.content_revision ?? 0, reason)
     ElMessage.success('已记录审核未通过')
     rejectDialogVisible.value = false
     rejectingWork.value = null

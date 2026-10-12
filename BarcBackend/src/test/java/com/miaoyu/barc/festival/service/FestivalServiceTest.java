@@ -33,6 +33,7 @@ class FestivalServiceTest {
     @Mock
     private BackgroundImageMapper backgroundImageMapper;
 
+    @Mock private com.miaoyu.barc.api.mapper.CatalogMutationMapper catalogMutationMapper;
     @InjectMocks
     private FestivalService festivalService;
 
@@ -43,8 +44,8 @@ class FestivalServiceTest {
     void list_returnsBoundCount() {
         FestivalModel newYear = festival(MonthDayRangeUtils.toIndex(12, 1), MonthDayRangeUtils.toIndex(2, 28));
         newYear.setId("fest-ny");
-        when(festivalMapper.selectAll()).thenReturn(List.of(newYear));
-        when(backgroundImageMapper.countByFestival("fest-ny")).thenReturn(3);
+        newYear.setBound_backgrounds(3);
+        when(festivalMapper.selectAllWithCounts()).thenReturn(List.of(newYear));
 
         ResponseEntity<J> response = festivalService.listService("admin-uuid");
 

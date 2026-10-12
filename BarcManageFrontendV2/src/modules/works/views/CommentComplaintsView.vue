@@ -53,6 +53,8 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-pagination v-model:current-page="page" :page-size="20" :total="total"
+      layout="prev, pager, next, total" @current-change="load" />
 
     <!-- 查看评论内容弹窗 -->
     <el-dialog v-model="contentVisible" title="被投诉评论内容" width="500px">
@@ -105,6 +107,9 @@ interface DisplayComplaint extends ManageCommentComplaintRecord {
 }
 
 const loading = ref(false)
+// 评论投诉与其他反馈共用分页合同，第二页及更旧记录始终可访问。
+const page = ref(1)
+const total = ref(0)
 const complaints = ref<ManageCommentComplaintRecord[]>([])
 const displayComplaints = ref<DisplayComplaint[]>([])
 
@@ -121,7 +126,9 @@ const viewComment = ref<CommentContentResult | null>(null)
 async function load() {
   loading.value = true
   try {
-    complaints.value = await getCommentComplaints()
+    const result = await getCommentComplaints(page.value)
+    complaints.value = result.list
+    total.value = result.total
     // 为每个投诉获取投诉人昵称
     const enriched: DisplayComplaint[] = []
     for (const c of complaints.value) {
@@ -167,33 +174,11 @@ async function confirmProcess() {
 
   try {
     if (pendingAction.value === 'delete') {
-      // 先判断投诉目标是主评论还是子回复
-      let deleted = false
-      try {
-        const info = await getCommentById(targetId)
-        if (info) {
-          if (info.type === 'comment') {
-            await deleteWorkComment(targetId)
-            deleted = true
-          } else if (info.type === 'reply') {
-            await deleteWorkReply(targetId)
-            deleted = true
-          }
-        }
-        // info 为 null 说明已被删除，deleted 保持 false
-      } catch {
-        // getCommentById 失败，尝试直接删（兜底）
-      }
-      if (!deleted) {
-        // 内容已不存在或查询失败，尝试两种删除方式兜底
-        try { await deleteWorkComment(targetId); deleted = true } catch { /* */ }
-        if (!deleted) {
-          try { await deleteWorkReply(targetId); deleted = true } catch { /* */ }
-        }
-      }
-      if (!deleted) {
-        ElMessage.warning('评论删除失败，可能已被删除')
-      }
+      // 证据读取或删除失败时终止处理，避免把未成功删除的投诉标为完成。
+      const info = await getCommentById(targetId)
+      if (!info) throw new Error('评论不可读取，请核实后选择其他处理结果')
+      if (info.type === 'comment') await deleteWorkComment(targetId)
+      else await deleteWorkReply(targetId)
     }
 
     // 更新投诉状态

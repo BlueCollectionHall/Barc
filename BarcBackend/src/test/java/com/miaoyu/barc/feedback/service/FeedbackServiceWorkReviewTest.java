@@ -6,6 +6,9 @@ import com.miaoyu.barc.feedback.enumeration.FeedbackStatusEnum;
 import com.miaoyu.barc.feedback.enumeration.FeedbackTypeEnum;
 import com.miaoyu.barc.feedback.mapper.FeedbackMapper;
 import com.miaoyu.barc.feedback.model.FeedbackFormModel;
+import com.miaoyu.barc.feedback.model.FeedbackUpdateRequest;
+import com.miaoyu.barc.user.enumeration.UserIdentityEnum;
+import com.miaoyu.barc.email.service.MailOutbox;
 import com.miaoyu.barc.permission.ComparePermission;
 import com.miaoyu.barc.permission.PermissionConst;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
@@ -31,7 +34,7 @@ class FeedbackServiceWorkReviewTest {
     @Mock private UserBasicMapper userBasicMapper;
     @Mock private UserArchiveMapper userArchiveMapper;
     @Mock private WorkMapper workMapper;
-    @Mock private SendEmailUtils sendEmailUtils;
+    @Mock private MailOutbox mailOutbox;
     @Mock private FeedbackMapper feedbackMapper;
     @Mock private ComparePermission comparePermission;
 
@@ -43,21 +46,21 @@ class FeedbackServiceWorkReviewTest {
     void updateFeedbackService_WorkFeedback_ShouldUseGenericFeedbackUpdate() {
         UserArchiveModel manager = new UserArchiveModel();
         manager.setPermission(PermissionConst.SEC_MAINTAINER);
+        manager.setIdentity(UserIdentityEnum.MANAGER);
         FeedbackFormModel feedback = new FeedbackFormModel();
         feedback.setId("feedback-1");
         feedback.setType(FeedbackTypeEnum.WORK);
-        feedback.setStatus(FeedbackStatusEnum.COMPLETED);
+        feedback.setStatus(FeedbackStatusEnum.PENDING);
         feedback.setEcho("已处理作品投诉");
         when(feedbackMapper.selectById("feedback-1")).thenReturn(feedback);
         when(userArchiveMapper.selectByUuid("manager-1")).thenReturn(manager);
-        when(comparePermission.has(PermissionConst.SEC_MAINTAINER, PermissionConst.SEC_MAINTAINER)).thenReturn(true);
-        when(feedbackMapper.update(feedback)).thenReturn(true);
+        when(feedbackMapper.transition("feedback-1", FeedbackStatusEnum.PENDING, FeedbackStatusEnum.COMPLETED, "已处理作品投诉")).thenReturn(1);
 
-        ResponseEntity<J> response = feedbackService.updateFeedbackService("manager-1", feedback);
+        ResponseEntity<J> response = feedbackService.updateFeedbackService("manager-1", new FeedbackUpdateRequest("feedback-1", "已处理作品投诉", FeedbackStatusEnum.COMPLETED, FeedbackStatusEnum.PENDING));
 
         J body = response.getBody();
         assertNotNull(body);
         assertEquals(0, body.getCode());
-        verify(feedbackMapper).update(feedback);
+        verify(feedbackMapper).transition("feedback-1", FeedbackStatusEnum.PENDING, FeedbackStatusEnum.COMPLETED, "已处理作品投诉");
     }
 }

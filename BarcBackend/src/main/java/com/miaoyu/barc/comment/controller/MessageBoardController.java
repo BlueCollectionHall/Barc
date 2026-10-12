@@ -2,6 +2,7 @@ package com.miaoyu.barc.comment.controller;
 
 import com.miaoyu.barc.annotation.IgnoreAuth;
 import com.miaoyu.barc.comment.service.MessageBoardService;
+import com.miaoyu.barc.comment.model.MessageCommands;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.dto.PageRequestDto;
 import java.util.List;
@@ -22,19 +23,26 @@ public class MessageBoardController {
 
     // 说明（2026-10 清理）：原 @IgnoreAuth 的 GET /comment/message_board/all 已删除。
     // 它与下面的 /new 同表、同投影（MessageBoardModel 全字段），却无排序也无条数上限；
-    // 「全量」语义改由 /new 传足够大的 limit 表达。
+    // /new 有容量上限；完整历史通过 /page 翻页读取。
     @IgnoreAuth
     @GetMapping("/new")
     public ResponseEntity<J> getNewBoardMessagesControl(@RequestParam("limit") Integer limit) {
         return messageBoardService.getNewBoardMessagesService(limit);
     }
 
-    @GetMapping("/upload")
+    @PostMapping("/upload")
     public ResponseEntity<J> uploadBoardMessageControl(
             HttpServletRequest request,
-            @RequestParam("content") String content
+            @RequestBody MessageCommands.Create body
     ) {
-        return messageBoardService.uploadBoardMessageService(request.getAttribute("uuid").toString(), content);
+        return messageBoardService.uploadBoardMessageService(request.getAttribute("uuid").toString(), body.content());
+    }
+
+    /** 完整留言历史分页读取，最新若干条入口仍兼容。 */
+    @IgnoreAuth
+    @GetMapping("/page")
+    public ResponseEntity<J> getPage(@RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "20") Integer size) {
+        return messageBoardService.getPage(page, size);
     }
 
     @DeleteMapping("/delete")
@@ -64,13 +72,10 @@ public class MessageBoardController {
     @PutMapping("/admin/update")
     public ResponseEntity<J> adminUpdateControl(
             HttpServletRequest request,
-            @RequestBody Map<String, Object> body
+            @RequestBody MessageCommands.Update body
     ) {
-        String messageId = (String) body.get("message_id");
-        String content = (String) body.get("content");
-        String reason = (String) body.getOrDefault("reason", "");
         return messageBoardService.adminUpdateBoardMessageService(
-            request.getAttribute("uuid").toString(), messageId, content, reason
+            request.getAttribute("uuid").toString(), body.message_id(), body.content(), body.reason()
         );
     }
 
@@ -80,13 +85,10 @@ public class MessageBoardController {
     @DeleteMapping("/admin/batch_delete")
     public ResponseEntity<J> adminBatchDeleteControl(
             HttpServletRequest request,
-            @RequestBody Map<String, Object> body
+            @RequestBody MessageCommands.BatchDelete body
     ) {
-        @SuppressWarnings("unchecked")
-        List<String> messageIds = (List<String>) body.get("message_ids");
-        String reason = (String) body.getOrDefault("reason", "");
         return messageBoardService.adminBatchDeleteBoardMessagesService(
-            request.getAttribute("uuid").toString(), messageIds, reason
+            request.getAttribute("uuid").toString(), body.message_ids(), body.reason()
         );
     }
 }

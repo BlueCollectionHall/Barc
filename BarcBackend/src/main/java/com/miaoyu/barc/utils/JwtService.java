@@ -1,88 +1,60 @@
 package com.miaoyu.barc.utils;
 
 import com.miaoyu.barc.JwtConfig;
+import com.miaoyu.barc.exception.ApiException;
 import com.miaoyu.barc.response.TokenR;
-import com.miaoyu.barc.user.mapper.BarcNaigosUuidMapper;
-import com.miaoyu.barc.user.model.BarcNaigosUuidModel;
+import com.miaoyu.barc.response.UserR;
+import com.miaoyu.barc.user.mapper.UserBasicMapper;
+import com.miaoyu.barc.user.model.UserBasicModel;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
-import io.jsonwebtoken.security.SignatureException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
 import javax.crypto.SecretKey;
-import java.util.*;
+import java.util.Date;
+import java.util.UUID;
 
+/** Barc 令牌必须具有完整来源、用户与会话版本；外部账号通过登录交换签发本服务令牌。 */
 @Service
 public class JwtService {
     private final JwtConfig jwtConfig;
-    @Autowired
-    public JwtService(JwtConfig jwtConfig) {
-        this.jwtConfig = jwtConfig;
-    }
-    @Autowired
-    private BarcNaigosUuidMapper barcNaigosUuidMapper;
+    @Autowired private UserBasicMapper userBasicMapper;
 
-    private String getKey() {
-        return jwtConfig.getKey();
-    }
-    private String getNaigosKey() {
-        return jwtConfig.getNaigos_key();
-    }
+    public JwtService(JwtConfig jwtConfig) { this.jwtConfig = jwtConfig; }
+
+    private SecretKey key() { return Keys.hmacShaKeyFor(Decoders.BASE64.decode(jwtConfig.getKey())); }
 
     public String jwtSigned(String uuid) {
-        String issuer = "com.miaoyu.barc";
-        SecretKey key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(this.getKey()));
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("uuid", uuid);
-        claims.put("service", "barc");
-        return Jwts.builder()
-                .signWith(key, Jwts.SIG.HS256)
-                .issuer(issuer)
-                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24 * 15))
-                .id(UUID.randomUUID().toString())
-                .issuedAt(new Date())
-                .claims(claims)
-                .compact();
+        UserBasicModel user = userBasicMapper.selectByUuid(uuid);
+        if (!active(user)) throw new ApiException(new UserR().insufficientAccountPermission());
+        return Jwts.builder().signWith(key(), Jwts.SIG.HS256).issuer("com.miaoyu.barc")
+                .expiration(new Date(System.currentTimeMillis() + 1000L * 60 * 60 * 24 * 15))
+                .id(UUID.randomUUID().toString()).issuedAt(new Date())
+                .claim("uuid", uuid).claim("service", "barc")
+                .claim("auth_version", version(user)).compact();
     }
 
+    /** 同时接受宪法格式 Token {jwt} 和旧客户端裸 JWT，解析异常永远转为认证失败。 */
     public J jwtParser(String token) {
-        Claims payload;
-        SecretKey key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(this.getKey()));
-        try{
-            payload = Jwts.parser()
-                    .verifyWith(key)
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
-        } catch (ExpiredJwtException e){
-            System.out.println("ExpiredJwtException" + e.getMessage());
-            return new TokenR().token(false, "令牌已过期！", null);
-        } catch (SignatureException e) {
-            System.out.println("SignatureException" + e.getMessage());
-            return new TokenR().token(false, "令牌鉴签失效！", null);
-        } catch (MalformedJwtException e) {
-            System.out.println("MalformedJwtException" + e.getMessage());
-            return new TokenR().token(false, "令牌错误！", null);
-        } catch (UnsupportedJwtException e) {
-            System.out.println("UnsupportedJwtException" + e.getMessage());
-            return new TokenR().token(false, "令牌解算失效！", null);
-        } catch (JwtException e){
-            System.out.println("JwtException" + e.getMessage());
-            return new TokenR().token(false, "令牌无效！", null);
-        }
-        String[] issuers = payload.getIssuer().split("\\.");
-        if (issuers.length < 2) {
-            return new TokenR().token(false, "未知令牌来源！", null);
-        }
-        if (issuers[2].equals("naigos")) {
-            BarcNaigosUuidModel barcNaigosUuid = barcNaigosUuidMapper.selectByNaigosUuid(payload.get("uuid").toString());
-            if (Objects.isNull(barcNaigosUuid)) {
-                return new TokenR().token(false, "Naigos服务Token令牌无法互认或记录不存在！", null);
-            }
-            return new TokenR().token(true, null, barcNaigosUuid.getUuid());
-        }
-        return new TokenR().token(true, null, payload.get("uuid").toString());
+        if (token == null || token.isBlank()) return invalid();
+        String normalized = token.trim();
+        if (normalized.regionMatches(true, 0, "Token ", 0, 6)) normalized = normalized.substring(6).trim();
+        try {
+            Claims claims = Jwts.parser().verifyWith(key()).requireIssuer("com.miaoyu.barc")
+                    .require("service", "barc").build().parseSignedClaims(normalized).getPayload();
+            String uuid = claims.get("uuid", String.class);
+            Number claimVersion = claims.get("auth_version", Number.class);
+            if (uuid == null || uuid.isBlank() || claimVersion == null || claims.getExpiration() == null) return invalid();
+            UserBasicModel user = userBasicMapper.selectByUuid(uuid);
+            if (!active(user) || claimVersion.longValue() != version(user)) return invalid();
+            return new TokenR().token(true, null, uuid);
+        } catch (JwtException | IllegalArgumentException failure) { return invalid(); }
     }
+
+    private boolean active(UserBasicModel user) {
+        return user != null && (user.getSafe_level() == null || user.getSafe_level() >= 0);
+    }
+    private long version(UserBasicModel user) { return user.getAuth_version() == null ? 0L : user.getAuth_version(); }
+    private J invalid() { return new TokenR().token(false, "登录状态已失效，请重新登录", null); }
 }

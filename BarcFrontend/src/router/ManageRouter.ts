@@ -8,6 +8,8 @@ export default {
   component: ManageView,
   redirect: {name: "ManageWork"},
   children: [
+    // 本人申请记录独立保留，作品下架或认领完成后仍可查看。
+    {path: "claims", name: "ManageClaims", component: () => import("@/components/Manage/ManageClaimsComp.vue")},
     {
       path: "work",
       name: "ManageWork",

@@ -35,7 +35,7 @@ class WorkManageReviewServiceTest {
     @Mock private WorkMapper workMapper;
     @Mock private WorkReviewMapper workReviewMapper;
     @Mock private WorkOperationLogMapper workOperationLogMapper;
-    @Mock private SendEmailUtils sendEmailUtils;
+    @Mock private com.miaoyu.barc.email.service.MailOutbox mailOutbox;
 
     @InjectMocks
     private WorkManageService service;
@@ -44,39 +44,40 @@ class WorkManageReviewServiceTest {
     @DisplayName("通过上传审核应更新审核记录、写日志且不发送邮件")
     void reviewWork_WhenApproved_ShouldPersistSilently() {
         WorkModel work = pendingWork();
-        when(workMapper.selectById("work-1")).thenReturn(work);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(work);
         when(workReviewMapper.review(
                 "work-1", WorkReviewStatusEnum.APPROVED, null, "manager-1")).thenReturn(true);
 
-        ResponseEntity<J> response = service.reviewWork("manager-1", "work-1", true, null);
+        when(workOperationLogMapper.insert(any())).thenReturn(1);
+        ResponseEntity<J> response = service.reviewWork("manager-1", "work-1", true, null, 0L);
 
         assertSuccess(response);
         verify(workReviewMapper).review(
                 "work-1", WorkReviewStatusEnum.APPROVED, null, "manager-1");
         verify(workOperationLogMapper).insert(any(WorkOperationLogModel.class));
-        verifyNoInteractions(sendEmailUtils);
+        verifyNoInteractions(mailOutbox);
     }
 
     @Test
     @DisplayName("拒绝审核必须填写用户可见原因")
     void reviewWork_WhenRejectedWithoutReason_ShouldRejectBeforeWrite() {
-        when(workMapper.selectById("work-1")).thenReturn(pendingWork());
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(pendingWork());
 
-        ResponseEntity<J> response = service.reviewWork("manager-1", "work-1", false, "   ");
+        ResponseEntity<J> response = service.reviewWork("manager-1", "work-1", false, "   ", 0L);
 
         J body = response.getBody();
         assertNotNull(body);
         assertEquals(1, body.getCode());
         verify(workReviewMapper, never()).review(any(), any(), any(), any());
         verify(workOperationLogMapper, never()).insert(any());
-        verifyNoInteractions(sendEmailUtils);
+        verifyNoInteractions(mailOutbox);
     }
 
     @Test
     @DisplayName("上传审核权限必须使用SEC_MAINTAINER严格位检查")
     void reviewWork_ShouldDeclareStrictPermissionBitCheck() throws NoSuchMethodException {
         Method method = WorkManageService.class.getMethod(
-                "reviewWork", String.class, String.class, boolean.class, String.class);
+                "reviewWork", String.class, String.class, boolean.class, String.class, Long.class);
         RequireUserAndPermissionAnno annotation = method.getAnnotation(RequireUserAndPermissionAnno.class);
 
         assertNotNull(annotation);

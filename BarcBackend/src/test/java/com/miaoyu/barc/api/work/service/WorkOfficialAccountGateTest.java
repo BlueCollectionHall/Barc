@@ -18,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -43,6 +44,8 @@ class WorkOfficialAccountGateTest {
     private WorkOperationLogMapper workOperationLogMapper;
     @Mock
     private OfficialAccountService officialAccountService;
+    @Mock
+    private com.miaoyu.barc.api.mapper.StudentMapper studentMapper;
 
     @InjectMocks
     private WorkService workService;
@@ -56,11 +59,10 @@ class WorkOfficialAccountGateTest {
     void uploadWork_WhenOfficialUnbound_ShouldRejectWithoutInsert() {
         when(officialAccountService.findBoundUuid(OfficialAccountEnum.COLLECTION_ASSISTANT)).thenReturn(null);
 
-        ResponseEntity<J> response = workService.uploadWorkService(
-                OPERATOR_UUID, null, collectedWorkForm(), null, null);
-
-        assertEquals(1, response.getBody().getCode());
-        assertTrue(String.valueOf(response.getBody().getData()).contains("官方账号未配置"));
+        validStudent();
+        // 文件和学生先验证；业务失败必须抛出异常以回滚完整上传事务。
+        assertThrows(com.miaoyu.barc.exception.ApiException.class, () -> workService.uploadWorkService(
+                OPERATOR_UUID, null, collectedWorkForm(), cover(), null));
         verify(workMapper, never()).insert(any());
     }
 
@@ -70,7 +72,9 @@ class WorkOfficialAccountGateTest {
         when(officialAccountService.findBoundUuid(OfficialAccountEnum.COLLECTION_ASSISTANT)).thenReturn(BOUND_UUID);
         when(workMapper.insert(any())).thenReturn(false);
 
-        workService.uploadWorkService(OPERATOR_UUID, null, collectedWorkForm(), null, null);
+        validStudent();
+        assertThrows(com.miaoyu.barc.exception.ApiException.class,
+                () -> workService.uploadWorkService(OPERATOR_UUID, null, collectedWorkForm(), cover(), null));
 
         ArgumentCaptor<WorkModel> captor = ArgumentCaptor.forClass(WorkModel.class);
         verify(workMapper).insert(captor.capture());
@@ -85,7 +89,9 @@ class WorkOfficialAccountGateTest {
 
         WorkModel form = collectedWorkForm();
         form.setIs_claim(true);
-        workService.uploadWorkService(OPERATOR_UUID, null, form, null, null);
+        validStudent();
+        assertThrows(com.miaoyu.barc.exception.ApiException.class,
+                () -> workService.uploadWorkService(OPERATOR_UUID, null, form, cover(), null));
 
         ArgumentCaptor<WorkModel> captor = ArgumentCaptor.forClass(WorkModel.class);
         verify(workMapper).insert(captor.capture());
@@ -98,7 +104,7 @@ class WorkOfficialAccountGateTest {
     @Test
     @DisplayName("撤销认领：官方账号未配置时必须报错且不改动作品")
     void revokeClaim_WhenOfficialUnbound_ShouldRejectWithoutUpdate() {
-        when(workMapper.selectById("work-1")).thenReturn(claimedWork());
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(claimedWork());
         when(officialAccountService.findBoundUuid(OfficialAccountEnum.COLLECTION_ASSISTANT)).thenReturn(null);
 
         ResponseEntity<J> response = workManageService.revokeClaim(OPERATOR_UUID, "work-1");
@@ -111,17 +117,16 @@ class WorkOfficialAccountGateTest {
     @Test
     @DisplayName("撤销认领：官方账号已配置时 author 必须回到绑定账号 UUID")
     void revokeClaim_WhenOfficialBound_ShouldResetToBoundUuid() {
-        when(workMapper.selectById("work-1")).thenReturn(claimedWork());
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(claimedWork());
         when(officialAccountService.findBoundUuid(OfficialAccountEnum.COLLECTION_ASSISTANT)).thenReturn(BOUND_UUID);
-        when(workMapper.update(any())).thenReturn(true);
+        when(workMapper.updateAttribution("work-1", BOUND_UUID, false)).thenReturn(true);
+        when(workOperationLogMapper.insert(any())).thenReturn(1);
 
         ResponseEntity<J> response = workManageService.revokeClaim(OPERATOR_UUID, "work-1");
 
         assertEquals(0, response.getBody().getCode());
-        ArgumentCaptor<WorkModel> captor = ArgumentCaptor.forClass(WorkModel.class);
-        verify(workMapper).update(captor.capture());
-        assertEquals(BOUND_UUID, captor.getValue().getAuthor());
-        assertFalse(captor.getValue().getIs_claim());
+        verify(workMapper).updateAttribution("work-1", BOUND_UUID, false);
+        verify(workMapper, never()).update(any());
     }
 
     // ==================== 工具 ====================
@@ -132,7 +137,17 @@ class WorkOfficialAccountGateTest {
         form.setIs_claim(false);
         form.setAuthor_nickname("站外原作者");
         form.setTitle("搬运收录测试");
+        form.setStudent("student");
         return form;
+    }
+
+    /** 使用真实图片头，确保测试走到官方账号门禁而非格式校验。 */
+    private org.springframework.mock.web.MockMultipartFile cover() {
+        return new org.springframework.mock.web.MockMultipartFile("cover_image", "a.png", "image/png", com.miaoyu.barc.security.TestImages.png());
+    }
+
+    private void validStudent() {
+        when(studentMapper.selectById("student")).thenReturn(new com.miaoyu.barc.api.model.StudentModel());
     }
 
     /** 一篇已被认领的作品 */

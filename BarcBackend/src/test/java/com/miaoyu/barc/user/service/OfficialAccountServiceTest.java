@@ -271,7 +271,7 @@ class OfficialAccountServiceTest {
         vo.setNickname("蔚蓝收录认领助手");
         when(userArchiveMapper.searchByKeyword("works")).thenReturn(List.of(vo));
 
-        assertEquals(List.of(vo), searchBody("works"));
+        assertEquals(List.of(com.miaoyu.barc.user.model.vo.UserSearchView.from(vo)), searchBody("works"));
         verify(userArchiveMapper).searchByKeyword("works");
     }
 
@@ -289,10 +289,11 @@ class OfficialAccountServiceTest {
     }
 
     @SuppressWarnings("unchecked")
-    private List<UserInfoVo> searchBody(String keyword) {
+    private List<com.miaoyu.barc.user.model.vo.UserSearchView> searchBody(String keyword) {
+        org.springframework.test.util.ReflectionTestUtils.setField(officialAccountService, "userSearchService", new UserSearchService(userArchiveMapper));
         ResponseEntity<J> response = officialAccountService.searchUserService(OPERATOR_UUID, keyword);
         assertEquals(0, response.getBody().getCode());
-        return (List<UserInfoVo>) response.getBody().getData();
+        return (List<com.miaoyu.barc.user.model.vo.UserSearchView>) response.getBody().getData();
     }
 
     private OfficialAccountModel boundRow(String userUuid, boolean dangling) {

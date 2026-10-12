@@ -1,7 +1,15 @@
+import type { EntityDraft } from './entityDraft'
 import { http } from '@/shared/api/http'
 import type { PageResult } from './school'
 
 export interface Student {
+  // 原始 key 只用于写入，签名 URL 只用于展示。
+  avatar_square_key?: string
+  avatar_square_url?: string
+  avatar_rectangle_key?: string
+  avatar_rectangle_url?: string
+  body_image_key?: string
+  body_image_url?: string
   id: string
   cn_name: string
   jp_name?: string
@@ -16,7 +24,7 @@ export interface Student {
 }
 
 export function fetchStudentList(clubId: string, keyword: string, page: number, size: number): Promise<PageResult<Student>> {
-  const params: Record<string, any> = { keyword, page, size }
+  const params: Record<string, string | number> = { keyword, page, size }
   if (clubId) params.club_id = clubId
   return http.get<PageResult<Student>>('/api/student/list', { params })
 }
@@ -25,11 +33,11 @@ export function fetchStudentById(id: string): Promise<Student> {
   return http.get<Student>(`/api/student/${id}`)
 }
 
-export function createStudent(payload: Student, clubId: string): Promise<Student> {
+export function createStudent(payload: EntityDraft, clubId: string): Promise<Student> {
   return http.post<Student>('/api/student', payload, { params: { club_id: clubId } })
 }
 
-export function updateStudent(id: string, payload: Partial<Student>, clubId?: string): Promise<Student> {
+export function updateStudent(id: string, payload: Partial<EntityDraft>, clubId?: string): Promise<Student> {
   return http.put<Student>(`/api/student/${id}`, payload, { params: clubId ? { club_id: clubId } : undefined })
 }
 

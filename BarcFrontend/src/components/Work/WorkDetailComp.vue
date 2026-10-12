@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {sanitizeHtmlContent} from '@/utils/richText';
 import {type LocationQuery, useRoute} from "vue-router";
 import {onMounted, ref, watch} from "vue";
 import type {WorkImpl} from "@/interfaces/WorkImpl.ts";
@@ -25,6 +26,7 @@ import WorkCommentSection from "@/components/Work/WorkCommentSection.vue";
 import {useUserPinia} from "@/stores/UserPinia.ts";
 import {storeToRefs} from "pinia";
 import type {FeedBackImpl} from "@/interfaces/FeedbackImpl.ts";
+import {submitWorkClaim, fetchMyClaims, claimStatusLabel, type ClaimProgress} from "@/utils/workClaimApi";
 import {fetchCommentCountByWork} from "@/utils/commentApi.ts";
 
 const route = useRoute();
@@ -57,7 +59,7 @@ const fetchWork = async (work_id: string) => {
   const config = token ? {params: {work_id}, headers: {Authorization: token}} : {params: {work_id}};
   await baseHttp.get("/api/work/only", config)
     .then(res => {
-      const data: ResponseImpl = res.data;
+      const data: ResponseImpl<WorkImpl> = res.data;
       if (data.code === 0) {
         work.value = data.data;
         if (!work.value) {
@@ -106,7 +108,7 @@ const handleToggleLike = async () => {
 const fetchWorkImages = async (work_id: string) => {
   await baseHttp.get("/api/work/image/images_by_work", {params: {work_id}})
     .then(res => {
-      const data: ResponseImpl = res.data;
+      const data: ResponseImpl<string[]> = res.data;
       if (data.code === 0) {
         workImages.value = data.data;
       } else infoMessage(data.data);
@@ -143,7 +145,7 @@ const fetchWorkAuthor = async () => {
   }
   await baseHttp.get("/user/current_by_uuid", {params: {uuid: work.value.author}})
     .then(res => {
-      const data: ResponseImpl = res.data;
+      const data: ResponseImpl<UserArchiveImpl> = res.data;
       if (data.code === 0) {
         authorArchive.value = data.data;
       } else infoMessage(data.data);
@@ -160,7 +162,7 @@ const fetchWorkUploader = async () => {
   }
   await baseHttp.get("/user/current_by_uuid", {params: {uuid: work.value.uploader}})
     .then(res => {
-      const data: ResponseImpl = res.data;
+      const data: ResponseImpl<UserArchiveImpl> = res.data;
       if (data.code === 0) {
         uploaderArchive.value = data.data;
       } else infoMessage(data.data);
@@ -207,17 +209,17 @@ const handleOk = async () => {
     errorMessage("反馈内容不能为空");
     return;
   }
-  console.log('Feedback Form Content: ', feedbackForm.value);
   await baseHttp.post("/feedback/upload", feedbackForm.value)
     .then(res => {
-      const data: ResponseImpl = res.data;
+      const data: ResponseImpl<string> = res.data;
       if (data.code === 0) {
         successMessage(data.data);
+        open.value = false;
         feedbackForm.value.content = "";
         feedbackForm.value.email = "";
         feedbackForm.value.target_id = "";
       } else {
-        successMessage(data.msg);
+        errorMessage(data.msg);
       }
     }).catch(e => {
       console.error(e);
@@ -227,6 +229,32 @@ const handleOk = async () => {
 
 // 作品认领相关的程序
 const claimOpen = ref<boolean>(false);
+const claimStatement = ref("");
+const claimSubmitting = ref(false);
+const claimProgress = ref<ClaimProgress | null>(null);
+
+/** 打开时先读取本人已有申请，避免重复提交；所有人只能看到自己的进度。 */
+const openClaim = async () => {
+  if (!localStorage.token) { infoMessage("请先登录后申请认领"); return; }
+  if (!work.value) return;
+  claimOpen.value = true;
+  try { claimProgress.value = (await fetchMyClaims(1, work.value.id)).list[0] ?? null; }
+  catch (error) { errorMessage(error instanceof Error ? error.message : "查询申请进度失败"); }
+};
+
+const submitClaim = async () => {
+  if (!work.value || claimSubmitting.value) return;
+  if (claimProgress.value?.status === "PENDING") { infoMessage("已有待审核申请"); return; }
+  if (!claimStatement.value.trim()) { infoMessage("请填写认领说明"); return; }
+  claimSubmitting.value = true;
+  try {
+    await submitWorkClaim(work.value.id, claimStatement.value.trim());
+    successMessage("申请已提交，可在认领记录中查看进度");
+    claimProgress.value = (await fetchMyClaims(1, work.value.id)).list[0] ?? null;
+    claimStatement.value = "";
+  } catch (error) { errorMessage(error instanceof Error ? error.message : "提交失败"); }
+  finally { claimSubmitting.value = false; }
+};
 
 </script>
 
@@ -240,8 +268,12 @@ const claimOpen = ref<boolean>(false);
     <br/>
     <a-textarea v-model:value="feedbackForm.content"/>
   </a-modal>
-  <a-modal v-model="claimOpen" title="您要认领这个作品吗？" ok-text="认领" cancel-text="关闭">
-    暂时缺少功能接口
+  <a-modal v-model:open="claimOpen" title="作品认领" ok-text="提交申请" cancel-text="关闭"
+    :confirm-loading="claimSubmitting" :ok-button-props="{disabled: claimProgress?.status === 'PENDING'}" @ok="submitClaim">
+    <p v-if="claimProgress">最近申请：{{claimStatusLabel[claimProgress.status]}} {{claimProgress.result_reason}}</p>
+    <p>请说明您与原作品作者的关系，并提供可以核实的原作地址或署名信息。</p>
+    <a-textarea v-model:value="claimStatement" :maxlength="2000" :rows="4" placeholder="认领说明（最多2000字）" />
+    <RouterLink :to="{name: 'ManageClaims'}">查看我的全部认领记录</RouterLink>
   </a-modal>
   <div class="work_detail_container" v-if="work">
     <div class="title">
@@ -273,7 +305,7 @@ const claimOpen = ref<boolean>(false);
             @click="handleToggleLike"
           ><HeartFilled v-if="work.liked_by_current_user" /><HeartOutlined v-else />{{work.like_count}}</div>
           <div class="comment_box item" @click="commentVisible = true"><MessageOutlined />{{commentCount}}</div>
-          <div class="claim_box item" v-if="!work.is_claim" @click="claimOpen = true"><FlagOutlined />认领</div>
+          <div class="claim_box item" v-if="!work.is_claim" @click="openClaim"><FlagOutlined />认领</div>
           <div class="feedback_box item" @click="open = true"><AlertOutlined />投诉反馈</div>
         </div>
       </div>
@@ -281,7 +313,7 @@ const claimOpen = ref<boolean>(false);
     <div class="view_items">
       <div :class="`item ${item.value === viewSelected? 'active': 'no_active'}`" v-for="item in viewItemList" :key="item.value" @click="viewSelected = item.value">{{item.label}}</div>
     </div>
-    <div class="content" v-html="work.content" v-if="viewSelected === 'view'"/>
+    <div class="content" v-html="sanitizeHtmlContent(work.content)" v-if="viewSelected === 'view'"/>
     <div class="content images" v-else-if="viewSelected === 'image' && workImages.length > 0">
       <a-image :width="200" v-for="(item, index) in workImages" :key="index" :src="item"/>
     </div>

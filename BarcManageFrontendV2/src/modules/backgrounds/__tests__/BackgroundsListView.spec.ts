@@ -169,7 +169,7 @@ describe('BackgroundsListView', () => {
   })
 
   it('loads the festival options from the festival module', async () => {
-    const wrapper = mount(BackgroundsListView)
+    mount(BackgroundsListView)
 
     await flushPromises()
 

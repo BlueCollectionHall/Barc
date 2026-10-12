@@ -1,6 +1,9 @@
 package com.miaoyu.barc.friendlink.service;
 
 import com.miaoyu.barc.api.service.CosGcService;
+import com.miaoyu.barc.api.file.service.ObjectStorageService;
+import com.miaoyu.barc.exception.ApiException;
+import com.miaoyu.barc.security.TestImages;
 import com.miaoyu.barc.friendlink.mapper.FriendLinkMapper;
 import com.miaoyu.barc.friendlink.model.FriendLinkModel;
 import com.miaoyu.barc.utils.J;
@@ -42,6 +45,8 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class FriendLinkServiceTest {
+    @Mock private ObjectStorageService objectStorage;
+    @Mock private com.miaoyu.barc.api.mapper.CatalogMutationMapper catalogMutationMapper;
 
     @Mock
     private FriendLinkMapper friendLinkMapper;
@@ -61,14 +66,16 @@ class FriendLinkServiceTest {
     @BeforeEach
     void setUp() {
         friendLinkService = new FriendLinkService();
+        ReflectionTestUtils.setField(friendLinkService, "catalogMutationMapper", catalogMutationMapper);
         // 字段注入（生产用 @Autowired，测试直接反射注入，避免引入 Spring 上下文）
         ReflectionTestUtils.setField(friendLinkService, "friendLinkMapper", friendLinkMapper);
         ReflectionTestUtils.setField(friendLinkService, "cosService", cosService);
+        ReflectionTestUtils.setField(friendLinkService, "objectStorage", objectStorage);
         ReflectionTestUtils.setField(friendLinkService, "cosConfig", cosConfig);
         ReflectionTestUtils.setField(friendLinkService, "cosGcService", cosGcService);
         ReflectionTestUtils.setField(friendLinkService, "imageUrlResolver", imageUrlResolver);
 
-        image = new MockMultipartFile("file", "Photo.png", "image/png", new byte[]{1, 2, 3});
+        image = new MockMultipartFile("file", "Photo.png", "image/png", TestImages.png());
     }
 
     // ============ 上传 ============
@@ -105,14 +112,14 @@ class FriendLinkServiceTest {
     @Test
     @DisplayName("上传 logo - 成功，命名符合 friendlink/logo/{图片名}_{uuid第一段}_{秒级}.扩展名")
     void upload_success() {
-        when(cosService.uploadFileWithKey(eq(image), anyString(), eq(CosBucketConfigEnum.image)))
-                .thenAnswer(inv -> new J(0, "文件上传成功", inv.getArgument(1)));
+        when(objectStorage.uploadWithKey(eq("admin-uuid"), eq(image), anyString(), eq(1024L * 1024)))
+                .thenAnswer(inv -> inv.getArgument(2));
 
         ResponseEntity<J> response = friendLinkService.uploadService("admin-uuid", image);
 
         assertEquals(0, response.getBody().getCode());
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(cosService).uploadFileWithKey(eq(image), captor.capture(), eq(CosBucketConfigEnum.image));
+        verify(objectStorage).uploadWithKey(eq("admin-uuid"), eq(image), captor.capture(), eq(1024L * 1024));
         String objectKey = captor.getValue();
         assertTrue(objectKey.startsWith("friendlink/logo/"), objectKey);
         assertTrue(objectKey.endsWith(".png"), objectKey);
@@ -124,55 +131,54 @@ class FriendLinkServiceTest {
     @DisplayName("上传 logo - 文件名含路径与非法字符时被清洗")
     void upload_sanitizeFileName() {
         MockMultipartFile messy = new MockMultipartFile(
-                "file", "C:\\Users\\me\\My Cover!.png", "image/png", new byte[]{1});
-        when(cosService.uploadFileWithKey(eq(messy), anyString(), eq(CosBucketConfigEnum.image)))
-                .thenAnswer(inv -> new J(0, "文件上传成功", inv.getArgument(1)));
+                "file", "C:\\Users\\me\\My Cover!.png", "image/png", TestImages.png());
+        when(objectStorage.uploadWithKey(eq("admin-uuid"), eq(messy), anyString(), eq(1024L * 1024)))
+                .thenAnswer(inv -> inv.getArgument(2));
 
         friendLinkService.uploadService("admin-uuid", messy);
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(cosService).uploadFileWithKey(eq(messy), captor.capture(), eq(CosBucketConfigEnum.image));
+        verify(objectStorage).uploadWithKey(eq("admin-uuid"), eq(messy), captor.capture(), eq(1024L * 1024));
         assertTrue(captor.getValue().matches("friendlink/logo/My_Cover_[0-9A-F]{8}_\\d{10}\\.png"),
                 captor.getValue());
     }
 
     @Test
-    @DisplayName("上传 logo - 无扩展名时不拼点号")
+    @DisplayName("上传 logo - 无扩展名时按真实图片格式补全扩展名")
     void upload_noExtension() {
         MockMultipartFile noExt = new MockMultipartFile(
-                "file", "cover", "image/png", new byte[]{1});
-        when(cosService.uploadFileWithKey(eq(noExt), anyString(), eq(CosBucketConfigEnum.image)))
-                .thenAnswer(inv -> new J(0, "文件上传成功", inv.getArgument(1)));
+                "file", "cover", "image/png", TestImages.png());
+        when(objectStorage.uploadWithKey(eq("admin-uuid"), eq(noExt), anyString(), eq(1024L * 1024)))
+                .thenAnswer(inv -> inv.getArgument(2));
 
         friendLinkService.uploadService("admin-uuid", noExt);
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(cosService).uploadFileWithKey(eq(noExt), captor.capture(), eq(CosBucketConfigEnum.image));
-        assertTrue(captor.getValue().matches("friendlink/logo/cover_[0-9A-F]{8}_\\d{10}"), captor.getValue());
+        verify(objectStorage).uploadWithKey(eq("admin-uuid"), eq(noExt), captor.capture(), eq(1024L * 1024));
+        assertTrue(captor.getValue().matches("friendlink/logo/cover_[0-9A-F]{8}_\\d{10}\\.png"), captor.getValue());
     }
 
     @Test
     @DisplayName("上传 logo - 图片名清洗后为空时回落为 logo")
     void upload_emptyBaseNameFallsBackToLogo() {
         MockMultipartFile weird = new MockMultipartFile(
-                "file", "   .png", "image/png", new byte[]{1});
-        when(cosService.uploadFileWithKey(eq(weird), anyString(), eq(CosBucketConfigEnum.image)))
-                .thenAnswer(inv -> new J(0, "文件上传成功", inv.getArgument(1)));
+                "file", "   .png", "image/png", TestImages.png());
+        when(objectStorage.uploadWithKey(eq("admin-uuid"), eq(weird), anyString(), eq(1024L * 1024)))
+                .thenAnswer(inv -> inv.getArgument(2));
 
         friendLinkService.uploadService("admin-uuid", weird);
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(cosService).uploadFileWithKey(eq(weird), captor.capture(), eq(CosBucketConfigEnum.image));
+        verify(objectStorage).uploadWithKey(eq("admin-uuid"), eq(weird), captor.capture(), eq(1024L * 1024));
         assertTrue(captor.getValue().matches("friendlink/logo/logo_[0-9A-F]{8}_\\d{10}\\.png"), captor.getValue());
     }
 
     @Test
     @DisplayName("上传 logo - COS 上传失败时原样透出错误")
     void upload_cosFail() {
-        when(cosService.uploadFileWithKey(eq(image), anyString(), eq(CosBucketConfigEnum.image)))
-                .thenReturn(new J(1, "文件上传失败", null));
-        ResponseEntity<J> response = friendLinkService.uploadService("admin-uuid", image);
-        assertEquals(1, response.getBody().getCode());
+        when(objectStorage.uploadWithKey(eq("admin-uuid"), eq(image), anyString(), eq(1024L * 1024)))
+                .thenThrow(new ApiException(new J(1, "文件上传失败", null)));
+        assertThrows(ApiException.class, () -> friendLinkService.uploadService("admin-uuid", image));
     }
 
     // ============ 列表 ============
@@ -287,10 +293,8 @@ class FriendLinkServiceTest {
         when(friendLinkMapper.selectMaxSortOrder()).thenReturn(0);
         when(friendLinkMapper.insert(any(FriendLinkModel.class))).thenReturn(0);
 
-        ResponseEntity<J> response = friendLinkService.createService(
-                "admin-uuid", item("A 站", "https://a.com", null, null));
-
-        assertEquals(1, response.getBody().getCode());
+        assertThrows(ApiException.class, () -> friendLinkService.createService(
+                "admin-uuid", item("A 站", "https://a.com", null, null)));
     }
 
     // ============ 修改 ============
@@ -378,10 +382,8 @@ class FriendLinkServiceTest {
                 .thenReturn(model("id1", "A 站", "https://a.com", null, 1));
         when(friendLinkMapper.update(any(FriendLinkModel.class))).thenReturn(0);
 
-        ResponseEntity<J> response = friendLinkService.updateService(
-                "admin-uuid", "id1", item("A 站", "https://a.com", null, null));
-
-        assertEquals(1, response.getBody().getCode());
+        assertThrows(ApiException.class, () -> friendLinkService.updateService(
+                "admin-uuid", "id1", item("A 站", "https://a.com", null, null)));
     }
 
     // ============ 上移 / 下移 ============
@@ -397,7 +399,6 @@ class FriendLinkServiceTest {
     @Test
     @DisplayName("上移 - 记录不存在返回失败")
     void move_notFound() {
-        when(friendLinkMapper.selectById("id9")).thenReturn(null);
         ResponseEntity<J> response = friendLinkService.moveService("admin-uuid", "id9", "up");
         assertEquals(1, response.getBody().getCode());
     }
@@ -405,8 +406,7 @@ class FriendLinkServiceTest {
     @Test
     @DisplayName("上移 - 已在最前时返回失败且不写库")
     void move_upAtTop() {
-        when(friendLinkMapper.selectById("id1")).thenReturn(model("id1", "A", "https://a.com", null, 1));
-        when(friendLinkMapper.selectPrevBySortOrder(1)).thenReturn(null);
+        when(friendLinkMapper.selectAll()).thenReturn(List.of(model("id1", "A", "https://a.com", null, 1)));
 
         ResponseEntity<J> response = friendLinkService.moveService("admin-uuid", "id1", "up");
 
@@ -419,8 +419,7 @@ class FriendLinkServiceTest {
     @Test
     @DisplayName("下移 - 已在最后时返回失败且不写库")
     void move_downAtBottom() {
-        when(friendLinkMapper.selectById("id2")).thenReturn(model("id2", "B", "https://b.com", null, 2));
-        when(friendLinkMapper.selectNextBySortOrder(2)).thenReturn(null);
+        when(friendLinkMapper.selectAll()).thenReturn(List.of(model("id2", "B", "https://b.com", null, 2)));
 
         ResponseEntity<J> response = friendLinkService.moveService("admin-uuid", "id2", "down");
 
@@ -433,11 +432,10 @@ class FriendLinkServiceTest {
     @Test
     @DisplayName("上移 - 与相邻一条交换序号并回传完整列表")
     void move_upSwapsOrders() {
-        when(friendLinkMapper.selectById("id2")).thenReturn(model("id2", "B", "https://b.com", null, 2));
-        when(friendLinkMapper.selectPrevBySortOrder(2)).thenReturn(model("id1", "A", "https://a.com", null, 1));
         when(friendLinkMapper.selectAll()).thenReturn(List.of(
-                model("id2", "B", "https://b.com", null, 1),
-                model("id1", "A", "https://a.com", null, 2)));
+                model("id1", "A", "https://a.com", null, 1),
+                model("id2", "B", "https://b.com", null, 2)));
+        when(friendLinkMapper.updateSortOrder(anyString(), anyInt())).thenReturn(1);
         when(imageUrlResolver.resolve(null)).thenReturn(null);
 
         ResponseEntity<J> response = friendLinkService.moveService("admin-uuid", "id2", "up");
@@ -453,11 +451,10 @@ class FriendLinkServiceTest {
     @Test
     @DisplayName("下移 - 与相邻一条交换序号（大小写不敏感）")
     void move_downSwapsOrders() {
-        when(friendLinkMapper.selectById("id1")).thenReturn(model("id1", "A", "https://a.com", null, 1));
-        when(friendLinkMapper.selectNextBySortOrder(1)).thenReturn(model("id2", "B", "https://b.com", null, 2));
         when(friendLinkMapper.selectAll()).thenReturn(List.of(
-                model("id2", "B", "https://b.com", null, 1),
-                model("id1", "A", "https://a.com", null, 2)));
+                model("id1", "A", "https://a.com", null, 1),
+                model("id2", "B", "https://b.com", null, 2)));
+        when(friendLinkMapper.updateSortOrder(anyString(), anyInt())).thenReturn(1);
         when(imageUrlResolver.resolve(null)).thenReturn(null);
 
         ResponseEntity<J> response = friendLinkService.moveService("admin-uuid", "id1", "DOWN");

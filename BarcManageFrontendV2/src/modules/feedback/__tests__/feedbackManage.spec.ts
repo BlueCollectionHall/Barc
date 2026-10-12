@@ -23,8 +23,8 @@ describe('feedback manage API', () => {
 
       await getFeedbacksByType(type)
 
-      expect(get).toHaveBeenCalledWith('/feedback/feedbacks_by_type', {
-        params: { type, is_manager: true },
+      expect(get).toHaveBeenCalledWith('/feedback/page', {
+        params: { type, is_manager: true, page: 1, size: 20, status: undefined },
       })
     },
   )

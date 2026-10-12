@@ -1,4 +1,6 @@
 import { http } from '@/shared/api/http'
+import { fetchFeedbackPage } from '@/shared/api/feedback'
+import type { PageResult } from '@/shared/types/api'
 
 /** 管理端评论管理 API */
 
@@ -8,14 +10,15 @@ export interface ManageCommentRecord {
   author: string
   content: string
   created_at: string
-  replyCount: number
+  reply_count: number
+  replies?: ManageReplyRecord[]
 }
 
 export interface ManageReplyRecord {
   id: string
   parent_id: string
   author: string
-  reply_user: string
+  reply_user: string | null
   content: string
   created_at: string
 }
@@ -33,9 +36,14 @@ export interface ManageCommentComplaintRecord {
   updated_at: string
 }
 
-/** 获取作品的全部评论（返回数组，每条包含嵌套回复） */
-export function getCommentsByWork(workId: string): Promise<any[]> {
-  return http.get<any[]>('/comment/work/comments_by_work', { params: { work_id: workId } })
+/** 管理分页允许检查隐藏作品；每页包含前五条回复预览。 */
+export function getCommentsByWork(workId: string, page = 1): Promise<PageResult<ManageCommentRecord>> {
+  return http.get('/comment/work/manage/page', { params: { work_id: workId, page, size: 10 } })
+}
+
+/** 完整回复按页读取，不再以预览条数冒充真实总数。 */
+export function getManagementReplies(parentId: string, page: number): Promise<PageResult<ManageReplyRecord>> {
+  return http.get('/comment/work/manage/replies/page', { params: { parent_id: parentId, page, size: 5 } })
 }
 
 /** 管理员删除评论 */
@@ -49,10 +57,8 @@ export function deleteWorkReply(replyId: string): Promise<string> {
 }
 
 /** 获取 COMMENT 类型的投诉列表 */
-export function getCommentComplaints(): Promise<ManageCommentComplaintRecord[]> {
-  return http.get<ManageCommentComplaintRecord[]>('/feedback/feedbacks_by_type', {
-    params: { type: 'COMMENT', is_manager: true },
-  })
+export function getCommentComplaints(page = 1): Promise<PageResult<ManageCommentComplaintRecord>> {
+  return fetchFeedbackPage<ManageCommentComplaintRecord>('COMMENT', page)
 }
 
 /** 处理投诉（更新状态） */
@@ -71,10 +77,10 @@ export function processCommentComplaint(
 
 /** 获取用户档案 */
 export function getUserArchive(uuid: string): Promise<{ nickname: string; avatar: string | null } | null> {
-  return http.get<any>('/user/current_by_uuid', { params: { uuid } }).catch(() => null)
+  return http.get<{ nickname: string; avatar: string | null }>('/user/current_by_uuid', { params: { uuid } }).catch(() => null)
 }
 
-/** 根据评论/回复ID获取内容（兼容主评论和子回复） */
+/** 管理取证内容使用受控入口，保持隐藏作品举报可处理。 */
 export interface CommentContentResult {
   id: string
   content: string
@@ -85,5 +91,5 @@ export interface CommentContentResult {
 }
 
 export function getCommentById(commentId: string): Promise<CommentContentResult | null> {
-  return http.get<CommentContentResult>('/comment/work/comment_by_id', { params: { comment_id: commentId } }).catch(() => null)
+  return http.get<CommentContentResult>('/comment/work/manage/detail', { params: { comment_id: commentId } })
 }

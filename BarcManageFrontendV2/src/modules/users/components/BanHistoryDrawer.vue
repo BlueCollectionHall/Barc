@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import { getErrorMessage } from '@/shared/types/api'
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getBanHistory } from '@/modules/users/api/users.service'
-import type { BanRecord } from '@/shared/types/user'
-import { BAN_TYPE_LABELS } from '@/shared/types/user'
+import { BAN_TYPE_LABELS, type BanRecord } from '@/shared/types/user'
 
 const props = defineProps<{
   visible: boolean
@@ -42,8 +42,8 @@ async function loadHistory(): Promise<void> {
     )
     records.value = result.list
     pagination.value.total = result.total
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载封号历史失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '加载封号历史失败'))
   } finally {
     loading.value = false
   }

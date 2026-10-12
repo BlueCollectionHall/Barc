@@ -27,10 +27,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getOperationLogs } from '../api/workManage'
+import { getOperationLogs, type OperationLogRecord } from '../api/workManage'
 
 const typeMap: Record<string, string> = { BAN: '封禁', OFF: '下架', DELETE: '删除', RESTORE: '恢复', EDIT: '编辑', CLAIM_APPROVE: '认领审批', CLAIM_REVOKE: '认领撤销', CLAIM_ASSIGN: '指派作者', COMPLAINT_PROCESS: '投诉处理' }
-const logs = ref<any[]>([])
+const logs = ref<OperationLogRecord[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const loading = ref(false)
@@ -49,7 +49,7 @@ const formatDetail = (type: string, detail: string): string => {
         return `从「${old}」改为「${nw}」${d.remark ? '，备注：' + d.remark : ''}`
       }
       case 'EDIT': return d.remark || '修改了作品内容'
-      case 'CLAIM_APPROVE': return d.result === 'approved' ? '审批通过' : '审批拒绝'
+      case 'CLAIM_APPROVE': return String(d.result).toUpperCase() === 'APPROVED' ? '审批通过' : '审批拒绝'
       case 'CLAIM_REVOKE': return d.remark || '撤销认领'
       case 'CLAIM_ASSIGN': return '指派了新作者'
       case 'COMPLAINT_PROCESS': {

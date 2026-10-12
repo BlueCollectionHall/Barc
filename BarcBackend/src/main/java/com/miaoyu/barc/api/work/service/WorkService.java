@@ -1,6 +1,5 @@
 package com.miaoyu.barc.api.work.service;
 
-import com.miaoyu.barc.annotation.RequireSelfOrPermissionAnno;
 import com.miaoyu.barc.annotation.RequireUserAndPermissionAnno;
 import com.miaoyu.barc.api.mapper.ClubMapper;
 import com.miaoyu.barc.api.mapper.SchoolMapper;
@@ -21,6 +20,7 @@ import com.miaoyu.barc.api.work.model.WorkCoverImageModel;
 import com.miaoyu.barc.api.work.model.WorkEditDetailDto;
 import com.miaoyu.barc.api.work.model.WorkImageModel;
 import com.miaoyu.barc.api.work.model.WorkModel;
+import com.miaoyu.barc.api.work.model.PublicWorkView;
 import com.miaoyu.barc.api.work.model.WorkReviewModel;
 import com.miaoyu.barc.api.work.model.entity.WorkEntity;
 import com.miaoyu.barc.permission.PermissionConst;
@@ -36,7 +36,6 @@ import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.JwtService;
 import com.miaoyu.barc.utils.dto.PageRequestDto;
 import com.miaoyu.barc.utils.dto.PageResultDto;
-import com.miaoyu.barc.utils.minio.MinioObjects;
 import com.miaoyu.barc.utils.pojo.PageInitPojo;
 import com.miaoyu.barc.utils.tencent.cos.CosBucketConfigEnum;
 import com.miaoyu.barc.utils.tencent.cos.CosService;
@@ -61,6 +60,12 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class WorkService {
+    @Autowired private com.miaoyu.barc.api.service.StudentService studentService;
+    @Autowired private com.miaoyu.barc.api.file.service.ObjectStorageService objectStorage;
+    @Autowired private com.miaoyu.barc.api.service.CosGcService garbage;
+    @Autowired private com.miaoyu.barc.utils.tencent.cos.CosConfig cosConfig;
+    @Autowired private com.miaoyu.barc.api.mapper.CategoryMapper categoryMapper;
+
     @Autowired
     private WorkMapper workMapper;
     @Autowired
@@ -73,8 +78,6 @@ public class WorkService {
     private SchoolMapper schoolMapper;
     @Autowired
     private ClubMapper clubMapper;
-    @Autowired
-    private MinioObjects minioObjects;
     @Autowired
     private WorkImageMapper workImageMapper;
     @Autowired
@@ -93,119 +96,93 @@ public class WorkService {
     private WorkReviewMapper workReviewMapper;
 
     public ResponseEntity<J> getNewWorkService(int day, boolean isStudentList) {
-        List<WorkEntity> works = workMapper.selectByDay(day, WorkStatusEnum.PUBLIC);
+        if (day < 1 || day > 365) throw failure("最新天数须在1到365之间");
         if (isStudentList) {
-            List<StudentModel> students = works.stream()
-                    .map(WorkEntity::getStudent)
-                    .distinct()
-                    .map(studentMapper::selectById)
-                    .filter(Objects::nonNull)
-                    .toList();
+            List<StudentModel> students = studentMapper.selectByRecentWork(day);
+            students.forEach(studentService::resolveImages);
             return ResponseEntity.ok(new ResourceR().resourceSuch(true, students));
         }
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, works));
+        return getPublicLegacyList(WorkStatusEnum.PUBLIC, Map.of("day", day), 1, 100);
     }
 
-    public ResponseEntity<J> getWorksAllService(WorkStatusEnum statusEnum) {
-        if (statusEnum != WorkStatusEnum.PUBLIC) return publicListStatusError();
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workMapper.selectAll(statusEnum)));
+    /** 公共作品列表只维护一套筛选与投影；旧数组入口保留分页参数，完整遍历使用分页入口。 */
+    public ResponseEntity<J> getPublicLegacyList(WorkStatusEnum status, Map<String, Object> filters, Integer page, Integer size) {
+        if (status != WorkStatusEnum.PUBLIC) return publicListStatusError();
+        PageInitPojo p = new PageInitPojo(page, size);
+        List<WorkModel> rows = workMapper.selectByPage(WorkStatusEnum.PUBLIC, p.getOffset(), p.getPageSize(), publicConditions(filters));
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, loopSignatureWorkCover(rows).stream().map(PublicWorkView::from).toList()));
     }
 
-    public ResponseEntity<J> getWorkByPageService(WorkStatusEnum statusEnum, PageRequestDto dto) {
-        if (statusEnum != WorkStatusEnum.PUBLIC) return publicListStatusError();
-        PageInitPojo pageInit = new PageInitPojo(dto);
-        Integer pageNum = pageInit.getPageNum();
-        Integer pageSize = pageInit.getPageSize();
-        Integer offset = pageInit.getOffset(); // 偏移量
-        List<WorkModel> models = workMapper.selectByPage(statusEnum, offset, pageSize, dto.getParams());
-        Long total = workMapper.countByPage(statusEnum, dto.getParams());
-        int totalPage = (int) Math.ceil((double) total / pageSize);
-        // 循环所有作品获取封面图并签名
-        List<WorkModel> signatureWorks = this.loopSignatureWorkCover(models);
-        return ResponseEntity.ok(
-                new ResourceR().resourceSuch(
-                        true,
-                        new PageResultDto<>(
-                                total,
-                                signatureWorks,
-                                pageNum,
-                                pageSize,
-                                totalPage == 0 ? 1 : totalPage
-                        )
-                )
-        );
+    public ResponseEntity<J> getWorksAllService(WorkStatusEnum status) { return getPublicLegacyList(status, Map.of(), 1, 100); }
+
+    public ResponseEntity<J> getWorkByPageService(WorkStatusEnum status, PageRequestDto dto) {
+        if (status != WorkStatusEnum.PUBLIC) return publicListStatusError();
+        if (dto == null) dto = new PageRequestDto();
+        PageInitPojo p = new PageInitPojo(dto);
+        Map<String, Object> filters = publicConditions(dto.getParams());
+        List<WorkModel> rows = workMapper.selectByPage(WorkStatusEnum.PUBLIC, p.getOffset(), p.getPageSize(), filters);
+        long total = workMapper.countByPage(WorkStatusEnum.PUBLIC, filters);
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, new PageResultDto<>(total,
+            loopSignatureWorkCover(rows).stream().map(PublicWorkView::from).toList(), p.getPageNum(), p.getPageSize(),
+            Math.max(1, (int) Math.ceil((double) total / p.getPageSize())))));
     }
 
-    public ResponseEntity<J> getWorksByCategoryService(String categoryId, WorkStatusEnum statusEnum, PageRequestDto dto) {
-        if (statusEnum != WorkStatusEnum.PUBLIC) return publicListStatusError();
-        PageInitPojo pageInit = new PageInitPojo(dto); // 初始化接收的分页dto参数
-        Integer pageNum = pageInit.getPageNum(); // 页码
-        Integer pageSize = pageInit.getPageSize(); // 本页实体数
-        Integer offset = pageInit.getOffset(); // 偏移量
-        List<WorkModel> works = workMapper.selectByPageOnCategory(categoryId, statusEnum, offset, pageSize, dto.getParams());
-        Long total = workMapper.countByPageOnCategory(categoryId, statusEnum, dto.getParams());
-        int totalPage = (int) Math.ceil((double) total / pageSize);
-        // 循环所有作品获取封面图并签名
-        List<WorkModel> signatureWorks = this.loopSignatureWorkCover(works);
-        return ResponseEntity.ok(
-                new ResourceR().resourceSuch(
-                        true,
-                        new PageResultDto<>(
-                                total,
-                                signatureWorks,
-                                pageNum,
-                                pageSize,
-                                totalPage == 0 ? 1 : totalPage
-                        )
-                )
-        );
+    public ResponseEntity<J> getWorksByCategoryService(String categoryId, WorkStatusEnum status, PageRequestDto dto) {
+        if (dto == null) dto = new PageRequestDto();
+        Map<String, Object> filters = dto.getParams() == null ? new HashMap<>() : new HashMap<>(dto.getParams());
+        filters.put("category_id", categoryId); dto.setParams(filters);
+        return getWorkByPageService(status, dto);
+    }
+    public ResponseEntity<J> getWorksBySchoolService(String id, WorkStatusEnum status) { return getPublicLegacyList(status, Map.of("school_id", id), 1, 100); }
+    public ResponseEntity<J> getWorksByClubService(String id, WorkStatusEnum status) { return getPublicLegacyList(status, Map.of("club_id", id), 1, 100); }
+    public ResponseEntity<J> getWorksByStudentService(String id, WorkStatusEnum status) { return getPublicLegacyList(status, Map.of("student_id", id), 1, 100); }
+
+    public ResponseEntity<J> getWorksByMeService(String uuid, WorkStatusEnum status) { return getWorksByMeService(uuid, status, null, null); }
+    public ResponseEntity<J> getWorksByMeService(String uuid, WorkStatusEnum status, Map<String, Object> filters) { return getWorksByMeService(uuid, status, null, filters); }
+    public ResponseEntity<J> getWorksByMeService(String uuid, WorkStatusEnum status, WorkReviewStatusEnum review, Map<String, Object> filters) {
+        Map<String, Object> condition = ownerConditions(uuid, filters, new PageInitPojo(1, 100));
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, loopSignatureWorkEntityCover(workMapper.selectByUuidWithFilters(uuid, status, review, condition))));
     }
 
-    public ResponseEntity<J> getWorksBySchoolService(String schoolId, WorkStatusEnum statusEnum) {
-        if (statusEnum != WorkStatusEnum.PUBLIC) return publicListStatusError();
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workMapper.selectBySchoolId(schoolId, statusEnum)));
+    /** 本人可见范围固定来自认证身份；客户端筛选不能替换作者UUID。 */
+    public ResponseEntity<J> getMyWorkPage(String uuid, WorkStatusEnum status, WorkReviewStatusEnum review, PageRequestDto dto) {
+        if (dto == null) dto = new PageRequestDto();
+        PageInitPojo p = new PageInitPojo(dto);
+        Map<String, Object> condition = ownerConditions(uuid, dto.getParams(), p);
+        long total = workMapper.countByUuidWithFilters(uuid, status, review, condition);
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, new PageResultDto<>(total,
+            loopSignatureWorkEntityCover(workMapper.selectByUuidWithFilters(uuid, status, review, condition)), p.getPageNum(), p.getPageSize(),
+            Math.max(1, (int) Math.ceil((double) total / p.getPageSize())))));
     }
 
-    public ResponseEntity<J> getWorksByClubService(String clubId, WorkStatusEnum statusEnum) {
-        if (statusEnum != WorkStatusEnum.PUBLIC) return publicListStatusError();
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workMapper.selectByClubId(clubId, statusEnum)));
+    public ResponseEntity<J> getWorksByUuidService(String uuid, WorkStatusEnum status) { return getWorksByUuidService(uuid, status, null); }
+    public ResponseEntity<J> getWorksByUuidService(String uuid, WorkStatusEnum status, Map<String, Object> filters) {
+        Map<String, Object> condition = filters == null ? new HashMap<>() : new HashMap<>(filters);
+        condition.put("author_uuid", uuid);
+        return getPublicLegacyList(status, condition, 1, 100);
+    }
+    public ResponseEntity<J> getWorksByUsernameService(String username, WorkStatusEnum status) { return getPublicLegacyList(status, Map.of("author_username", username), 1, 100); }
+
+    private Map<String, Object> ownerConditions(String uuid, Map<String, Object> filters, PageInitPojo page) {
+        Map<String, Object> condition = publicConditions(filters);
+        condition.put("author_uuid", uuid); condition.put("offset", page.getOffset()); condition.put("limit", page.getPageSize());
+        return condition;
     }
 
-    public ResponseEntity<J> getWorksByStudentService(String studentId, WorkStatusEnum statusEnum) {
-        if (statusEnum != WorkStatusEnum.PUBLIC) return publicListStatusError();
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workMapper.selectByStudentId(studentId, statusEnum)));
-    }
-    public ResponseEntity<J> getWorksByMeService(String uuid, WorkStatusEnum statusEnum) {
-        List<WorkEntity> works = workMapper.selectByUuidWithFilters(uuid, statusEnum, null, buildOwnerListCondition(uuid, null));
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, loopSignatureWorkEntityCover(works)));
-    }
-    public ResponseEntity<J> getWorksByMeService(String uuid, WorkStatusEnum statusEnum, Map<String, Object> condition) {
-        return getWorksByMeService(uuid, statusEnum, null, condition);
-    }
-    public ResponseEntity<J> getWorksByMeService(String uuid, WorkStatusEnum statusEnum, WorkReviewStatusEnum reviewStatus, Map<String, Object> condition) {
-        List<WorkEntity> works = workMapper.selectByUuidWithFilters(uuid, statusEnum, reviewStatus, buildOwnerListCondition(uuid, condition));
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, loopSignatureWorkEntityCover(works)));
-    }
-    public ResponseEntity<J> getWorksByUuidService(String uuid, WorkStatusEnum statusEnum) {
-        if (statusEnum != WorkStatusEnum.PUBLIC) return publicListStatusError();
-        List<WorkEntity> works = workMapper.selectByUuid(uuid, statusEnum);
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, loopSignatureWorkEntityCover(works)));
-    }
-    public ResponseEntity<J> getWorksByUuidService(String uuid, WorkStatusEnum statusEnum, Map<String, Object> condition) {
-        if (statusEnum != WorkStatusEnum.PUBLIC) return publicListStatusError();
-        List<WorkEntity> works = workMapper.selectPublicByUuidWithFilters(uuid, statusEnum, buildOwnerListCondition(uuid, condition));
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, loopSignatureWorkEntityCover(works)));
-    }
-
-    private Map<String, Object> buildOwnerListCondition(String uuid, Map<String, Object> condition) {
-        Map<String, Object> ownerCondition = condition == null ? new HashMap<>() : new HashMap<>(condition);
-        // 作者列表筛选必须先锁定作者UUID，再复用分页查询的标题/简介/学生/学园/部团匹配语义。
-        ownerCondition.put("author_uuid", uuid);
-        return ownerCondition;
-    }
-    public ResponseEntity<J> getWorksByUsernameService(String username, WorkStatusEnum statusEnum) {
-        if (statusEnum != WorkStatusEnum.PUBLIC) return publicListStatusError();
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workMapper.selectByUsername(username, statusEnum)));
+    private Map<String, Object> publicConditions(Map<String, Object> input) {
+        Map<String, Object> result = new HashMap<>();
+        if (input == null) return result;
+        for (String key : List.of("keyword", "school", "club", "student", "school_id", "club_id", "student_id", "category_id", "author_uuid", "uploader_uuid", "author_username", "uploader_username")) {
+            Object value = input.get(key);
+            if (value == null) continue;
+            if (!(value instanceof String text) || text.length() > 100) throw failure("作品筛选字段无效");
+            if (!text.isBlank()) result.put(key, text.trim());
+        }
+        if (input.get("day") != null) {
+            try { int day = Integer.parseInt(input.get("day").toString()); if (day < 1 || day > 365) throw failure("天数须在1到365之间"); result.put("day", day); }
+            catch (NumberFormatException invalid) { throw failure("天数格式无效"); }
+        }
+        return result;
     }
 
     private ResponseEntity<J> publicListStatusError() {
@@ -242,7 +219,7 @@ public class WorkService {
                  } catch (Exception e) {
                      log.error("Unexpected work view recording failure for work_id={}", workId, e);
                  }
-                 yield ResponseEntity.ok(new ResourceR().resourceSuch(true, work));
+                 yield ResponseEntity.ok(new ResourceR().resourceSuch(true, PublicWorkView.from(work)));
              }
          };
     }
@@ -265,7 +242,7 @@ public class WorkService {
         if (Objects.isNull(work)) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         }
-        if (work.getAuthor().equals(uuid) || work.getUploader().equals(uuid)) {
+        if (isWorkOwner(uuid, work)) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(true, work));
         }
         return ResponseEntity.ok(new UserR().uuidMismatch());
@@ -282,10 +259,11 @@ public class WorkService {
     /** 作者侧纯文字保存：图片由独立表维护，禁止回写 legacy work.cover_image 字段 */
     @Transactional
     public ResponseEntity<J> updateOwnerWorkContent(String uuid, WorkModel requestModel) {
-        WorkModel work = workMapper.selectById(requestModel.getId());
+        WorkModel work = workMapper.selectByIdForUpdate(requestModel.getId());
         if (Objects.isNull(work)) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         if (!isWorkOwner(uuid, work)) return ResponseEntity.ok(new UserR().uuidMismatch());
-        if (!workMapper.updateText(requestModel)) return ResponseEntity.ok(new ChangeR().udu(false, 3));
+        validateContentUpdate(work, requestModel);
+        if (!workMapper.updateText(requestModel)) throw failure("作品保存失败");
         submitForReview(work.getId());
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
     }
@@ -296,7 +274,7 @@ public class WorkService {
      */
     @Transactional
     public ResponseEntity<J> resubmitRejectedWork(String uuid, String workId) {
-        WorkModel work = workMapper.selectById(workId);
+        WorkModel work = workMapper.selectByIdForUpdate(workId);
         if (Objects.isNull(work)) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         if (!isWorkOwner(uuid, work)) return ResponseEntity.ok(new UserR().uuidMismatch());
 
@@ -316,7 +294,7 @@ public class WorkService {
      */
     @Transactional
     public ResponseEntity<J> updateOwnerWorkVisibility(String uuid, String workId, WorkStatusEnum requestedStatus) {
-        WorkModel work = workMapper.selectById(workId);
+        WorkModel work = workMapper.selectByIdForUpdate(workId);
         if (Objects.isNull(work)) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         if (!isWorkOwner(uuid, work)) return ResponseEntity.ok(new UserR().uuidMismatch());
         if (requestedStatus != WorkStatusEnum.PUBLIC && requestedStatus != WorkStatusEnum.PRIVATE) {
@@ -326,24 +304,19 @@ public class WorkService {
             return ResponseEntity.ok(new ErrorR().normal("作品处于管理状态，不能由作者切换公开/私有"));
         }
         work.setStatus(requestedStatus);
-        if (!workMapper.update(work)) return ResponseEntity.ok(new ChangeR().udu(false, 3));
+        if (!workMapper.updateStatus(workId, requestedStatus, null)) throw failure("可见性保存失败");
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
     }
 
     /** 作者侧替换封面：只更新 work_cover_image 指针，不再把图片地址写回 work 表 */
     @Transactional
     public ResponseEntity<J> replaceOwnerWorkCover(String uuid, String workId, MultipartFile coverImage) {
-        WorkModel work = workMapper.selectById(workId);
+        WorkModel work = workMapper.selectByIdForUpdate(workId);
         if (Objects.isNull(work)) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         if (!isWorkOwner(uuid, work)) return ResponseEntity.ok(new UserR().uuidMismatch());
 
-        final String KEY = "/" + uuid + "/work_images/";
-        J uploadResult = cosService.uploadFile(coverImage, KEY, CosBucketConfigEnum.image);
-        if (uploadResult == null || uploadResult.getCode() != 0) {
-            return ResponseEntity.ok(new ErrorR().normal("上传封面图时出现异常：From Server!"));
-        }
-
-        String newObjectKey = uploadResult.getData().toString();
+        String newObjectKey = objectStorage.upload(uuid, coverImage, "uploads/" + uuid + "/work_images/", 10L * 1024 * 1024);
+        objectStorage.bind(uuid, newObjectKey);
         WorkCoverImageModel oldCover = workCoverImageMapper.selectByWorkId(workId);
         boolean changed;
         if (oldCover == null) {
@@ -356,11 +329,10 @@ public class WorkService {
             String oldObjectKey = oldCover.getObject_key();
             oldCover.setObject_key(newObjectKey);
             changed = workCoverImageMapper.update(oldCover);
-            if (changed) cosService.deleteFile(oldObjectKey, CosBucketConfigEnum.image);
+            if (changed) garbage.enqueue(cosConfig.getImage().getBucketName(), oldObjectKey);
         }
         if (!changed) {
-            cosService.deleteFile(newObjectKey, CosBucketConfigEnum.image);
-            return ResponseEntity.ok(new ChangeR().udu(false, 3));
+            throw failure("封面记录保存失败");
         }
         submitForReview(workId);
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
@@ -370,7 +342,8 @@ public class WorkService {
         return Objects.equals(work.getAuthor(), uuid) || Objects.equals(work.getUploader(), uuid);
     }
 
-    private WorkEditDetailDto buildWorkEditDetailDto(WorkModel work) {
+    /** 两端共用编辑详情构造，读取权限由各入口独立校验。 */
+    WorkEditDetailDto buildWorkEditDetailDto(WorkModel work) {
         String workId = work.getId();
         String coverUrl = "";
         WorkCoverImageModel cover = workCoverImageMapper.selectByWorkId(workId);
@@ -437,137 +410,61 @@ public class WorkService {
     @Transactional
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
     public ResponseEntity<J> uploadWorkService(String uuid, String categoryId, WorkModel requestModel, MultipartFile coverImage, MultipartFile[] files) {
-        WorkModel tempWork;
-        // 不存在ID，需要自动生成ID
-        if (requestModel.getId() == null || requestModel.getId().isEmpty()) {
-            do {
-                requestModel.setId(new GenerateUUID().getUuid36l());
-                tempWork = workMapper.selectById(requestModel.getId());
-            } while (tempWork != null);
+
+        if (requestModel == null || requestModel.getTitle() == null || requestModel.getTitle().isBlank()
+                || requestModel.getTitle().length() > 255 || requestModel.getIs_claim() == null
+                || (requestModel.getContent() != null && requestModel.getContent().length() > 100000)
+                || (requestModel.getDescription() != null && requestModel.getDescription().length() > 5000)) {
+            throw failure("作品标题、认领类型或内容长度无效");
         }
-        // 存在用户自定义的ID
+        if (requestModel.getStudent() == null || studentMapper.selectById(requestModel.getStudent()) == null) throw failure("所属学生不存在");
+        if (categoryId != null && !categoryId.isBlank() && categoryMapper.selectById(categoryId) == null) throw failure("作品分类不存在");
+        if (files == null) files = new MultipartFile[0];
+        if (files.length > 20) throw failure("一次最多上传 20 张内容图");
+        // 在创建任何业务记录前校验全部文件，避免后续图片格式错误造成部分提交。
+        com.miaoyu.barc.api.file.service.ImageInput.extension(coverImage, 10L * 1024 * 1024);
+        for (MultipartFile file : files) com.miaoyu.barc.api.file.service.ImageInput.extension(file, 10L * 1024 * 1024);
+        if (requestModel.getId() == null || requestModel.getId().isBlank()) requestModel.setId(new GenerateUUID().getUuid36l());
+        if (!requestModel.getId().matches("[A-Za-z0-9_-]{1,100}") || workMapper.selectByIdForUpdate(requestModel.getId()) != null) throw failure("作品 ID 无效或已被占用");
+        // 作者和收录者只由当前身份及受控官方账号决定，忽略请求中的协作者 UUID。
+        requestModel.setUploader(uuid);
+        if (Boolean.TRUE.equals(requestModel.getIs_claim())) requestModel.setAuthor(uuid);
         else {
-            tempWork = workMapper.selectById(requestModel.getId());
-            if (tempWork != null) return ResponseEntity.ok(new ErrorR().normal("您的自定义ID号已经冲突！"));
+            if (requestModel.getAuthor_nickname() == null || requestModel.getAuthor_nickname().isBlank()) throw failure("收录作品请标注站外原作者昵称");
+            String official = officialAccountService.findBoundUuid(OfficialAccountEnum.COLLECTION_ASSISTANT);
+            if (official == null) throw failure("官方收录账号尚未配置，请联系馆长");
+            requestModel.setAuthor(official);
         }
-        // 作品是号主自有
-        if (requestModel.getIs_claim()) requestModel.setAuthor(uuid);
-        // 作品是搬运收录
-        else {
-            if (requestModel.getAuthor_nickname() == null)
-                return ResponseEntity.ok(new ErrorR().normal("搬运收录的作品，请标注该作品作者在其他平台常用昵称！"));
-            // 未认领作品的临时归属账号改为「管理端可配置」：未配置时必须阻断，
-            // 不允许回落到任何硬编码 UUID，否则会在生产写入悬空归属。
-            String officialUuid = officialAccountService.findBoundUuid(OfficialAccountEnum.COLLECTION_ASSISTANT);
-            if (officialUuid == null) {
-                return ResponseEntity.ok(new ErrorR().normal(
-                        "官方账号未配置：未认领收录作品的临时归属账号尚未在「用户 → 官方账号」中绑定，请联系馆长配置后再收录。"));
-            }
-            requestModel.setUploader(uuid);
-            requestModel.setAuthor(officialUuid);
+        requestModel.setBanner_image(""); requestModel.setCover_image("");
+        requestModel.setStatus(requestModel.getStatus() == WorkStatusEnum.PRIVATE ? WorkStatusEnum.PRIVATE : WorkStatusEnum.PUBLIC);
+        if (!workMapper.insert(requestModel) || !workReviewMapper.insertPending(requestModel.getId())) throw failure("作品或审核记录保存失败");
+        if (categoryId != null && !categoryId.isBlank()) {
+            WorkCategoryModel category = new WorkCategoryModel(); category.setId(new GenerateUUID().getUuid36l());
+            category.setWork_id(requestModel.getId()); category.setCategory_id(categoryId);
+            if (!workCategoryMapper.insert(category)) throw failure("作品分类保存失败");
         }
-        requestModel.setBanner_image("");
-        requestModel.setCover_image("");
-        // 上传表单只允许声明审核通过后的公开意图，禁止伪造管理状态。
-        requestModel.setStatus(requestModel.getStatus() == WorkStatusEnum.PRIVATE
-                ? WorkStatusEnum.PRIVATE
-                : WorkStatusEnum.PUBLIC);
-        boolean insert = workMapper.insert(requestModel);
-        if (insert) {
-            // 新上传作品始终先进入审核队列；作品的 PUBLIC/PRIVATE 只是审核通过后的展示意图。
-            if (!workReviewMapper.insertPending(requestModel.getId())) {
-                workMapper.delete(requestModel.getId());
-                return ResponseEntity.ok(new ErrorR().normal("创建作品审核记录失败"));
-            }
-            /*若分类参数存在时的判断*/
-            if (categoryId != null) {
-                WorkCategoryModel workCategory = new WorkCategoryModel();
-                workCategory.setId(new GenerateUUID().getUuid36l());
-                workCategory.setCategory_id(categoryId);
-                workCategory.setWork_id(requestModel.getId());
-                try {
-                    workCategoryMapper.insert(workCategory);
-                } catch (Exception e) {
-                    log.error("作品分类写入失败！The category of work => Insert Error! 作品ID：{}", requestModel.getId());
-                }
-            }
-            /*接入腾讯云COS对象存储的操作方法*/
-            // 设置桶内Key路径
-            final String KEY =  "/" + uuid + "/work_images/";
-            // 向腾讯云COS存储对象
-            J reJ = cosService.uploadFile(coverImage, KEY, CosBucketConfigEnum.image);
-            // 若是向腾讯云COS存储失败时
-            if (reJ == null || reJ.getCode() != 0) {
-                // 删除掉已经上传的作品信息
-                workMapper.delete(requestModel.getId());
-                return ResponseEntity.ok(new ErrorR().normal("上传封面图时出现异常：From Server!"));
-            }
-            String coverKey = reJ.getData().toString();
-            WorkCoverImageModel coverImageModel = new WorkCoverImageModel();
-            coverImageModel.setId(new GenerateUUID().getUuid36l());
-            coverImageModel.setWork_id(requestModel.getId());
-            coverImageModel.setObject_key(coverKey);
-            try {
-                workCoverImageMapper.insert(coverImageModel);
-            } catch (Exception e) {
-                // 删除掉已经上传的作品信息
-                workMapper.delete(requestModel.getId());
-                // 删除腾讯云COS中记录的对象信息
-                cosService.deleteFile(coverKey, CosBucketConfigEnum.image);
-                return ResponseEntity.ok(new ErrorR().normal("记录封面图指针时出现异常：From Server!"));
-            }
-            // 循环上传作品内容图
-            int count = 0;
-            for (MultipartFile file : files) {
-                J ReImgJ = cosService.uploadFile(file, KEY, CosBucketConfigEnum.image);
-                if (ReImgJ == null || ReImgJ.getCode() != 0) {
-                    return ResponseEntity.ok(new ErrorR().normal("上传作品图时出现异常：From Server!"));
-                }
-                String imageKey = ReImgJ.getData().toString();
-                WorkImageModel imageModel = new WorkImageModel();
-                imageModel.setId(new GenerateUUID().getUuid36l());
-                imageModel.setWork_id(requestModel.getId());
-                imageModel.setSort(count);
-                imageModel.setObject_key(imageKey);
-                try {
-                    workImageMapper.insert(imageModel);
-                } catch (Exception e) {
-                    return ResponseEntity.ok(new ErrorR().normal("记录作品图指针时出现异常：From Server!"));
-                }
-                count++;
-            }
-            return ResponseEntity.ok(new ChangeR().udu(true, 1));
+        String prefix = "uploads/" + uuid + "/work_images/";
+        String coverKey = objectStorage.upload(uuid, coverImage, prefix, 10L * 1024 * 1024);
+        objectStorage.bind(uuid, coverKey);
+        WorkCoverImageModel cover = new WorkCoverImageModel(); cover.setId(new GenerateUUID().getUuid36l());
+        cover.setWork_id(requestModel.getId()); cover.setObject_key(coverKey);
+        if (!workCoverImageMapper.insert(cover)) throw failure("封面记录保存失败");
+        for (int index = 0; index < files.length; index++) {
+            String key = objectStorage.upload(uuid, files[index], prefix, 10L * 1024 * 1024);
+            objectStorage.bind(uuid, key);
+            WorkImageModel image = new WorkImageModel(); image.setId(new GenerateUUID().getUuid36l());
+            image.setWork_id(requestModel.getId()); image.setSort(index); image.setObject_key(key);
+            if (!workImageMapper.insert(image)) throw failure("内容图片记录保存失败");
         }
-        return ResponseEntity.ok(new ChangeR().udu(false, 1));
-    }
-    @RequireSelfOrPermissionAnno(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true)
-    public ResponseEntity<J> updateWorkService(String uuid, WorkModel requestModel) {
-        boolean b = workMapper.update(requestModel);
-        if (b) {
-            return ResponseEntity.ok(new ChangeR().udu(true, 3));
-        }
-        return ResponseEntity.ok(new ChangeR().udu(false, 3));
+        // 任何异常均向外抛出触发事务回滚；已上传对象有独立持久化记录，按未引用对象回收。
+        return ResponseEntity.ok(new ChangeR().udu(true, 1));
     }
 
-    public ResponseEntity<J> deleteWorkService(String workId) {
-        try {
-            // 取出所有作品图指针逐一删除
-            List<WorkImageModel> workImages = workImageMapper.selectByWorkId(workId);
-            for (WorkImageModel workImage : workImages) {
-                cosService.deleteFile(workImage.getObject_key(), CosBucketConfigEnum.image);
-                workImageMapper.delete(workImage.getId());
-            }
-            // 取出封面图指针执行删除
-            WorkCoverImageModel coverImage = workCoverImageMapper.selectByWorkId(workId);
-            cosService.deleteFile(coverImage.getObject_key(), CosBucketConfigEnum.image);
-            workCoverImageMapper.deleteByWorkId(workId);
-            // 删除作品
-            workMapper.delete(workId);
-        } catch (Exception e) {
-            return ResponseEntity.ok(new ChangeR().udu(false, 2));
-        }
-        return ResponseEntity.ok(new ChangeR().udu(true, 2));
+    private com.miaoyu.barc.exception.ApiException failure(String message) {
+        return new com.miaoyu.barc.exception.ApiException(new ErrorR().normal(message));
     }
+    // 旧全字段更新与物理删除已收敛至 WorkCompatibilityService / WorkDeletionService，
+    // 避免其他服务继续误用绕过提审、审计或真实归属校验的实现。
 
     /** 批量签名作品封面图，供本包内复用 */
     List<WorkModel> loopSignatureWorkCover(List<WorkModel> works) {
@@ -609,13 +506,29 @@ public class WorkService {
      * 展示内容变化后的审核处理：新作品补建记录，已通过/审核中作品转入或刷新待审。
      * 已驳回作品保持 REJECTED 和拒绝原因，等待作者显式点击“再次提审”。
      */
+    @Transactional
     public void submitForReview(String workId) {
+        // 所有调用方在改动前已锁定父作品；版本和审核状态作为一个事务提交。
+        if (!workMapper.touchContent(workId)) throw failure("作品版本保存失败");
         WorkReviewModel review = workReviewMapper.selectByWorkId(workId);
         if (review == null) {
-            workReviewMapper.insertPending(workId);
+            if (!workReviewMapper.insertPending(workId)) throw failure("审核记录保存失败");
         } else if (review.getStatus() != WorkReviewStatusEnum.REJECTED) {
-            workReviewMapper.submitForReview(workId);
+            if (!workReviewMapper.submitForReview(workId)) throw failure("提审保存失败");
         }
+    }
+
+    /** 兼容服务调用也执行字段校验；认领/身份字段不进入正文 SQL。 */
+    void validateContentUpdate(WorkModel existing, WorkModel request) {
+        com.miaoyu.barc.utils.RequestInput.required(request.getTitle(), "标题", 255);
+        com.miaoyu.barc.utils.RequestInput.optional(request.getContent(), "正文", 100000);
+        com.miaoyu.barc.utils.RequestInput.optional(request.getDescription(), "简介", 5000);
+        com.miaoyu.barc.utils.RequestInput.optional(request.getAuthor_nickname(), "作者署名", 255);
+        if (request.getExpected_revision() != null && !request.getExpected_revision().equals(existing.getContent_revision())) {
+            throw failure("作品已被修改，请刷新后重试");
+        }
+        if (request.getStudent() == null) request.setStudent(existing.getStudent());
+        else if (studentMapper.selectById(request.getStudent()) == null) throw failure("所属学生不存在");
     }
 
     /** 作者列表使用 WorkEntity，单独签名以避免改动 mapper 返回契约 */

@@ -28,7 +28,7 @@ const fetchWorks = async (student_id: string) => {
     const response = await baseHttp.post("/api/work/works_by_page", requestPage.value, {
       params: {status: "PUBLIC"}
     });
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<PageResultImpl<WorkImpl>> = response.data;
     if (data.code === 0) {
       resultPage.value = data.data;
       works.value = resultPage.value?.list || [];

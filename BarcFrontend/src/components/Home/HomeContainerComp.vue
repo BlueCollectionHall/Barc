@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import HomeMessageComp from "@/components/Home/HomeMessageComp.vue";
 import HomeUpdatedComp from "@/components/Home/HomeUpdatedComp.vue";
-import HomeJoinComp from "@/components/Home/HomeJoinComp.vue";
 import HomeNoticeComp from "@/components/Home/HomeNoticeComp.vue";
 import HomeArticleComp from "@/components/Home/HomeArticleComp.vue";
 import HomeFriendshipComp

@@ -25,7 +25,7 @@
                 AND m.created_at &lt;= #{condition.date_to}
             </if>
         </where>
-        ORDER BY m.created_at DESC
+        ORDER BY m.created_at DESC, m.id DESC
         LIMIT #{offset}, #{pageSize}
     </select>
 

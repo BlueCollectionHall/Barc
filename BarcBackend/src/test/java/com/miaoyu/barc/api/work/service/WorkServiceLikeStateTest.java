@@ -22,7 +22,6 @@ import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.api.work.model.entity.WorkEntity;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.JwtService;
-import com.miaoyu.barc.utils.minio.MinioObjects;
 import com.miaoyu.barc.utils.tencent.cos.CosBucketConfigEnum;
 import com.miaoyu.barc.utils.tencent.cos.CosService;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,8 +63,6 @@ class WorkServiceLikeStateTest {
     @Mock
     private ClubMapper clubMapper;
     @Mock
-    private MinioObjects minioObjects;
-    @Mock
     private WorkImageMapper workImageMapper;
     @Mock
     private WorkCoverImageMapper workCoverImageMapper;
@@ -81,6 +78,12 @@ class WorkServiceLikeStateTest {
     private WorkViewService workViewService;
     @Mock
     private WorkReviewMapper workReviewMapper;
+    @Mock
+    private com.miaoyu.barc.api.file.service.ObjectStorageService objectStorage;
+    @Mock
+    private com.miaoyu.barc.api.service.CosGcService garbage;
+    @Mock(answer = org.mockito.Answers.RETURNS_DEEP_STUBS)
+    private com.miaoyu.barc.utils.tencent.cos.CosConfig cosConfig;
 
     @InjectMocks
     private WorkService workService;
@@ -112,7 +115,7 @@ class WorkServiceLikeStateTest {
 
         ResponseEntity<J> response = workService.getWorksByIdService(requestWithoutAuth(), "work-1");
 
-        WorkModel data = successfulWork(response);
+        com.miaoyu.barc.api.work.model.PublicWorkView data = successfulWork(response);
         assertEquals(false, data.getLiked_by_current_user());
         assertEquals("https://signed.example/cover.png", data.getCover_image());
         verifyNoInteractions(jwtService, workLikeMapper);
@@ -128,7 +131,7 @@ class WorkServiceLikeStateTest {
 
         ResponseEntity<J> response = workService.getWorksByIdService(requestWithAuth("valid-jwt"), "work-1");
 
-        WorkModel data = successfulWork(response);
+        com.miaoyu.barc.api.work.model.PublicWorkView data = successfulWork(response);
         assertEquals(true, data.getLiked_by_current_user());
         assertEquals("https://signed.example/cover.png", data.getCover_image());
         verify(workLikeMapper).selectByWorkIdAndUserUuid("work-1", "user-1");
@@ -143,7 +146,7 @@ class WorkServiceLikeStateTest {
 
         ResponseEntity<J> response = workService.getWorksByIdService(requestWithAuth("expired-jwt"), "work-1");
 
-        WorkModel data = successfulWork(response);
+        com.miaoyu.barc.api.work.model.PublicWorkView data = successfulWork(response);
         assertEquals(false, data.getLiked_by_current_user());
         verify(workLikeMapper, never()).selectByWorkIdAndUserUuid(anyString(), anyString());
     }
@@ -157,7 +160,7 @@ class WorkServiceLikeStateTest {
 
         ResponseEntity<J> response = workService.getWorksByIdService(requestWithAuth("malformed-jwt"), "work-1");
 
-        WorkModel data = successfulWork(response);
+        com.miaoyu.barc.api.work.model.PublicWorkView data = successfulWork(response);
         assertEquals(false, data.getLiked_by_current_user());
         verify(workLikeMapper, never()).selectByWorkIdAndUserUuid(anyString(), anyString());
     }
@@ -277,9 +280,11 @@ class WorkServiceLikeStateTest {
         request.setId("work-1");
         request.setTitle("新标题");
         request.setCover_image("must-not-persist");
-        when(workMapper.selectById("work-1")).thenReturn(existing);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(existing);
         when(workMapper.updateText(request)).thenReturn(true);
 
+        when(workMapper.touchContent("work-1")).thenReturn(true);
+        when(workReviewMapper.insertPending("work-1")).thenReturn(true);
         ResponseEntity<J> response = workService.updateOwnerWorkContent("user-1", request);
 
         J body = response.getBody();
@@ -290,22 +295,27 @@ class WorkServiceLikeStateTest {
     }
 
     @Test
-    @DisplayName("作者替换封面只更新work_cover_image指针并删除旧对象")
+    @DisplayName("作者替换封面只更新work_cover_image指针并登记旧对象回收")
     void replaceOwnerWorkCover_ShouldUpdateCoverTableOnly() {
         WorkModel existing = claimedWork("work-1", "user-1");
-        when(workMapper.selectById("work-1")).thenReturn(existing);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(existing);
         when(workCoverImageMapper.selectByWorkId("work-1")).thenReturn(coverImage);
-        when(cosService.uploadFile(any(), eq("/user-1/work_images/"), eq(CosBucketConfigEnum.image)))
-                .thenReturn(new J(0, "文件上传成功", "covers/new.png"));
+        // 文件删除延后至提交后的引用检查，数据库事务内只登记回收任务。
+        when(objectStorage.upload(eq("user-1"), any(), eq("uploads/user-1/work_images/"), org.mockito.ArgumentMatchers.anyLong()))
+                .thenReturn("covers/new.png");
+        when(cosConfig.getImage().getBucketName()).thenReturn("test-image");
         when(workCoverImageMapper.update(any(WorkCoverImageModel.class))).thenReturn(true);
 
+        when(workMapper.touchContent("work-1")).thenReturn(true);
+        when(workReviewMapper.insertPending("work-1")).thenReturn(true);
         ResponseEntity<J> response = workService.replaceOwnerWorkCover("user-1", "work-1", new org.springframework.mock.web.MockMultipartFile("cover_image", "new.png", "image/png", new byte[]{1}));
 
         J body = response.getBody();
         assertNotNull(body);
         assertEquals(0, body.getCode());
         verify(workCoverImageMapper).update(any(WorkCoverImageModel.class));
-        verify(cosService).deleteFile("covers/work-1.png", CosBucketConfigEnum.image);
+        verify(garbage).enqueue("test-image", "covers/work-1.png");
+        verify(cosService, never()).deleteFile(anyString(), any());
         verify(workMapper, never()).update(any(WorkModel.class));
     }
 
@@ -371,10 +381,10 @@ class WorkServiceLikeStateTest {
                 .thenReturn("https://signed.example/cover.png");
     }
 
-    private WorkModel successfulWork(ResponseEntity<J> response) {
+    private com.miaoyu.barc.api.work.model.PublicWorkView successfulWork(ResponseEntity<J> response) {
         J body = response.getBody();
         assertNotNull(body);
         assertEquals(0, body.getCode());
-        return (WorkModel) body.getData();
+        return (com.miaoyu.barc.api.work.model.PublicWorkView) body.getData();
     }
 }

@@ -62,13 +62,10 @@ class NoticeMapperXmlTest {
     }
 
     @Test
-    @DisplayName("天数范围查询 latest 必须保留 INTERVAL 天数过滤，保持原语义")
-    void latest_ShouldStillFilterByDayInterval() throws IOException {
-        String statementBlock = slice(readNoticeMapperXml(), "<select id=\"latest\"", "</select>");
-
-        assertFalse(statementBlock.isEmpty(), "NoticeMapper.xml 必须存在 id=\"latest\" 的 select 语句");
-        assertTrue(statementBlock.contains("INTERVAL #{day} DAY"),
-                "latest 必须保留 day 天数的 INTERVAL 过滤条件");
+    @DisplayName("最新公告合并为一次查询，移除无实际作用的天数过滤分支")
+    void latest_UsesOnlyOneUnboundedByDayQuery() throws IOException {
+        assertFalse(readNoticeMapperXml().contains("<select id=\"latest\""));
+        assertFalse(Arrays.stream(NoticeMapper.class.getDeclaredMethods()).anyMatch(method -> method.getName().equals("latest")));
     }
 
     @Test

@@ -42,7 +42,7 @@ let pendingStatus = ''
 
 const act = (status: string) => {
   pendingStatus = status
-  dialogTitle.value = status === 'PUBLIC' ? '恢复公开' : status === 'BAN' ? '封禁作品' : '下架作品'
+  dialogTitle.value = status === 'PUBLIC' ? '恢复原可见性' : status === 'BAN' ? '封禁作品' : '下架作品'
   remark.value = ''
   dialogVisible.value = true
 }

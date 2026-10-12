@@ -1,4 +1,6 @@
 import { http } from '@/shared/api/http'
+import { fetchFeedbackPage } from '@/shared/api/feedback'
+import type { PageResult } from '@/shared/types/api'
 
 export type FeedbackType = 'USER' | 'BUG' | 'SUGGESTION' | 'OTHER'
 export type FeedbackStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
@@ -16,10 +18,8 @@ export interface FeedbackRecord {
   updated_at: string
 }
 
-export function getFeedbacksByType(type: FeedbackType): Promise<FeedbackRecord[]> {
-  return http.get<FeedbackRecord[]>('/feedback/feedbacks_by_type', {
-    params: { type, is_manager: true },
-  })
+export function getFeedbacksByType(type: FeedbackType, page = 1): Promise<PageResult<FeedbackRecord>> {
+  return fetchFeedbackPage<FeedbackRecord>(type, page)
 }
 
 export function updateFeedbackStatus(

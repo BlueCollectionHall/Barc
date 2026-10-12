@@ -37,6 +37,8 @@ class WorkImageServiceOwnerFlowTest {
     private CosService cosService;
     @Mock
     private WorkService workService;
+    @Mock
+    private com.miaoyu.barc.api.file.service.ObjectStorageService objectStorage;
 
     @InjectMocks
     private WorkImageService workImageService;
@@ -47,10 +49,11 @@ class WorkImageServiceOwnerFlowTest {
         WorkModel work = new WorkModel();
         work.setId("work-1");
         work.setAuthor("user-1");
-        when(workMapper.selectById("work-1")).thenReturn(work);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(work);
         when(workImageMapper.selectByWorkId("work-1")).thenReturn(List.of(image("old-0", 0), image("old-3", 3)));
-        when(cosService.uploadFile(any(), eq("/user-1/work_images/"), eq(CosBucketConfigEnum.image)))
-                .thenReturn(new J(0, "文件上传成功", "content/new.png"));
+        // 新上传经过持久补偿层；授权时已经持有作品行锁。
+        when(objectStorage.upload(eq("user-1"), any(), eq("uploads/user-1/work_images/"), org.mockito.ArgumentMatchers.anyLong()))
+                .thenReturn("content/new.png");
         when(workImageMapper.insert(any(WorkImageModel.class))).thenReturn(true);
 
         ResponseEntity<J> response = workImageService.uploadWorkImageService("user-1", "work-1", new MockMultipartFile("file", "new.png", "image/png", new byte[]{1}));
@@ -71,7 +74,7 @@ class WorkImageServiceOwnerFlowTest {
         WorkModel work = new WorkModel();
         work.setId("work-1");
         work.setAuthor("user-1");
-        when(workMapper.selectById("work-1")).thenReturn(work);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(work);
 
         ResponseEntity<J> response = workImageService.uploadWorkImageService("other-user", "work-1", new MockMultipartFile("file", "new.png", "image/png", new byte[]{1}));
 
@@ -79,6 +82,7 @@ class WorkImageServiceOwnerFlowTest {
         assertNotNull(body);
         assertEquals(1, body.getCode());
         verify(cosService, never()).uploadFile(any(), any(), any());
+        org.mockito.Mockito.verifyNoInteractions(objectStorage);
         verify(workImageMapper, never()).insert(any(WorkImageModel.class));
     }
 

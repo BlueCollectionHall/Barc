@@ -4,7 +4,8 @@
 
     <update id="updateSafeLevel">
         UPDATE user_basic
-        SET safe_level = #{safeLevel}
+        <!-- 封禁和解封都会更换会话版本，旧令牌不能在解封后重新恢复有效。 -->
+        SET safe_level = #{safeLevel}, auth_version = auth_version + 1
         WHERE uuid = #{uuid}
     </update>
 

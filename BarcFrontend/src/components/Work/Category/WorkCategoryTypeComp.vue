@@ -10,7 +10,7 @@ const categories = ref<Array<CategoryImpl>>([]);
 const fetchTopCategories = async () => {
   await baseHttp.get("/api/category/all_top_categories")
     .then(res => {
-      const data: ResponseImpl = res.data;
+      const data: ResponseImpl<CategoryImpl[]> = res.data;
       if (data.code === 0) categories.value = data.data;
       else infoMessage(data.msg);
     }).catch(err => {

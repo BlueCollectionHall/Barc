@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import {ref} from "vue";
-import {baseHttp} from "@/utils/https.ts";
-import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
+import {login} from "@/utils/accountApi.ts";
+import {CheckOutlined} from "@ant-design/icons-vue";
 import {useRouter} from "vue-router";
 const router = useRouter();
 import {useUserPinia} from "@/stores/UserPinia.ts";
 const userPinia = useUserPinia();
-import {CheckOutlined} from "@ant-design/icons-vue";
 import {errorMessage} from "@/utils/MessageAlert.ts";
 
 interface SigninFormImpl {
@@ -21,24 +20,15 @@ const signinForm = ref<SigninFormImpl>({type: "username", account: "", password:
 
 const signinFormFinish = async () => {
   try {
-    let response;
-    if (loginSource.value === "barc") {
-      response = await baseHttp("/user/sign/in", {method: "GET", params: signinForm.value});
-    } else {
-      if (signinForm.value.type === 'username') {
-        signinForm.value.type = 'uid';
-      }
-      response = await baseHttp("/user/sign/in_by_naigos", {method: "GET", params: signinForm.value});
-    }
-    const data: ResponseImpl = response.data;
-    if (data.code === 0) {
-      const token: string = data.data as string;
-      window.localStorage.setItem("token", token);
-      await userPinia.fetchUserInfo(token)
-      router.back();
-    } else errorMessage(data.data);
-  } catch {
-    errorMessage("登录失败");
+    // 外部账号使用独立请求副本，切回本地登录时不污染 username 类型。
+    const naigos = loginSource.value !== 'barc';
+    const payload = {...signinForm.value, type: naigos && signinForm.value.type === 'username' ? 'uid' : signinForm.value.type};
+    const token = await login(payload, naigos);
+    window.localStorage.setItem("token", token);
+    await userPinia.fetchUserInfo(token);
+    router.back();
+  } catch (error) {
+    errorMessage(error instanceof Error ? error.message : "登录失败");
   }
 }
 </script>

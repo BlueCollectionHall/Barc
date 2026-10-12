@@ -63,7 +63,7 @@ public interface UserArchiveMapper {
             "       AND a.age = #{condition.age}" +
             "   </if>" +
             "</where>" +
-            "ORDER BY a.updated_at DESC " +
+            "ORDER BY a.updated_at DESC, a.uuid ASC " +
             "LIMIT #{offset}, #{pageSize}" +
             "</script>")
     List<UserInfoVo> selectUserInfoByPage(
@@ -110,7 +110,8 @@ public interface UserArchiveMapper {
     UserArchiveModel selectByUsername(@Param("username") String username);
     @Insert("INSERT INTO user_archive (uuid, nickname, avatar) VALUES (#{uuid}, #{nickname}, #{avatar})")
     boolean insert(UserArchiveModel model);
-    @Update("UPDATE user_archive SET nickname = #{nickname}, avatar = #{avatar}, gender = #{gender}, birthday = #{birthday}, age = #{age}, permission = #{permission}, updated_at = #{updated_at} WHERE uuid = #{uuid}")
+    /** 个人资料专用更新：权限仅能经 UserPermissionMapper 修改，时间由数据库维护。 */
+    @Update("UPDATE user_archive SET nickname = #{nickname}, avatar = #{avatar}, gender = #{gender}, birthday = #{birthday}, age = #{age}, updated_at = CURRENT_TIMESTAMP WHERE uuid = #{uuid}")
     boolean update(UserArchiveModel model);
 
     /** 按关键词搜索用户（UUID/用户名/昵称，OR逻辑），限制返回条数 */
@@ -118,6 +119,6 @@ public interface UserArchiveMapper {
             "WHERE a.uuid LIKE CONCAT('%', #{keyword}, '%') " +
             "OR b.username LIKE CONCAT('%', #{keyword}, '%') " +
             "OR a.nickname LIKE CONCAT('%', #{keyword}, '%') " +
-            "LIMIT 15")
+            "ORDER BY a.nickname ASC, a.uuid ASC LIMIT 15")
     List<UserInfoVo> searchByKeyword(@Param("keyword") String keyword);
 }

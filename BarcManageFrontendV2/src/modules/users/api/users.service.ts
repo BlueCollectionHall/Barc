@@ -15,7 +15,7 @@ import type {
 } from '@/shared/types/user'
 
 export function queryUsersByPage(payload: PageRequest<UserListFilters>): Promise<PageResult<UserListItem>> {
-  return http.post<PageResult<UserListItem>>('/user/query/all_by_page', payload)
+  return http.post<PageResult<UserListItem>>('/user/query/manage/page', payload)
 }
 
 export function uploadNewUser(payload: UserQuickCreatePayload): Promise<string> {

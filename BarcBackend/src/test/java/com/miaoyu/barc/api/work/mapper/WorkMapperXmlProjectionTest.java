@@ -34,7 +34,7 @@ class WorkMapperXmlProjectionTest {
     @DisplayName("公开分类分页作品列表查询应返回浏览量和点赞数")
     void selectByPageOnCategory_ShouldProjectViewCountAndLikeCount() throws IOException {
         String xml = readWorkMapperXml();
-        String selectByPageOnCategoryBlock = slice(xml, "<select id=\"selectByPageOnCategory\"", "</select>");
+        String selectByPageOnCategoryBlock = slice(xml, "<select id=\"selectByPage\"", "</select>");
 
         assertTrue(selectByPageOnCategoryBlock.contains("w.view_count"), "selectByPageOnCategory should project w.view_count");
         assertTrue(selectByPageOnCategoryBlock.contains("w.like_count"), "selectByPageOnCategory should project w.like_count");
@@ -44,7 +44,7 @@ class WorkMapperXmlProjectionTest {
     @DisplayName("公开分类分页作品列表查询应返回内容更新时间")
     void selectByPageOnCategory_ShouldProjectContentUpdatedAt() throws IOException {
         String xml = readWorkMapperXml();
-        String selectByPageOnCategoryBlock = slice(xml, "<select id=\"selectByPageOnCategory\"", "</select>");
+        String selectByPageOnCategoryBlock = slice(xml, "<select id=\"selectByPage\"", "</select>");
 
         assertTrue(selectByPageOnCategoryBlock.contains("w.content_updated_at"), "selectByPageOnCategory should project w.content_updated_at");
     }

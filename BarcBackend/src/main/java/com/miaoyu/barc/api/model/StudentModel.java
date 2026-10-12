@@ -1,6 +1,13 @@
 package com.miaoyu.barc.api.model;
 
 public class StudentModel {
+    // 新字段分开存储 key 与展示 URL；旧图片字段仍返回 URL 供既有页面展示。
+    @lombok.Getter @lombok.Setter private String avatar_square_key;
+    @lombok.Getter @lombok.Setter private String avatar_square_url;
+    @lombok.Getter @lombok.Setter private String avatar_rectangle_key;
+    @lombok.Getter @lombok.Setter private String avatar_rectangle_url;
+    @lombok.Getter @lombok.Setter private String body_image_key;
+    @lombok.Getter @lombok.Setter private String body_image_url;
     private String id;
     private String cn_name;
     private String jp_name;

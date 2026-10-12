@@ -16,10 +16,9 @@ class WorkReviewGateSqlTest {
     void publicQueries_ShouldRequireApprovedReview() throws IOException {
         String xml = read("mappers/work/WorkMapper.xml");
         String publicWhere = slice(xml, "<sql id=\"whereConditions\">", "</sql>");
-        String categoryWhere = slice(xml, "<sql id=\"whereConditionOnCategory\">", "</sql>");
-
+        // 分类条件并入同一公开查询后，必须与审核门禁共同生效。
         assertTrue(publicWhere.contains("wr.status = 'APPROVED'"));
-        assertTrue(categoryWhere.contains("wr.status = 'APPROVED'"));
+        assertTrue(publicWhere.contains("category_id"));
     }
 
     @Test

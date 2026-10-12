@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {nextTick, onBeforeMount, onMounted, ref, watch} from "vue";
+import {nextTick, onMounted, ref, watch} from "vue";
 import type {WorkImpl} from "@/interfaces/WorkImpl.ts";
 import {
   CheckCircleOutlined,
@@ -112,7 +112,7 @@ const selectCategory = ref<string | null>(null);
 const fetchWorkCategories = async () => {
   await baseHttp.get("/api/category/all_top_categories")
     .then(res => {
-      const data: ResponseImpl = res.data;
+      const data: ResponseImpl<CategoryImpl[]> = res.data;
       if (data.code === 0) {
         workCategories.value = data.data;
       } else errorMessage("获取所有分类信息失败！网络问题？请刷新界面！");
@@ -133,7 +133,7 @@ const fetchStudentsByKeyword = async () => {
   }
   try {
     const response = await baseHttp("/api/student/list", {params: {keyword: studentKeyword.value}});
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<{ list: StudentImpl[] }> = response.data;
     if (data.code === 0) {
       studentList.value = data.data.list;
     } else infoMessage(data.msg);
@@ -299,7 +299,7 @@ const uploadWorkForm = async () => {
       method: "POST",
       data: formData,
     })
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<string> = response.data;
     if (data.code === 0) {
       successMessage("作品已提交，正在等待审核");
     } else {

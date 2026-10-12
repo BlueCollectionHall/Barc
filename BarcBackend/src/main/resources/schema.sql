@@ -1,3 +1,4 @@
+-- 当前结构快照：用于人工核对或独立空库导入。应用空库安装请使用 Flyway B13 + 后续迁移。
 # CREATE TABLE IF NOT EXISTS schools (
 #     id VARCHAR(200) PRIMARY KEY NOT NULL ,
 #     cn_name VARCHAR(100) NOT NULL,
@@ -37,10 +38,14 @@ CREATE TABLE IF NOT EXISTS user_basic(
     username VARCHAR(50) UNIQUE NOT NULL ,
     password VARCHAR(255) NOT NULL ,
     password_version TINYINT DEFAULT 1 ,
+    -- auth_version 用于撤销会话；password_version 仅描述口令算法。
+    auth_version BIGINT NOT NULL DEFAULT 0,
+    local_password_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     email VARCHAR(255) UNIQUE NOT NULL ,
     email_verified BOOLEAN DEFAULT FALSE ,
     telephone VARCHAR(20) NULL ,
     safe_level TINYINT DEFAULT 100 ,
+    safe_level_before_ban INT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -52,17 +57,26 @@ CREATE TABLE IF NOT EXISTS user_archive(
     birthday DATE NULL ,
     age INT NULL ,
     permission INT NOT NULL DEFAULT 1 ,
+    identity VARCHAR(16) NOT NULL DEFAULT 'USER',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
     FOREIGN KEY (uuid) REFERENCES user_basic(uuid) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS verification_code (
     unique_id VARCHAR(36) PRIMARY KEY NOT NULL ,
     code VARCHAR(6) NOT NULL ,
-    username VARCHAR(50) NOT NULL ,
+    username VARCHAR(255) NOT NULL ,
     scenario VARCHAR(20) NOT NULL ,
     create_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ,
     expiration_at TIMESTAMP NOT NULL ,
-    used BOOLEAN DEFAULT FALSE
+    used BOOLEAN DEFAULT FALSE,
+    INDEX idx_verification_email_scenario (username, scenario, used)
+);
+-- 同一邮箱及业务场景的验证码签发锁，禁止并发邮件互相作废。
+CREATE TABLE IF NOT EXISTS verification_issue_guard (
+    email VARCHAR(255) NOT NULL,
+    scenario VARCHAR(20) NOT NULL,
+    issued_at TIMESTAMP NULL,
+    PRIMARY KEY (email, scenario)
 );
 CREATE TABLE IF NOT EXISTS category(
     id VARCHAR(50) PRIMARY KEY NOT NULL ,
@@ -80,7 +94,7 @@ CREATE TABLE IF NOT EXISTS category(
 );
 CREATE TABLE IF NOT EXISTS work(
     id VARCHAR(100) PRIMARY KEY NOT NULL ,
-    title VARCHAR(50) NOT NULL ,
+    title VARCHAR(255) NOT NULL ,
     description TEXT NULL ,
     content LONGTEXT NULL ,
     banner_image VARCHAR(255) NOT NULL ,
@@ -88,14 +102,16 @@ CREATE TABLE IF NOT EXISTS work(
     view_count INT DEFAULT 0 ,
     like_count INT DEFAULT 0 ,
     author VARCHAR(32) NOT NULL ,
-    author_nickname VARCHAR(50) NULL ,
+    author_nickname VARCHAR(255) NULL ,
     uploader VARCHAR(32) NULL ,
     is_claim BOOLEAN DEFAULT FALSE ,
-    status TINYINT DEFAULT 0 ,
+    status VARCHAR(16) NOT NULL DEFAULT 'PRIVATE' ,
     student VARCHAR(255) NOT NULL ,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
     content_updated_at TIMESTAMP NULL DEFAULT NULL ,
+    content_revision BIGINT NOT NULL DEFAULT 0 ,
+    restore_status VARCHAR(16) NULL ,
     INDEX idx_creator (author),
     INDEX idx_status (status)
 );
@@ -113,7 +129,7 @@ CREATE TABLE IF NOT EXISTS work_review(
     FOREIGN KEY (reviewer_uuid) REFERENCES user_basic(uuid) ON DELETE SET NULL
 );
 CREATE TABLE IF NOT EXISTS work_category(
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    id VARCHAR(36) PRIMARY KEY NOT NULL,
     work_id VARCHAR(100) NOT NULL ,
     category_id VARCHAR(50) NOT NULL ,
     create_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -150,10 +166,11 @@ CREATE TABLE IF NOT EXISTS work_view_log(
     FOREIGN KEY (work_id) REFERENCES work(id)
 );
 CREATE TABLE IF NOT EXISTS school(
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
     id VARCHAR(200) PRIMARY KEY NOT NULL ,
-    cn_name VARCHAR(100) NOT NULL,
-    jp_name VARCHAR(100) NULL,
-    kr_name VARCHAR(100) NULL,
+    cn_name VARCHAR(255) NOT NULL,
+    jp_name VARCHAR(255) NULL,
+    kr_name VARCHAR(255) NULL,
     en_name VARCHAR(255) NULL,
     introduce TEXT NULL,
     logo VARCHAR(255) NULL,
@@ -162,11 +179,12 @@ CREATE TABLE IF NOT EXISTS school(
     UNIQUE KEY uk_name (cn_name)
 );
 CREATE TABLE IF NOT EXISTS club(
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
     id VARCHAR(200) PRIMARY KEY NOT NULL,
     school VARCHAR(200) NULL,
-    cn_name VARCHAR(100) NOT NULL,
-    jp_name VARCHAR(100) NULL,
-    kr_name VARCHAR(100) NULL,
+    cn_name VARCHAR(255) NOT NULL,
+    jp_name VARCHAR(255) NULL,
+    kr_name VARCHAR(255) NULL,
     en_name VARCHAR(255) NULL,
     logo VARCHAR(255) NULL,
     bg VARCHAR(255) NULL,
@@ -178,13 +196,15 @@ CREATE TABLE IF NOT EXISTS school_club(
     club_id VARCHAR(200) NOT NULL ,
     FOREIGN KEY (school_id) REFERENCES school(id) ON DELETE CASCADE ,
     FOREIGN KEY (club_id) REFERENCES club(id) ON DELETE CASCADE ,
-    UNIQUE KEY uk_school_club (school_id, club_id)
+    UNIQUE KEY uk_school_club (school_id, club_id),
+    UNIQUE KEY uk_school_club_single (club_id)
 );
 CREATE TABLE IF NOT EXISTS student(
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
     id VARCHAR(255) PRIMARY KEY NOT NULL,
-    cn_name VARCHAR(50) NOT NULL ,
-    jp_name VARCHAR(100) NULL ,
-    kr_name VARCHAR(100) NULL ,
+    cn_name VARCHAR(255) NOT NULL ,
+    jp_name VARCHAR(255) NULL ,
+    kr_name VARCHAR(255) NULL ,
     en_name VARCHAR(255) NOT NULL ,
     introduce TEXT NULL ,
     avatar_square VARCHAR(255) NULL ,
@@ -194,8 +214,8 @@ CREATE TABLE IF NOT EXISTS student(
     club VARCHAR(100) NOT NULL,
     INDEX idx_club (club),
     INDEX idx_school (school) ,
-    FOREIGN KEY student(club) REFERENCES club(id) ON DELETE CASCADE ,
-    FOREIGN KEY student(school) REFERENCES school(id) ON DELETE RESTRICT
+    CONSTRAINT fk_student_club FOREIGN KEY (club) REFERENCES club(id) ON DELETE CASCADE ,
+    CONSTRAINT fk_student_school FOREIGN KEY (school) REFERENCES school(id) ON DELETE RESTRICT
 );
 CREATE TABLE IF NOT EXISTS barc_naigos_uuid(
     uuid VARCHAR(32) PRIMARY KEY NOT NULL ,
@@ -206,10 +226,20 @@ CREATE TABLE IF NOT EXISTS work_claim(
     id VARCHAR(36) PRIMARY KEY NOT NULL ,
     work_id VARCHAR(100) NOT NULL ,
     applicant_uuid VARCHAR(32) NOT NULL ,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    statement VARCHAR(2000) NULL,
+    reviewer_uuid VARCHAR(32) NULL,
+    processed_at DATETIME NULL,
+    result_reason VARCHAR(500) NULL,
+    -- 仅状态参与生成列计算，保留账号外键的级联行为。
+    pending_marker TINYINT GENERATED ALWAYS AS (CASE WHEN status='PENDING' THEN 1 ELSE NULL END) STORED,
+    INDEX idx_claim_work_created (work_id, created_at, id),
+    INDEX idx_claim_applicant_created (applicant_uuid, created_at, id),
+    INDEX idx_claim_status_created (status, created_at, id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ,
     FOREIGN KEY (work_id) REFERENCES work(id) ON DELETE CASCADE ,
     FOREIGN KEY (applicant_uuid) REFERENCES user_basic(uuid) ON DELETE CASCADE ,
-    UNIQUE KEY (work_id, applicant_uuid)
+    UNIQUE KEY uk_claim_pending (work_id, applicant_uuid, pending_marker)
 );
 CREATE TABLE IF NOT EXISTS work_comment(
     id VARCHAR(36) PRIMARY KEY NOT NULL ,
@@ -256,7 +286,7 @@ CREATE TABLE IF NOT EXISTS message_board(
 );
 # 【已废弃】feedback_type / feedback_option
 # 反馈分类已改由后端 FeedbackTypeEnum 与前端本地映射驱动，
-# 全项目仅剩 FeedbackTypeOfController 的两个无调用方接口在查询它们，禁止再新增使用。
+# 旧接口已经下线；仅保留历史表定义，禁止新增读写链路。
 CREATE TABLE IF NOT EXISTS feedback_type(
     id VARCHAR(50) PRIMARY KEY NOT NULL ,
     name VARCHAR(20) NOT NULL,
@@ -292,7 +322,7 @@ CREATE TABLE IF NOT EXISTS feedback_work(
 );
 CREATE TABLE IF NOT EXISTS feedback(
     id VARCHAR(36) PRIMARY KEY NOT NULL ,
-    target_id VARCHAR(36) NOT NULL COMMENT '目标对象ID',
+    target_id VARCHAR(100) NULL COMMENT '目标对象ID',
     ipv4 VARCHAR(15) DEFAULT NULL ,
     ipv6 VARCHAR(39) DEFAULT NULL ,
     author VARCHAR(32) DEFAULT NULL,
@@ -325,7 +355,9 @@ CREATE TABLE IF NOT EXISTS trend_image(
     id VARCHAR(36) PRIMARY KEY NOT NULL ,
     trend_id VARCHAR(36) NOT NULL ,
     sort INT NOT NULL DEFAULT 0,
-    image_url VARCHAR(255) NOT NULL ,
+    image_url VARCHAR(255) NULL ,
+    object_key VARCHAR(255) NULL ,
+    INDEX idx_trend_image_object_key (object_key),
     image_name VARCHAR(255) NOT NULL ,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_trend_id (trend_id),
@@ -334,7 +366,7 @@ CREATE TABLE IF NOT EXISTS trend_image(
 CREATE TABLE IF NOT EXISTS notice (
     id VARCHAR(36) PRIMARY KEY NOT NULL ,
     title VARCHAR(255) NOT NULL ,
-    content TEXT NOT NULL ,
+    content LONGTEXT NOT NULL ,
     author VARCHAR(32) NOT NULL ,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -390,4 +422,116 @@ CREATE TABLE IF NOT EXISTS festival (
     deleted_at TIMESTAMP NULL ,
     INDEX idx_festival_enabled (enabled, deleted_at) ,
     INDEX idx_festival_range (start_index, end_index)
+);
+
+-- 邮件与业务事务同时入库；投递失败可重试，业务回滚不留下成功通知。
+CREATE TABLE IF NOT EXISTS mail_outbox (
+    id VARCHAR(36) PRIMARY KEY,
+    event_key VARCHAR(160) NOT NULL UNIQUE,
+    recipient VARCHAR(255) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    expires_at TIMESTAMP NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    lease_token VARCHAR(36) NULL,
+    lease_until TIMESTAMP NULL,
+    next_attempt_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sent_at TIMESTAMP NULL,
+    INDEX idx_mail_pending (sent_at, next_attempt_at)
+);
+
+-- 对象注册在上传前独立提交；业务回滚或放弃表单后仍可找到待回收对象。
+CREATE TABLE IF NOT EXISTS storage_object (
+    bucket VARCHAR(100) NOT NULL,
+    object_key VARCHAR(500) NOT NULL,
+    owner_uuid VARCHAR(36) NULL,
+    state VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (bucket, object_key)
+);
+
+-- 保存部团迁移前逐学生归属，用于审查和人工反向迁移，不自动恢复历史数据。
+CREATE TABLE IF NOT EXISTS entity_relation_change (
+    id VARCHAR(36) PRIMARY KEY,
+    operator_uuid VARCHAR(36) NOT NULL,
+    club_id VARCHAR(255) NOT NULL,
+    old_school VARCHAR(255) NULL,
+    new_school VARCHAR(255) NOT NULL,
+    previous_students JSON NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 新动态图片保存 COS key；历史 MinIO URL 原样保留，不自动搬迁或删除用户文件。
+-- object_key 与索引已在 trend_image 定义中声明，重复导入不再重复 ALTER。
+CREATE TABLE IF NOT EXISTS legacy_object_retirement (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    provider VARCHAR(20) NOT NULL,
+    bucket VARCHAR(100) NOT NULL,
+    object_key VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMP NULL
+);
+
+-- 小型配置集合的事务互斥锁（V21），不承载业务数据。
+CREATE TABLE IF NOT EXISTS catalog_mutation_lock (scope VARCHAR(64) NOT NULL PRIMARY KEY) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS cos_garbage_key(
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    bucket VARCHAR(100) NOT NULL,
+    object_key VARCHAR(500) NOT NULL,
+    retry_count INT DEFAULT 0,
+    last_error TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP NULL DEFAULT NULL,
+    INDEX idx_processed (processed_at),
+    INDEX idx_created (created_at)
+);
+
+CREATE TABLE IF NOT EXISTS user_ban_record (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    user_id VARCHAR(255) NOT NULL COMMENT '被封号用户ID',
+    ban_type TINYINT NOT NULL COMMENT '封号类型：0-风险冻结，1-临时封号，2-违规封号',
+    ban_reason VARCHAR(500) NOT NULL COMMENT '封号原因',
+    ban_duration_days INT DEFAULT NULL COMMENT '封号天数（临时封号使用）',
+    banned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '封号时间',
+    unbanned_at DATETIME DEFAULT NULL COMMENT '解封时间',
+    unban_reason VARCHAR(500) DEFAULT NULL COMMENT '解封原因',
+    operator_id VARCHAR(255) NOT NULL COMMENT '操作人ID（管理员或系统）',
+    operator_type TINYINT NOT NULL DEFAULT 1 COMMENT '操作人类型：0-系统自动，1-管理员',
+    safe_level_before_ban INT NOT NULL COMMENT '封号前的safe_level值',
+    safe_level_after_ban INT NOT NULL COMMENT '封号后的safe_level值',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_user_id (user_id),
+    INDEX idx_ban_type (ban_type),
+    INDEX idx_banned_at (banned_at),
+    INDEX idx_unbanned_at (unbanned_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户封号记录表';
+
+CREATE TABLE IF NOT EXISTS official_account (
+    business_key VARCHAR(64) PRIMARY KEY NOT NULL COMMENT '业务键，取 OfficialAccountEnum.name()',
+    user_uuid    VARCHAR(32) NOT NULL COMMENT '被指定的官方账号 UUID（user_archive.uuid）',
+    remark       VARCHAR(255) NULL COMMENT '绑定备注',
+    updated_by   VARCHAR(32) NULL COMMENT '最后操作的管理员 UUID',
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_official_account_user (user_uuid),
+    INDEX idx_official_account_updated_by (updated_by)
+);
+
+CREATE TABLE IF NOT EXISTS friend_link (
+    id          VARCHAR(32)  PRIMARY KEY NOT NULL,
+    title       VARCHAR(64)  NOT NULL,
+    url         VARCHAR(512) NOT NULL,
+    logo_key    VARCHAR(255) NULL,
+    intro       VARCHAR(255) NULL,
+    sort_order  INT          NOT NULL DEFAULT 0,
+    enabled     TINYINT(1)   NOT NULL DEFAULT 1,
+    created_by  VARCHAR(32)  NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at  TIMESTAMP NULL,
+    INDEX idx_friend_link_order (sort_order),
+    INDEX idx_friend_link_logo_key (logo_key)
 );

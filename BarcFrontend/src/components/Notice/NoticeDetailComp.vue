@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {sanitizeHtmlContent} from '@/utils/richText';
 import {useRoute} from "vue-router";
 import {onMounted, ref} from "vue";
 import type {NoticeImpl} from "@/interfaces/NoticeImpl.ts";
@@ -17,7 +18,7 @@ const userArchive = ref<UserArchiveImpl | null>(null);
 const fetchNotice = async (noticeId: string) => {
   try {
     const response = await baseHttp.get("/notice/only", {params: {notice_id: noticeId}});
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<NoticeImpl> = response.data;
     if (data.code === 0) {
       notice.value = data.data;
       if (notice.value) await fetchUserArchive(notice.value.author);
@@ -32,7 +33,7 @@ const fetchNotice = async (noticeId: string) => {
 const fetchUserArchive = async (uuid: string) => {
   try {
     const response = await baseHttp.get("/user/current_by_uuid", {params: {uuid}});
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<UserArchiveImpl> = response.data;
     if (data.code === 0) {
       userArchive.value = data.data;
     } else errorMessage(data.data);
@@ -63,7 +64,7 @@ onMounted(() => {
         <span>发布于：{{timestampToCn(notice.created_at)}}</span>
       </div>
     </div>
-    <div class="content" v-html="notice.content"></div>
+    <div class="content" v-html="sanitizeHtmlContent(notice.content)"></div>
   </div>
   <div class="no_data" v-else>
     <img class="icon" src="https://static.kivo.wiki/images/gallery/E1.%E5%AE%98%E6%96%B9%E8%A1%A8%E6%83%85%E5%8C%85/Default/cafabb328c6564d3445ebaa00e1c510f.gif" alt="icon"/>

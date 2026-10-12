@@ -65,6 +65,12 @@ public interface FestivalMapper {
     @Select("SELECT * FROM festival WHERE deleted_at IS NULL ORDER BY start_index ASC, created_at ASC")
     List<FestivalModel> selectAll();
 
+    /** 管理统计一次聚合后关联，避免为每个节日单独查询背景数。 */
+    @Select("SELECT f.*,COALESCE(b.bound_backgrounds,0) AS bound_backgrounds FROM festival f "
+            + "LEFT JOIN (SELECT festival,COUNT(*) AS bound_backgrounds FROM background_image WHERE deleted_at IS NULL GROUP BY festival) b ON b.festival=f.id "
+            + "WHERE f.deleted_at IS NULL ORDER BY f.start_index,f.created_at,f.id")
+    List<FestivalModel> selectAllWithCounts();
+
     /**
      * 启用的节日（用户端判定、背景图节日下拉用），按起始统一索引排序
      */

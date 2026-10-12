@@ -181,11 +181,14 @@ const bugFeedback: FeedbackRecord = {
   updated_at: '2026-06-02T11:00:00.000Z',
 }
 
+/** 测试使用真实分页形状，防止界面退回全量数组假设。 */
+const feedbackPage = (list: FeedbackRecord[]) => ({ list, total: list.length, page_num: 1, page_size: 20, total_page: 1 })
+
 describe('FeedbackManageListView', () => {
   beforeEach(() => {
     currentRoute.meta.title = 'BUG反馈'
     currentRoute.meta.feedbackType = 'BUG'
-    vi.mocked(getFeedbacksByType).mockReset().mockResolvedValue([bugFeedback])
+    vi.mocked(getFeedbacksByType).mockReset().mockResolvedValue(feedbackPage([bugFeedback]))
     vi.mocked(updateFeedbackStatus).mockReset().mockResolvedValue('修改成功')
   })
 
@@ -193,7 +196,7 @@ describe('FeedbackManageListView', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(getFeedbacksByType).toHaveBeenCalledWith('BUG')
+    expect(getFeedbacksByType).toHaveBeenCalledWith('BUG', 1)
     expect(wrapper.text()).toContain('BUG反馈')
     expect(wrapper.text()).toContain('fb-bug-1')
     expect(wrapper.text()).toContain('alice')
@@ -206,7 +209,7 @@ describe('FeedbackManageListView', () => {
   it('shows the complained user column only for USER feedback', async () => {
     currentRoute.meta.title = '用户投诉'
     currentRoute.meta.feedbackType = 'USER'
-    vi.mocked(getFeedbacksByType).mockResolvedValueOnce([
+    vi.mocked(getFeedbacksByType).mockResolvedValueOnce(feedbackPage([
       {
         ...bugFeedback,
         id: 'fb-user-1',
@@ -214,12 +217,12 @@ describe('FeedbackManageListView', () => {
         type: 'USER',
         status: 'PENDING',
       },
-    ])
+    ]))
 
     const wrapper = mountView()
     await flushPromises()
 
-    expect(getFeedbacksByType).toHaveBeenCalledWith('USER')
+    expect(getFeedbacksByType).toHaveBeenCalledWith('USER', 1)
     expect(wrapper.text()).toContain('被投诉用户')
     expect(wrapper.text()).toContain('user-2')
     expect(wrapper.text()).toContain('待处理')
@@ -228,12 +231,12 @@ describe('FeedbackManageListView', () => {
   it('submits feedback-only processing statuses with echo remarks', async () => {
     currentRoute.meta.title = '其他反馈'
     currentRoute.meta.feedbackType = 'OTHER'
-    vi.mocked(getFeedbacksByType).mockResolvedValue([{
+    vi.mocked(getFeedbacksByType).mockResolvedValue(feedbackPage([{
       ...bugFeedback,
       id: 'fb-other-1',
       type: 'OTHER',
       status: 'PENDING',
-    }])
+    }]))
 
     const wrapper = mountView()
     await flushPromises()

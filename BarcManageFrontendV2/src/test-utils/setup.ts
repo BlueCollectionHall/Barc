@@ -72,9 +72,9 @@ config.global.stubs = {
 }
 
 class TestResizeObserver implements ResizeObserver {
-  observe(_target: Element, _options?: ResizeObserverOptions): void {}
+  observe(): void {}
 
-  unobserve(_target: Element): void {}
+  unobserve(): void {}
 
   disconnect(): void {}
 }

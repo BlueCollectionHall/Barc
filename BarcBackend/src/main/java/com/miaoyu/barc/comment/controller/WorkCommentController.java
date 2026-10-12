@@ -1,16 +1,10 @@
 package com.miaoyu.barc.comment.controller;
 
 import com.miaoyu.barc.annotation.IgnoreAuth;
-import com.miaoyu.barc.annotation.SuchWorkCommentAnno;
-import com.miaoyu.barc.comment.mapper.WorkCommentMapper;
-import com.miaoyu.barc.comment.mapper.WorkCommentReplyMapper;
 import com.miaoyu.barc.comment.model.WorkCommentModel;
 import com.miaoyu.barc.comment.model.WorkCommentReplyModel;
 import com.miaoyu.barc.comment.service.WorkCommentService;
-import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.utils.J;
-import java.util.HashMap;
-import java.util.Map;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -24,10 +18,6 @@ import org.springframework.web.bind.annotation.*;
 public class WorkCommentController {
     @Autowired
     private WorkCommentService workCommentService;
-    @Autowired
-    private WorkCommentMapper workCommentMapper;
-    @Autowired
-    private WorkCommentReplyMapper workCommentReplyMapper;
 
     @IgnoreAuth
     @GetMapping("/comments_by_work")
@@ -50,29 +40,41 @@ public class WorkCommentController {
     public ResponseEntity<J> getCommentByIdControl(
             @RequestParam("comment_id") String commentId
     ) {
-        // 先查主评论表
-        WorkCommentModel comment = workCommentMapper.selectById(commentId);
-        if (comment != null) {
-            Map<String, Object> result = new HashMap<>();
-            result.put("id", comment.getId());
-            result.put("content", comment.getContent());
-            result.put("created_at", comment.getCreated_at());
-            result.put("work_id", comment.getWork_id());
-            result.put("type", "comment");
-            return ResponseEntity.ok(new ResourceR().resourceSuch(true, result));
-        }
-        // 再查回复表
-        WorkCommentReplyModel reply = workCommentReplyMapper.selectById(commentId);
-        if (reply != null) {
-            Map<String, Object> result = new HashMap<>();
-            result.put("id", reply.getId());
-            result.put("content", reply.getContent());
-            result.put("created_at", reply.getCreated_at());
-            result.put("parent_id", reply.getParent_id());
-            result.put("type", "reply");
-            return ResponseEntity.ok(new ResourceR().resourceSuch(true, result));
-        }
-        return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        return workCommentService.getCommentDetail(commentId, null, false);
+    }
+
+    /** 举报处理读取独立取证入口，不能借公开详情查看隐藏作品。 */
+    @GetMapping("/manage/detail")
+    public ResponseEntity<J> getManagementDetail(HttpServletRequest request, @RequestParam("comment_id") String id) {
+        return workCommentService.getCommentDetail(id, request.getAttribute("uuid").toString(), true);
+    }
+
+    /** 作品管理面板使用受控分页，避免公开门禁阻断审核取证或截断大量评论。 */
+    @GetMapping("/manage/page")
+    public ResponseEntity<J> getManagementPage(HttpServletRequest request, @RequestParam("work_id") String id,
+            @RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "10") Integer size) {
+        return workCommentService.getManagementPage(request.getAttribute("uuid").toString(), id, page, size);
+    }
+
+    @GetMapping("/manage/replies/page")
+    public ResponseEntity<J> getManagementReplies(HttpServletRequest request, @RequestParam("parent_id") String id,
+            @RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "5") Integer size) {
+        return workCommentService.getManagementReplies(request.getAttribute("uuid").toString(), id, page, size);
+    }
+
+    /** 主评论与回复采用真正的服务端分页，保留原数组接口兼容旧客户端。 */
+    @IgnoreAuth
+    @GetMapping("/page")
+    public ResponseEntity<J> getPage(@RequestParam("work_id") String id,
+            @RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "10") Integer size) {
+        return workCommentService.getCommentsPage(id, page, size);
+    }
+
+    @IgnoreAuth
+    @GetMapping("/replies/page")
+    public ResponseEntity<J> getReplies(@RequestParam("parent_id") String id,
+            @RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "5") Integer size) {
+        return workCommentService.getRepliesPage(id, page, size);
     }
 
     @PostMapping("/upload_comment")
@@ -92,27 +94,25 @@ public class WorkCommentController {
     }
 
     @DeleteMapping("/delete_comment")
-    @SuchWorkCommentAnno(commentAndReply = "comment", selectType = "id", index = 1)
     public ResponseEntity<J> deleteCommentControl(
             HttpServletRequest request,
             @RequestParam("comment_id") String commentId
     ) {
         return workCommentService.deleteCommentService(
                 request.getAttribute("uuid").toString(),
-                workCommentMapper.selectById(commentId).getAuthor(),
+                null,
                 commentId
         );
     }
 
     @DeleteMapping("/delete_reply")
-    @SuchWorkCommentAnno(commentAndReply = "reply", selectType = "id", index = 1)
     public ResponseEntity<J> deleteReplyControl(
             HttpServletRequest request,
             @RequestParam("reply_id") String replyId
     ) {
         return workCommentService.deleteReplyService(
                 request.getAttribute("uuid").toString(),
-                workCommentReplyMapper.selectById(replyId).getAuthor(),
+                null,
                 replyId
         );
     }

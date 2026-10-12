@@ -5,6 +5,7 @@ import type {MessageBoardWithUserImpl} from "@/interfaces/MessageBoardImpl.ts";
 import {baseHttp} from "@/utils/https.ts";
 import type {UserArchiveImpl} from "@/interfaces/UserImpl.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
+import {postBoardMessage} from "@/utils/messageBoardApi";
 import {
   errorCatchMessage,
   errorMessage,
@@ -21,7 +22,7 @@ const fetchMessage = async (limit: number) => {
     method: "GET",
     params: {limit}
   }).then(res => {
-    const data: ResponseImpl = res.data;
+    const data: ResponseImpl<MessageBoardWithUserImpl[]> = res.data;
     if (data.code === 0) {
       messageList.value = data.data;
       messageList.value = messageList.value?.map(msg => ({...msg, userInfo: undefined}));
@@ -60,17 +61,11 @@ const uploadNewMessage = async (): Promise<void> => {
     return;
   }
   try {
-    const response = await baseHttp("/comment/message_board/upload", {
-      method: "GET",
-      headers: {Authorization: token},
-      params: {content: message.value}
-    });
-    const data: ResponseImpl = response.data;
-    if (data.code === 0) {
-      successMessage(data.data);
-      await fetchMessage(5);
-    }
-    else errorMessage(data.msg);
+    // 首页与留言板复用同一 POST JSON 命令，避免首页继续调用已退役的 GET 写接口。
+    await postBoardMessage(message.value, token);
+    successMessage("留言成功");
+    message.value = "";
+    await fetchMessage(5);
   } catch (error) {
     console.error(error);
     errorCatchMessage();

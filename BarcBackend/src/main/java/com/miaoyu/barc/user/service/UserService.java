@@ -7,6 +7,7 @@ import com.miaoyu.barc.user.mapper.UserBasicMapper;
 import com.miaoyu.barc.user.mapper.VerificationCodeMapper;
 import com.miaoyu.barc.user.model.UserArchiveModel;
 import com.miaoyu.barc.user.model.UserBasicModel;
+import com.miaoyu.barc.user.model.dto.UserProfileUpdateRequest;
 import com.miaoyu.barc.user.model.VerificationCodeModel;
 import com.miaoyu.barc.user.model.vo.UserBasicVo;
 import com.miaoyu.barc.user.model.vo.UserInfoVo;
@@ -40,52 +41,36 @@ public class UserService {
     @Autowired
     private VerificationCodeMapper verificationCodeMapper;
 
+    /** 匿名查询只返回公开资料，管理列表显式使用受控入口。 */
     @Transactional(readOnly = true)
-    public ResponseEntity<J> getUsersByPage(PageRequestDto requestDto) {
-        log.info("用户档案=分页查询，页码{}，大小{}", requestDto.getPage_num(), requestDto.getPage_size());
-        // 初始化参数验证和默认值设置
-        PageInitPojo init = new PageInitPojo(requestDto);
-        int pageNum = init.getPageNum(); // 页码
-        int pageSize = init.getPageSize(); // 页大小
-        int offset = init.getOffset(); // 偏移量
-        // 查询条件：params 可能为 null —— 请求体里显式写 "params": null 时，
-        // Jackson 会用 null 覆盖掉 DTO 上的默认空 Map，旧代码直接调 .isEmpty() 会 NPE。
-        // 空条件不会让 SQL 生成 WHERE 子句，等价于全量分页。
+    public ResponseEntity<J> getUsersByPage(PageRequestDto requestDto) { return usersPage(requestDto, false); }
+
+    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = com.miaoyu.barc.user.enumeration.UserIdentityEnum.MANAGER,
+        targetPermission = 1, isHasElseUpper = false, isSuchElseRequire = false)})
+    @Transactional(readOnly = true)
+    public ResponseEntity<J> getUsersByPageForManage(String uuid, PageRequestDto requestDto) { return usersPage(requestDto, true); }
+
+    private ResponseEntity<J> usersPage(PageRequestDto requestDto, boolean manager) {
+        if (requestDto == null) requestDto = new PageRequestDto();
+        PageInitPojo p = new PageInitPojo(requestDto);
         Map<String, Object> condition = requestDto.getParams() == null ? new HashMap<>() : requestDto.getParams();
-        // 取数与计数共用同一套条件（2026-10 合并：原先按 params 是否为空走两条 SQL，
-        // 两条投影字段不一致、且空条件分支前端不可达，现统一为一条）
-        List<UserInfoVo> models = userArchiveMapper.selectUserInfoByPage(offset, pageSize, condition);
-        Long total = userArchiveMapper.countUserInfo(condition);
-        // 计算总页数
-        int mathTotalPage = (int) Math.ceil((double) total / pageSize);
-        Integer totalPage = mathTotalPage == 0 ? 1 : mathTotalPage;
-        // 数据封装并返回
-        return ResponseEntity.ok(
-                new SuccessR().normal(
-                        new PageResultDto<>(
-                                total,
-                                models,
-                                pageNum,
-                                pageSize,
-                                totalPage)));
+        List<UserInfoVo> models = userArchiveMapper.selectUserInfoByPage(p.getOffset(), p.getPageSize(), condition);
+        long total = userArchiveMapper.countUserInfo(condition);
+        Object entries = manager ? models : models.stream().map(com.miaoyu.barc.user.model.vo.PublicUserView::from).toList();
+        return ResponseEntity.ok(new SuccessR().normal(new PageResultDto<>(total, (List<?>) entries,
+            p.getPageNum(), p.getPageSize(), Math.max(1, (int) Math.ceil((double) total / p.getPageSize())))));
     }
+
+    public ResponseEntity<J> getCurrentByUuidService(String uuid) { return profile(userArchiveMapper.selectByUuid(uuid), false); }
+
+    public ResponseEntity<J> getCurrentByUsernameService(String username) { return profile(userArchiveMapper.selectByUsername(username), false); }
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
-    public ResponseEntity<J> getCurrentByUuidService(String uuid) {
-        return ResponseEntity.ok(new SuccessR().normal(userArchiveMapper.selectByUuid(uuid)));
-    }
+    public ResponseEntity<J> getMeCurrentService(String uuid) { return profile(userArchiveMapper.selectByUuid(uuid), true); }
 
-    public ResponseEntity<J> getCurrentByUsernameService(String username) {
-        UserArchiveModel userArchive = userArchiveMapper.selectByUsername(username);
-        if (Objects.isNull(userArchive)) {
-            return ResponseEntity.ok(new UserR().noSuchUser());
-        }
-        return ResponseEntity.ok(new SuccessR().normal(userArchive));
-    }
-
-    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
-    public ResponseEntity<J> getMeCurrentService(String uuid) {
-        return ResponseEntity.ok(new SuccessR().normal(userArchiveMapper.selectByUuid(uuid)));
+    private ResponseEntity<J> profile(UserArchiveModel user, boolean self) {
+        if (user == null) return ResponseEntity.ok(new UserR().noSuchUser());
+        return ResponseEntity.ok(new SuccessR().normal(self ? user : com.miaoyu.barc.user.model.vo.PublicUserView.from(user)));
     }
 
     /**
@@ -133,52 +118,26 @@ public class UserService {
     }
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
-    public ResponseEntity<J> editArchiveService(String uuid, UserArchiveModel requestModel) {
-        if (!uuid.equals(requestModel.getUuid())) {
+    public ResponseEntity<J> editArchiveService(String uuid, UserProfileUpdateRequest requestModel) {
+        if (requestModel == null || !uuid.equals(requestModel.getUuid())) {
             return ResponseEntity.ok(new ErrorR().normal("登录账号与要修改的信息不匹配！"));
         }
-        if (!Objects.isNull(requestModel.getBirthday())) {
-            requestModel.setAge(Period.between(requestModel.getBirthday(), LocalDate.now()).getYears());
+        if (requestModel.getBirthday() != null && requestModel.getBirthday().isAfter(LocalDate.now())) {
+            return ResponseEntity.ok(new ErrorR().normal("生日不能晚于今天"));
         }
-        boolean b = userArchiveMapper.update(requestModel);
+        // 显式构造可写资料，防止持久化模型新增敏感字段后被自动绑定写入。
+        UserArchiveModel profile = new UserArchiveModel();
+        profile.setUuid(uuid);
+        profile.setNickname(requestModel.getNickname());
+        profile.setAvatar(requestModel.getAvatar());
+        profile.setGender(requestModel.getGender());
+        profile.setBirthday(requestModel.getBirthday());
+        profile.setAge(requestModel.getBirthday() == null ? null : Period.between(requestModel.getBirthday(), LocalDate.now()).getYears());
+        boolean b = userArchiveMapper.update(profile);
         if (b) {
             return ResponseEntity.ok(new ChangeR().udu(true, 3));
         }
         return ResponseEntity.ok(new ChangeR().udu(false, 3));
     }
-    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
-    public ResponseEntity<J> editBasicService(String uuid, UserBasicModel requestModel) {
-        if (!uuid.equals(requestModel.getUuid())) {
-            return ResponseEntity.ok(new ErrorR().normal("登录账号与要修改的信息不匹配！"));
-        }
-        boolean b = userBasicMapper.update(requestModel);
-        if (b) {
-            return ResponseEntity.ok(new ChangeR().udu(true, 3));
-        }
-        return ResponseEntity.ok(new ChangeR().udu(false, 3));
-    }
-
-    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check()})
-    public ResponseEntity<J> resetPasswordService(String uuid, String uniqueId, String code, String email, String password) {
-        VerificationCodeModel vcDB = verificationCodeMapper.selectByUniqueId(uniqueId);
-        if (Objects.isNull(vcDB)) {
-            return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
-        }
-        if (!email.equals(vcDB.getUsername())) {
-            return ResponseEntity.ok(new ErrorR().normal("验证码记录邮箱与要修改的邮箱不相同！"));
-        }
-        if (!code.equals(vcDB.getCode()) || !vcDB.getScenario().equals("ResetPassword")) {
-            return ResponseEntity.ok(new ErrorR().normal("验证码不一致！"));
-        }
-        String s = passwordHash.passwordHash256(password);
-        if (Objects.isNull(s)) {
-            return ResponseEntity.ok(new ErrorR().normal("密码重置失败！"));
-        }
-        verificationCodeMapper.updateUsed(uniqueId);
-        boolean b = userBasicMapper.updatePassword(uuid, s);
-        if (b) {
-            return ResponseEntity.ok(new ChangeR().udu(true, 3));
-        }
-        return ResponseEntity.ok(new ChangeR().udu(false, 3));
-    }
+    // 账号基础资料、改密及邮箱改绑统一由 AccountSecurityService 处理。
 }

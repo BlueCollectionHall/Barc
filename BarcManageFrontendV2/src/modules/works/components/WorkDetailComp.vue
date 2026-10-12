@@ -50,11 +50,12 @@
           <el-tag v-if="detail.student_name" size="small">{{ detail.student_name }}</el-tag>
         </div>
         <!-- 管理操作按钮 -->
-        <div class="actions">
+        <!-- 认领证据预览不展示作品治理操作。 -->
+        <div v-if="!props.claimMode" class="actions">
           <template v-if="detail.work.status !== 'DELETED'">
             <el-button v-if="detail.work.status === 'PUBLIC' || detail.work.status === 'PRIVATE'" type="warning" @click="emit('ban')">封禁</el-button>
             <el-button v-if="detail.work.status === 'PUBLIC' || detail.work.status === 'PRIVATE'" type="warning" @click="emit('off')">下架</el-button>
-            <el-button v-if="detail.work.status === 'BAN' || detail.work.status === 'OFF'" type="success" @click="emit('restore')">恢复公开</el-button>
+            <el-button v-if="detail.work.status === 'BAN' || detail.work.status === 'OFF'" type="success" @click="emit('restore')">恢复原可见性</el-button>
           </template>
           <el-button v-if="detail.work.status !== 'DELETED'" type="danger" @click="emit('delete')">删除</el-button>
         </div>
@@ -68,7 +69,7 @@
     </div>
 
     <!-- 内容区 -->
-    <div v-if="tab === 'content'" class="body" v-html="detail.work.content" />
+    <div v-if="tab === 'content'" class="body" v-html="sanitizeHtmlContent(detail.work.content)" />
 
     <!-- 图集 -->
     <div v-else-if="detail.content_image_urls?.length" class="gallery">
@@ -87,13 +88,14 @@
 </template>
 
 <script setup lang="ts">
+import { sanitizeHtmlContent } from '@/shared/utils/html'
 import { ref, onMounted } from 'vue'
 import { View } from '@element-plus/icons-vue'
-import { getWorkEditDetail } from '../api/workManage'
+import { getWorkEditDetail, getClaimWorkDetail } from '../api/workManage'
 import WorkStatusBadge from './WorkStatusBadge.vue'
 import type { WorkEditDetail, WorkRecord } from '../api/workManage'
 
-const props = defineProps<{ workId: string }>()
+const props = defineProps<{ workId: string; claimMode?: boolean }>()
 const emit = defineEmits<{ ban: []; off: []; restore: []; delete: [] }>()
 
 const detail = ref<WorkEditDetail | null>(null)
@@ -114,12 +116,12 @@ function reviewLabel(status: string): string {
 }
 
 onMounted(async () => {
-  try { detail.value = await getWorkEditDetail(props.workId) } catch { /* */ }
+  try { detail.value = await (props.claimMode ? getClaimWorkDetail : getWorkEditDetail)(props.workId) } catch { /* */ }
 })
 
 // 通过 expose 让父组件传 workId 并加载
 async function load(id: string) {
-  try { detail.value = await getWorkEditDetail(id) } catch { /* */ }
+  try { detail.value = await (props.claimMode ? getClaimWorkDetail : getWorkEditDetail)(id) } catch { /* */ }
 }
 defineExpose({ load })
 </script>

@@ -1,6 +1,9 @@
 package com.miaoyu.barc.background.service;
 
 import com.miaoyu.barc.api.service.CosGcService;
+import com.miaoyu.barc.api.file.service.ObjectStorageService;
+import com.miaoyu.barc.exception.ApiException;
+import com.miaoyu.barc.security.TestImages;
 import com.miaoyu.barc.background.mapper.BackgroundImageMapper;
 import com.miaoyu.barc.background.model.BackgroundImageModel;
 import com.miaoyu.barc.background.model.BackgroundModuleOption;
@@ -34,6 +37,7 @@ import static org.mockito.Mockito.*;
  */
 @ExtendWith(MockitoExtension.class)
 class BackgroundImageServiceTest {
+    @Mock private ObjectStorageService objectStorage;
 
     @Mock
     private BackgroundImageMapper backgroundImageMapper;
@@ -48,6 +52,7 @@ class BackgroundImageServiceTest {
     @Mock
     private ImageUrlResolver imageUrlResolver;
 
+    @Mock private com.miaoyu.barc.api.mapper.CatalogMutationMapper catalogMutationMapper;
     @InjectMocks
     private BackgroundImageService backgroundImageService;
 
@@ -56,7 +61,7 @@ class BackgroundImageServiceTest {
     @BeforeEach
     void setUp() {
         // 轻量图片（< 1MB）
-        image = new MockMultipartFile("file", "photo.jpg", "image/jpeg", new byte[]{1, 2, 3});
+        image = new MockMultipartFile("file", "photo.jpg", "image/jpeg", TestImages.jpeg());
     }
 
     @Test
@@ -96,8 +101,8 @@ class BackgroundImageServiceTest {
     @Test
     @DisplayName("上传背景图 - 成功，落 image 桶且命名符合规则")
     void upload_success() {
-        when(cosService.uploadFileWithKey(eq(image), anyString(), eq(CosBucketConfigEnum.image)))
-                .thenAnswer(inv -> new J(0, "文件上传成功", inv.getArgument(1)));
+        when(objectStorage.uploadWithKey(eq("admin-uuid"), eq(image), anyString(), eq(1024L * 1024)))
+                .thenAnswer(inv -> inv.getArgument(2));
         when(backgroundImageMapper.insert(any(BackgroundImageModel.class))).thenReturn(1);
 
         ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", null, null);
@@ -116,10 +121,9 @@ class BackgroundImageServiceTest {
     @Test
     @DisplayName("上传背景图 - COS 上传失败返回错误")
     void upload_cosFail() {
-        when(cosService.uploadFileWithKey(eq(image), anyString(), eq(CosBucketConfigEnum.image)))
-                .thenReturn(new J(1, "文件上传失败", null));
-        ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", null, null);
-        assertEquals(1, response.getBody().getCode());
+        when(objectStorage.uploadWithKey(eq("admin-uuid"), eq(image), anyString(), eq(1024L * 1024)))
+                .thenThrow(new ApiException(new J(1, "文件上传失败", null)));
+        assertThrows(ApiException.class, () -> backgroundImageService.uploadService("admin-uuid", image, "home", null, null));
         verify(backgroundImageMapper, never()).insert(any());
     }
 
@@ -230,8 +234,8 @@ class BackgroundImageServiceTest {
     @Test
     @DisplayName("上传背景图 - 携带合法时段与节日标签并落库")
     void upload_withValidScene() {
-        when(cosService.uploadFileWithKey(eq(image), anyString(), eq(CosBucketConfigEnum.image)))
-                .thenAnswer(inv -> new J(0, "文件上传成功", inv.getArgument(1)));
+        when(objectStorage.uploadWithKey(eq("admin-uuid"), eq(image), anyString(), eq(1024L * 1024)))
+                .thenAnswer(inv -> inv.getArgument(2));
         when(backgroundImageMapper.insert(any(BackgroundImageModel.class))).thenReturn(1);
         // 节日改为「节日管理」中的动态数据：节日存在即可绑定
         when(festivalMapper.selectById("fest-1")).thenReturn(enabledFestival("fest-1"));
@@ -277,8 +281,8 @@ class BackgroundImageServiceTest {
         disabled.setId("fest-off");
         disabled.setEnabled(false);
         when(festivalMapper.selectById("fest-off")).thenReturn(disabled);
-        when(cosService.uploadFileWithKey(eq(image), anyString(), eq(CosBucketConfigEnum.image)))
-                .thenAnswer(inv -> new J(0, "文件上传成功", inv.getArgument(1)));
+        when(objectStorage.uploadWithKey(eq("admin-uuid"), eq(image), anyString(), eq(1024L * 1024)))
+                .thenAnswer(inv -> inv.getArgument(2));
         when(backgroundImageMapper.insert(any(BackgroundImageModel.class))).thenReturn(1);
 
         ResponseEntity<J> response = backgroundImageService.uploadService("admin-uuid", image, "home", null, "fest-off");

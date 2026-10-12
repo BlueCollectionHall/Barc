@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from "vue";
+import { ref, watch, computed } from "vue";
 import {
   MessageOutlined,
   SendOutlined,
-  DeleteOutlined,
   CloseOutlined,
-  ExclamationCircleOutlined,
 } from "@ant-design/icons-vue";
 import { useUserPinia } from "@/stores/UserPinia.ts";
 import { storeToRefs } from "pinia";
 import {
-  fetchCommentsByWork,
+  fetchCommentsPage,
+  fetchRepliesPage,
+  fetchCommentCountByWork,
   uploadComment,
   uploadReply,
   deleteComment,
@@ -19,7 +19,7 @@ import {
   fetchUserArchive,
 } from "@/utils/commentApi.ts";
 import { errorMessage, successMessage } from "@/utils/MessageAlert.ts";
-import type { WorkCommentImpl, WorkCommentReplyImpl } from "@/interfaces/WorkImpl.ts";
+import type { WorkCommentReplyImpl } from "@/interfaces/WorkImpl.ts";
 import type { CommentDisplayImpl, ReplyDisplayImpl } from "@/interfaces/CommentImpl.ts";
 import type { FeedBackImpl } from "@/interfaces/FeedbackImpl.ts";
 
@@ -39,7 +39,11 @@ const { userBasic } = storeToRefs(userPinia);
 // ========== 状态 ==========
 const loading = ref(false);
 const allComments = ref<Array<CommentDisplayImpl>>([]);
-const displayCount = ref(10); // 每次展示条数
+// 分页容量与后端一致，避免仅在本地截取已全量下载的数据。
+const currentPage = ref(0);
+const parentTotal = ref(0);
+const totalCommentCount = ref(0);
+const replyLoading = ref<Record<string, boolean>>({});
 const inputContent = ref("");
 
 // 回复状态
@@ -58,19 +62,12 @@ const reportContent = ref("");
 const userCache = ref<Map<string, { nickname: string; avatar: string | null }>>(new Map());
 
 // ========== 计算属性 ==========
-const token = computed(() => window.localStorage.getItem("token") || "");
+// 每次操作读取当前会话，避免计算属性缓存已经退出的旧令牌。
+const readToken = () => window.localStorage.getItem("token") || "";
+let loadSequence = 0;
 
-const displayComments = computed(() => allComments.value.slice(0, displayCount.value));
-
-const hasMore = computed(() => displayCount.value < allComments.value.length);
-
-const totalCommentCount = computed(() => {
-  let count = allComments.value.length;
-  for (const c of allComments.value) {
-    if (c.replies) count += c.replies.length;
-  }
-  return count;
-});
+const displayComments = computed(() => allComments.value);
+const hasMore = computed(() => allComments.value.length < parentTotal.value);
 
 // ========== 用户信息获取（带缓存） ==========
 async function getUserInfo(uuid: string): Promise<{ nickname: string; avatar: string | null }> {
@@ -83,50 +80,56 @@ async function getUserInfo(uuid: string): Promise<{ nickname: string; avatar: st
   return info;
 }
 
-// ========== 加载评论 ==========
-async function loadComments() {
-  if (!props.workId) return;
+/** 转换当前页回复，昵称缓存避免重复查询。 */
+async function displayReply(reply: WorkCommentReplyImpl): Promise<ReplyDisplayImpl> {
+  const [author, target] = await Promise.all([
+    getUserInfo(reply.author),
+    reply.reply_user ? getUserInfo(reply.reply_user) : Promise.resolve(null),
+  ]);
+  return { ...reply, authorNickname: author.nickname, authorAvatar: author.avatar, replyUserNickname: target?.nickname ?? null };
+}
+
+/** 重载第一页或追加下一页，总数独立获取，失败时不推进页码。 */
+async function loadComments(append = false) {
+  if (!props.workId || loading.value) return;
+  const sequence = ++loadSequence;
   loading.value = true;
   try {
-    const rawComments = await fetchCommentsByWork(props.workId);
-    // 转换为展示模型（填充用户昵称）
-    const displayList: Array<CommentDisplayImpl> = [];
-    for (const c of rawComments) {
-      const authorInfo = await getUserInfo(c.author);
-      const displayComment: CommentDisplayImpl = {
-        ...c,
-        authorNickname: authorInfo.nickname,
-        authorAvatar: authorInfo.avatar,
-        replies: [],
-      };
-      if (c.replies && c.replies.length > 0) {
-        const replyDisplays: Array<ReplyDisplayImpl> = [];
-        for (const r of c.replies) {
-          const replyAuthorInfo = await getUserInfo(r.author);
-          let replyUserNickname: string | null = null;
-          if (r.reply_user) {
-            const replyUserInfo = await getUserInfo(r.reply_user);
-            replyUserNickname = replyUserInfo.nickname;
-          }
-          replyDisplays.push({
-            ...r,
-            authorNickname: replyAuthorInfo.nickname,
-            authorAvatar: replyAuthorInfo.avatar,
-            replyUserNickname,
-          });
-        }
-        displayComment.replies = replyDisplays;
-      }
-      displayList.push(displayComment);
-    }
-    allComments.value = displayList;
-    displayCount.value = 10;
-    emit("commentCount", totalCommentCount.value);
-  } catch (e) {
-    console.error(e);
-    errorMessage("加载评论失败");
+    const requestedPage = append ? currentPage.value + 1 : 1;
+    const [page, count] = await Promise.all([
+      fetchCommentsPage(props.workId, requestedPage),
+      fetchCommentCountByWork(props.workId),
+    ]);
+    const displayList = await Promise.all(page.list.map(async (comment) => {
+      const author = await getUserInfo(comment.author);
+      return { ...comment, authorNickname: author.nickname, authorAvatar: author.avatar,
+        replies: await Promise.all((comment.replies ?? []).map(displayReply)) };
+    }));
+    if (sequence !== loadSequence) return;
+    allComments.value = append ? [...allComments.value, ...displayList] : displayList;
+    currentPage.value = requestedPage;
+    parentTotal.value = page.total;
+    totalCommentCount.value = count;
+    emit("commentCount", count);
+  } catch {
+    if (sequence === loadSequence) errorMessage("加载评论失败");
   } finally {
-    loading.value = false;
+    if (sequence === loadSequence) loading.value = false;
+  }
+}
+
+/** 回复也可以继续翻页，避免回复数超过预览上限后无法查看。 */
+async function loadReplies(comment: CommentDisplayImpl) {
+  if (replyLoading.value[comment.id]) return;
+  replyLoading.value[comment.id] = true;
+  try {
+    const page = await fetchRepliesPage(comment.id, Math.floor((comment.replies?.length ?? 0) / 5) + 1);
+    comment.replies = [...(comment.replies ?? []), ...await Promise.all(page.list.map(displayReply))];
+    comment.reply_count = page.total;
+  } catch {
+    errorMessage("加载回复失败");
+  } finally {
+    replyLoading.value[comment.id] = false;
   }
 }
 
@@ -137,16 +140,17 @@ function onScroll(e: Event) {
   // 距离底部 50px 时加载更多
   if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
     if (hasMore.value && !loading.value) {
-      displayCount.value += 10;
+      void loadComments(true);
     }
   }
 }
 
 // ========== 发布评论 ==========
 async function handleSubmitComment() {
+  const token = readToken();
   const content = inputContent.value.trim();
   if (!content) return;
-  if (!token.value) {
+  if (!token) {
     errorMessage("请先登录后再评论");
     return;
   }
@@ -157,7 +161,7 @@ async function handleSubmitComment() {
         replyTarget.value.commentId,
         replyTarget.value.replyUserId,
         content,
-        token.value,
+        token,
       );
       if (success) {
         successMessage("回复成功");
@@ -167,7 +171,7 @@ async function handleSubmitComment() {
       }
     } else {
       // 新评论
-      const success = await uploadComment(props.workId, content, token.value);
+      const success = await uploadComment(props.workId, content, token);
       if (success) {
         successMessage("评论成功");
         inputContent.value = "";
@@ -182,7 +186,7 @@ async function handleSubmitComment() {
 
 // ========== 回复 ==========
 function handleReply(comment: CommentDisplayImpl | ReplyDisplayImpl, isReply: boolean) {
-  if (!token.value) {
+  if (!readToken()) {
     errorMessage("请先登录后再回复");
     return;
   }
@@ -210,9 +214,10 @@ function cancelReply() {
 
 // ========== 删除 ==========
 async function handleDeleteComment(commentId: string) {
-  if (!token.value) return;
+  const token = readToken();
+  if (!token) return;
   try {
-    const success = await deleteComment(commentId, token.value);
+    const success = await deleteComment(commentId, token);
     if (success) {
       successMessage("删除成功");
       await loadComments();
@@ -224,9 +229,10 @@ async function handleDeleteComment(commentId: string) {
 }
 
 async function handleDeleteReply(replyId: string) {
-  if (!token.value) return;
+  const token = readToken();
+  if (!token) return;
   try {
-    const success = await deleteReply(replyId, token.value);
+    const success = await deleteReply(replyId, token);
     if (success) {
       successMessage("删除成功");
       await loadComments();
@@ -296,15 +302,23 @@ function truncateNick(name: string, maxLen = 10): string {
 
 // ========== 监听 ==========
 watch(
-  () => props.visible,
-  (val) => {
-    if (val) {
-      displayCount.value = 10;
+  () => [props.visible, props.workId] as const,
+  ([visible]) => {
+    // 切换作品或关闭弹窗时令旧请求失效，避免旧页结果覆盖新作品。
+    loadSequence++;
+    loading.value = false;
+    allComments.value = [];
+    parentTotal.value = 0;
+    totalCommentCount.value = 0;
+    userCache.value.clear();
+    if (visible) {
+      currentPage.value = 0;
       replyTarget.value = null;
       inputContent.value = "";
       loadComments();
     }
   },
+  { immediate: true },
 );
 
 function handleClose() {
@@ -403,12 +417,16 @@ function handleClose() {
                   </div>
                 </div>
               </div>
+              <button v-if="(comment.reply_count ?? 0) > (comment.replies?.length ?? 0)"
+                class="action-btn" :disabled="replyLoading[comment.id]" @click="loadReplies(comment)">
+                {{ replyLoading[comment.id] ? '加载中...' : '加载更多回复' }}
+              </button>
             </div>
           </div>
         </div>
 
         <!-- 加载更多提示 -->
-        <div v-if="hasMore && !loading" class="load-more" @click="displayCount += 10">
+        <div v-if="hasMore && !loading" class="load-more" @click="loadComments(true)">
           点击加载更多...
         </div>
         <div v-if="!hasMore && allComments.length > 0" class="no-more">

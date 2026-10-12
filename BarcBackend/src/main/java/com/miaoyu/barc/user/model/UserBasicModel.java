@@ -7,6 +7,10 @@ public class UserBasicModel {
     private String username;
     private String password;
     private Integer password_version;
+    /** 会话撤销版本，与密码算法版本独立。 */
+    private Long auth_version;
+    /** 外部账号必须通过验证设置密码后才可使用本地登录。 */
+    private Boolean local_password_enabled;
     private String email;
     private Boolean email_verified;
     private String telephone;
@@ -46,6 +50,11 @@ public class UserBasicModel {
     public void setPassword_version(Integer password_version) {
         this.password_version = password_version;
     }
+
+    public Long getAuth_version() { return auth_version; }
+    public void setAuth_version(Long authVersion) { this.auth_version = authVersion; }
+    public Boolean getLocal_password_enabled() { return local_password_enabled; }
+    public void setLocal_password_enabled(Boolean enabled) { this.local_password_enabled = enabled; }
 
     public String getEmail() {
         return email;

@@ -164,7 +164,10 @@ public class UserBanService {
     public ResponseEntity<J> getBanHistory(String userId, int page, int size) {
         log.info("查询用户封号历史，用户{}，页码{}，大小{}", userId, page, size);
         
-        int offset = (page - 1) * size;
+        // 集中限制容量与长整型偏移，防止极端分页参数放大查询或溢出。
+        var paging = new com.miaoyu.barc.utils.pojo.PageInitPojo(page, size);
+        size = paging.getPageSize();
+        int offset = paging.getOffset();
         List<UserBanRecordModel> list = userBanRecordMapper.selectByUserId(userId, offset, size);
         long total = userBanRecordMapper.countByUserId(userId);
         

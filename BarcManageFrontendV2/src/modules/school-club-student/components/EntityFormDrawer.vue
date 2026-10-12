@@ -2,13 +2,8 @@
   <el-drawer v-model="visible" :title="title" size="480px" :before-close="handleClose">
     <el-form :model="form" label-width="100px" :rules="rules" ref="formRef">
       <!-- ID 字段 -->
-      <el-form-item v-if="!isEdit && entityType === 'student'" label="ID">
+      <el-form-item v-if="!isEdit" label="ID">
         <el-input :model-value="idPreview" disabled placeholder="输入英文名后自动生成" />
-        <div v-if="idConflict" class="error-text">ID 已存在</div>
-      </el-form-item>
-
-      <el-form-item v-if="!isEdit && entityType !== 'student'" label="ID" prop="id">
-        <el-input v-model="form.id" @blur="checkId" placeholder="输入唯一标识" />
         <div v-if="idConflict" class="error-text">ID 已存在</div>
       </el-form-item>
 
@@ -17,7 +12,7 @@
       </el-form-item>
 
       <el-form-item label="英文名" prop="en_name">
-        <el-input v-model="form.en_name" :disabled="isEdit && entityType === 'student'" :placeholder="entityType === 'student' && !isEdit ? 'North Abydos' : ''" />
+        <el-input v-model="form.en_name" :disabled="isEdit" @blur="checkId" placeholder="例如 North Abydos" />
       </el-form-item>
 
       <el-form-item label="中文名" prop="cn_name">
@@ -30,7 +25,7 @@
         <el-input v-model="form.kr_name" />
       </el-form-item>
       <el-form-item v-if="entityType !== 'club'" label="介绍">
-        <el-input v-model="form.introduce" type="textarea" rows="3" />
+        <el-input v-model="form.introduce" type="textarea" :rows="3" />
       </el-form-item>
 
       <!-- 跨级重选上级 -->
@@ -39,6 +34,7 @@
           <el-option v-for="s in schoolOptions" :key="s.id" :label="s.cn_name" :value="s.id" />
         </el-select>
       </el-form-item>
+      <el-alert v-if="moveCount !== null" :title="`此次迁移会同步更新 ${moveCount} 名学生的所属学园`" type="warning" :closable="false" />
       <el-form-item v-if="entityType === 'student'" label="所属学园">
         <el-select v-model="form.school_id" placeholder="选择学园" @change="handleSchoolChange">
           <el-option v-for="s in schoolOptions" :key="s.id" :label="s.cn_name" :value="s.id" />
@@ -54,6 +50,7 @@
       <el-form-item v-for="field in imageFields" :key="field.key" :label="field.label">
         <ImageUploadField 
           v-model="form[field.key]" 
+          :preview-url="imagePreviews[field.key]"
           :upload-url="buildUploadUrl(field.key)"
           :entity-id="isEdit ? initialData?.id : undefined"
           :field-key="field.key"
@@ -72,16 +69,20 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { deriveEntityId, entityImagePayload, imageFormValue, imageUploadUrl } from '../api/entityForm'
+import { DEFAULT_API_BASE_URL } from '@/shared/constants/auth'
+import { ElMessage, type FormRules, type FormInstance } from 'element-plus'
+import type { EntityDraft, EntityRecord } from '../api/entityDraft'
 import ImageUploadField from './ImageUploadField.vue'
 import { checkSchoolIdAvailable } from '../api/school'
-import { checkClubIdAvailable } from '../api/club'
-import { checkStudentIdAvailable, updateStudentAvatarSquare, updateStudentAvatarRectangle, updateStudentBodyImage } from '../api/student'
+import { checkClubIdAvailable, previewClubMove } from '../api/club'
+import { checkStudentIdAvailable, fetchStudentById, updateStudentAvatarSquare, updateStudentAvatarRectangle, updateStudentBodyImage } from '../api/student'
 
 const props = defineProps<{
   modelValue: boolean
   entityType: 'school' | 'club' | 'student'
   isEdit: boolean
-  initialData?: Record<string, any>
+  initialData?: Partial<EntityRecord>
   parentId?: string
   schoolOptions?: { id: string; cn_name: string }[]
   clubOptions?: { id: string; cn_name: string }[]
@@ -90,7 +91,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', val: boolean): void
-  (e: 'submit', data: Record<string, any>): void
+  (e: 'submit', data: EntityDraft): void
   (e: 'school-change', schoolId: string): void
 }>()
 
@@ -99,7 +100,7 @@ const visible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
-const form = reactive<Record<string, any>>({
+const form = reactive<Record<string, string>>({
   id: '',
   en_name: '',
   cn_name: '',
@@ -115,14 +116,28 @@ const form = reactive<Record<string, any>>({
   avatar_rectangle: '',
   body_image: '',
 })
-const formRef = ref()
+const formRef = ref<FormInstance>()
+const imagePreviews = reactive<Record<string, string>>({})
 const idPreview = ref('')
 const idConflict = ref(false)
 const submitting = ref(false)
+const moveCount = ref<number | null>(null)
+
+// 预览仅用于告知影响范围，提交时后端仍重新读取并锁定关系。
+watch(() => form.school_id, async (schoolId) => {
+  moveCount.value = null
+  if (props.isEdit && props.entityType === 'club' && schoolId && schoolId !== props.initialData?.school) {
+    try {
+      const preview = await previewClubMove(String(props.initialData?.id), String(schoolId))
+      if (form.school_id === schoolId) moveCount.value = preview.affected_students
+    } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法获取迁移影响') }
+  }
+})
 
 watch(() => form.en_name, (val) => {
-  if (!props.isEdit && props.entityType === 'student') {
-    idPreview.value = val ? deriveId(val) : ''
+  if (!props.isEdit) {
+    idPreview.value = val ? deriveEntityId(val) : ''
+    idConflict.value = false
   }
 })
 
@@ -164,8 +179,12 @@ function getSaveFn(fieldKey: string) {
 }
 
 // 图片保存成功后的回调
-function handleImageSaved() {
-  // 可以在这里刷新数据或执行其他操作
+async function handleImageSaved() {
+  if (props.entityType !== 'student' || !props.initialData?.id) return
+  const fresh = await fetchStudentById(props.initialData.id)
+  for (const field of imageFields.value) {
+    imagePreviews[field.key] = String(fresh[`${field.key}_url` as keyof typeof fresh] || fresh[field.key as keyof typeof fresh] || '')
+  }
 }
 
 const imageFields = computed(() => {
@@ -190,14 +209,11 @@ const imageFields = computed(() => {
 })
 
 const rules = computed(() => {
-  const r: Record<string, any> = {
+  const r: FormRules = {
     cn_name: [{ required: true, message: '中文名必填', trigger: 'blur' }],
   }
-  if (props.entityType === 'student' && !props.isEdit) {
-    r.en_name = [{ required: true, message: '英文名必填', trigger: 'blur' }]
-  }
-  if (!props.isEdit && props.entityType !== 'student') {
-    r.id = [{ required: true, message: 'ID 必填', trigger: 'blur' }]
+  if (!props.isEdit) {
+    r.en_name = [{ required: true, pattern: /^[A-Za-z][A-Za-z0-9 ]{0,79}$/, message: '英文名须以字母开头，最多 80 个英文、数字或空格', trigger: 'blur' }]
   }
   return r
 })
@@ -207,33 +223,22 @@ function buildUploadUrl(field: string) {
   if (props.isEdit) {
     entityId = props.initialData?.id || ''
   } else {
-    entityId = props.entityType === 'student' ? idPreview.value : form.id
+    entityId = idPreview.value
   }
   // 如果 entityId 为空，返回空字符串（禁用上传）
   if (!entityId) {
     return ''
   }
   const prefix = `${props.entityType}s/${entityId}/${field}`
-  const apiBase = import.meta.env.VITE_API_BASE_URL || ''
-  return `${apiBase}/api/file/upload?path=${encodeURIComponent(prefix)}`
-}
-
-function deriveId(enName: string) {
-  return enName.toLowerCase().replace(/ /g, '_')
+  const apiBase = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
+  return imageUploadUrl(apiBase, prefix, window.location.origin)
 }
 
 async function checkId() {
   if (props.isEdit) return
-  let id = ''
-  if (props.entityType === 'student') {
-    if (!form.en_name) return
-    id = deriveId(form.en_name)
-    idPreview.value = id
-  } else {
-    id = form.id
-    if (!id) return
-    idPreview.value = id
-  }
+  if (!form.en_name) return
+  const id = deriveEntityId(form.en_name)
+  idPreview.value = id
   let ok = false
   if (props.entityType === 'school') ok = await checkSchoolIdAvailable(id)
   else if (props.entityType === 'club') ok = await checkClubIdAvailable(id)
@@ -244,6 +249,10 @@ async function checkId() {
 watch(() => props.modelValue, (val) => {
   if (val) {
     Object.assign(form, props.initialData || {})
+    imageFields.value.forEach(field => {
+      form[field.key] = imageFormValue({ ...props.initialData }, field.key)
+      imagePreviews[field.key] = String(props.initialData?.[`${field.key}_url` as keyof EntityRecord] || props.initialData?.[field.key as keyof EntityRecord] || '')
+    })
     if (!props.isEdit) {
       form.id = ''
       form.en_name = ''
@@ -253,7 +262,7 @@ watch(() => props.modelValue, (val) => {
       form.introduce = ''
       form.school_id = props.entityType === 'club' ? (props.parentId || '') : ''
       form.club_id = props.entityType === 'student' ? (props.parentId || '') : ''
-      imageFields.value.forEach(f => form[f.key] = '')
+      imageFields.value.forEach(f => { form[f.key] = ''; imagePreviews[f.key] = '' })
       idPreview.value = ''
       idConflict.value = false
     } else {
@@ -274,30 +283,28 @@ function handleClose() {
 async function submit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
+  if (!props.isEdit) {
+    await checkId()
+    if (idConflict.value) return
+    if (props.entityType === 'student' && (!form.avatar_rectangle || !form.body_image)) {
+      ElMessage.error('请上传学生矩形头像和立绘')
+      return
+    }
+  }
   
   // 将空字符串转换为 null
-  const toNull = (v: any) => (v === '' || v === undefined ? null : v)
+  const toNull = (v: string | undefined) => (v === '' || v === undefined ? null : v)
   
-  const payload: Record<string, any> = {
-    id: form.id,
-    en_name: form.en_name,
-    cn_name: form.cn_name,
+  const payload: EntityDraft = {
+    id: props.isEdit ? form.id || '' : idPreview.value,
+    en_name: form.en_name || '',
+    cn_name: form.cn_name || '',
     jp_name: toNull(form.jp_name),
     kr_name: toNull(form.kr_name),
     introduce: toNull(form.introduce),
   }
-  if (props.entityType === 'school') {
-    payload.logo = toNull(form.logo)
-    payload.beautify_logo = toNull(form.beautify_logo)
-    payload.bg = toNull(form.bg)
-  } else if (props.entityType === 'club') {
-    payload.logo = toNull(form.logo)
-    payload.bg = toNull(form.bg)
-  }
-  // 学生图片字段单独保存，不包含在表单提交中
-  if (!props.isEdit && props.entityType === 'student') {
-    payload.id = deriveId(form.en_name)
-  }
+  // 展示 URL 不进入写入 payload；新增学生也携带必需的图片 key。
+  Object.assign(payload, entityImagePayload(props.entityType, props.isEdit, form))
   if (props.entityType === 'club') {
     payload.school = toNull(form.school_id)
   }

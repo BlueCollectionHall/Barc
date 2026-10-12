@@ -1,4 +1,5 @@
 import { http } from '@/shared/api/http'
+import { fetchFeedbackPage } from '@/shared/api/feedback'
 import type { PageRequest, PageResult } from '@/shared/types/api'
 
 // 类型定义
@@ -13,6 +14,7 @@ export interface WorkRecord {
   reviewer_uuid?: string | null
   review_submitted_at?: string | null
   reviewed_at?: string | null
+  content_revision?: number
   created_at: string; content_updated_at?: string | null; updated_at: string
 }
 
@@ -20,6 +22,8 @@ export interface ClaimRecord {
   id: string; work_id: string; work_title: string
   applicant_uuid: string; applicant_nickname: string; applicant_username: string
   created_at: string
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUPERSEDED'
+  statement?: string; result_reason?: string; processed_at?: string
 }
 
 export interface ComplaintRecord {
@@ -67,8 +71,14 @@ export function updateWorkContent(model: Record<string, unknown>): Promise<strin
   return http.put<string>('/api/work/manage/update', model)
 }
 
-export function getClaimsList(): Promise<ClaimRecord[]> {
-  return http.get<ClaimRecord[]>('/api/work/manage/claims')
+/** 认领查询使用分页，状态为空时可遍历已处理历史。 */
+export function getClaimsPage(page = 1, status?: string, workId?: string): Promise<PageResult<ClaimRecord>> {
+  return http.get<PageResult<ClaimRecord>>('/api/work/manage/claims/page', {params: {page, size: 20, status, work_id: workId}})
+}
+
+/** 认领证据读取允许风纪委员；其他作品管理写权限保持独立。 */
+export function getClaimWorkDetail(workId: string): Promise<WorkEditDetail> {
+  return http.get<WorkEditDetail>('/api/work/manage/claim/detail', {params: {work_id: workId}})
 }
 
 export function approveClaim(claimId: string, approved: boolean): Promise<string> {
@@ -87,11 +97,12 @@ export function getClaimHistory(workId: string): Promise<ClaimRecord[]> {
   return http.get<ClaimRecord[]>('/api/work/manage/claim/history', { params: { work_id: workId } })
 }
 
-export function getComplaintsList(): Promise<ComplaintRecord[]> {
-  return http.get<ComplaintRecord[]>('/feedback/feedbacks_by_type', {
-    params: { type: 'WORK', is_manager: true },
-  })
+export function getComplaintsList(page = 1): Promise<PageResult<ComplaintRecord>> {
+  return fetchFeedbackPage<ComplaintRecord>('WORK', page)
 }
+
+/** 认领选择器使用后端字段白名单，不依赖管理详情中的正文或审核信息。 */
+export interface WorkSearchRecord { id: string; title: string }
 
 export type WorkReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
@@ -106,10 +117,11 @@ export function getWorkReviewList(
 }
 
 /** 静默提交审核结论，拒绝时 reason 必填；该接口不会发送邮件。 */
-export function reviewWork(workId: string, approved: boolean, reason?: string): Promise<string> {
+export function reviewWork(workId: string, approved: boolean, expectedRevision: number, reason?: string): Promise<string> {
   return http.post<string>('/api/work/manage/review', {
     work_id: workId,
     approved,
+    expected_revision: expectedRevision,
     reason,
   })
 }
@@ -128,11 +140,12 @@ export function getOperationLogs(payload: PageRequest): Promise<PageResult<Opera
 }
 
 // 搜索作品（远程搜索用）
-export function searchWorks(keyword: string): Promise<WorkRecord[]> {
-  return http.get<WorkRecord[]>('/api/work/manage/search-work', { params: { keyword } })
+export function searchWorks(keyword: string): Promise<WorkSearchRecord[]> {
+  return http.get<WorkSearchRecord[]>('/api/work/manage/search-work', { params: { keyword } })
 }
 
-// 搜索用户（远程搜索用）
-export function searchUsers(keyword: string): Promise<any[]> {
-  return http.get<any[]>('/api/work/manage/search-user', { params: { keyword } })
+/** 用户搜索仅使用公开白名单字段，避免把内部档案当作搜索响应。 */
+export interface UserSearchRecord { uuid: string; username: string; nickname: string; avatar?: string | null }
+export function searchUsers(keyword: string): Promise<UserSearchRecord[]> {
+  return http.get<UserSearchRecord[]>('/user/query/search', { params: { keyword } })
 }

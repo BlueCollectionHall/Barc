@@ -11,14 +11,19 @@
       <template #default="{ row }"><el-button v-if="row.status === 'PENDING' || row.status === 'PROCESSING'" size="small" type="primary" @click="emit('process', row)">处理</el-button><span v-else style="color:#999">已处理</span></template>
     </el-table-column>
   </el-table>
+  <el-pagination v-model:current-page="page" :page-size="20" :total="total"
+    layout="prev, pager, next, total" @current-change="fetchData" />
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getComplaintsList } from '../api/workManage'
+import { getComplaintsList, type ComplaintRecord } from '../api/workManage'
 
-const emit = defineEmits<{ process: [row: any] }>()
-const complaints = ref<any[]>([])
+const emit = defineEmits<{ process: [row: ComplaintRecord] }>()
+const complaints = ref<ComplaintRecord[]>([])
+// 每次仅请求当前页，避免投诉增长后加载全表。
+const page = ref(1)
+const total = ref(0)
 const loading = ref(false)
 
 const statusLabel = (status: string) => ({
@@ -30,7 +35,11 @@ const statusLabel = (status: string) => ({
 
 const fetchData = async () => {
   loading.value = true
-  try { complaints.value = await getComplaintsList() } finally { loading.value = false }
+  try {
+    const result = await getComplaintsList(page.value)
+    complaints.value = result.list
+    total.value = result.total
+  } finally { loading.value = false }
 }
 onMounted(() => fetchData())
 defineExpose({ refresh: fetchData })

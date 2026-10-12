@@ -2,19 +2,7 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.miaoyu.barc.notice.mapper.NoticeMapper">
 
-<!--    查询最新的一条公告（限制在 day 天内）-->
-<!--    排序补充 id 作为第二排序键，保证同一时间戳的多条公告返回结果稳定-->
-    <select id="latest" resultType="com.miaoyu.barc.notice.model.NoticeModel">
-        SELECT id, title, content, author, updated_at
-        FROM notice
-        WHERE updated_at >= DATE_SUB(now(), INTERVAL #{day} DAY)
-        ORDER BY updated_at DESC, id DESC
-        LIMIT 1
-    </select>
-
-<!--    查询全表最新的一条公告（不限时间）-->
-<!--    用途：/notice/latest 在 day 天内查不到公告时的回退兜底，避免前端因公告超期而显示“暂无公告”-->
-<!--    该语句不得再带任何时间过滤条件，否则会退化成原「超期即无公告」的缺陷-->
+    <!-- 单次查询覆盖近期与历史公告，保留稳定二次排序。 -->
     <select id="latestWithoutDayLimit" resultType="com.miaoyu.barc.notice.model.NoticeModel">
         SELECT id, title, content, author, updated_at
         FROM notice
@@ -30,7 +18,7 @@
                 AND title LIKE CONCAT('%', #{condition.title}, '%')
             </if>
         </where>
-        ORDER BY updated_at DESC
+        ORDER BY updated_at DESC, id DESC
         LIMIT #{offset}, #{pageSize}
     </select>
 

@@ -4,6 +4,7 @@ import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkLikeMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
 import com.miaoyu.barc.api.work.model.WorkModel;
+import com.miaoyu.barc.api.work.model.PublicWorkView;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.dto.PageRequestDto;
 import com.miaoyu.barc.utils.dto.PageResultDto;
@@ -53,9 +54,10 @@ class WorkLikeListServiceTest {
 
         ResponseEntity<J> response = workLikeService.listLikedWorksByUsername("alice", dto);
 
-        PageResultDto<WorkModel> page = successfulPage(response);
+        PageResultDto<PublicWorkView> page = successfulPage(response);
         assertEquals(5L, page.getTotal());
-        assertEquals(works, page.getList());
+        // 公开列表使用白名单视图，保持作品顺序与显示字段，不再泄露内部审核字段。
+        assertEquals(works.stream().map(WorkModel::getTitle).toList(), page.getList().stream().map(PublicWorkView::getTitle).toList());
         assertEquals(2, page.getPage_num());
         assertEquals(3, page.getPage_size());
         assertEquals(2, page.getTotal_page());
@@ -86,7 +88,7 @@ class WorkLikeListServiceTest {
 
         ResponseEntity<J> response = workLikeService.listLikedWorksByUsername("missing", dto);
 
-        PageResultDto<WorkModel> page = successfulPage(response);
+        PageResultDto<PublicWorkView> page = successfulPage(response);
         assertEquals(0L, page.getTotal());
         assertEquals(List.of(), page.getList());
         assertEquals(1, page.getPage_num());
@@ -111,7 +113,7 @@ class WorkLikeListServiceTest {
 
         ResponseEntity<J> response = workLikeService.listLikedWorksByUsername("alice", dto);
 
-        PageResultDto<WorkModel> page = successfulPage(response);
+        PageResultDto<PublicWorkView> page = successfulPage(response);
         assertEquals("https://signed.example/work-1.png", page.getList().get(0).getCover_image());
         verify(workService).loopSignatureWorkCover(unsignedWorks);
     }
@@ -134,10 +136,10 @@ class WorkLikeListServiceTest {
     }
 
     @SuppressWarnings("unchecked")
-    private PageResultDto<WorkModel> successfulPage(ResponseEntity<J> response) {
+    private PageResultDto<PublicWorkView> successfulPage(ResponseEntity<J> response) {
         J body = response.getBody();
         assertNotNull(body);
         assertEquals(0, body.getCode());
-        return (PageResultDto<WorkModel>) body.getData();
+        return (PageResultDto<PublicWorkView>) body.getData();
     }
 }

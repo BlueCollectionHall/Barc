@@ -18,6 +18,9 @@ const route = useRoute()
 const feedbackTypes: FeedbackType[] = ['USER', 'BUG', 'SUGGESTION', 'OTHER']
 
 const loading = ref(false)
+// 服务端分页保留全部历史记录的可达性。
+const page = ref(1)
+const total = ref(0)
 const feedbackList = ref<FeedbackRecord[]>([])
 const dialogVisible = ref(false)
 const submitting = ref(false)
@@ -50,7 +53,9 @@ async function loadFeedbacks(): Promise<void> {
 
   loading.value = true
   try {
-    feedbackList.value = await getFeedbacksByType(currentType.value)
+    const result = await getFeedbacksByType(currentType.value, page.value)
+    feedbackList.value = result.list
+    total.value = result.total
   } catch {
     ElMessage.error('加载反馈列表失败')
   } finally {
@@ -120,6 +125,7 @@ function feedbackTypeLabel(type: FeedbackType): string {
 watch(
   () => currentType.value,
   () => {
+    page.value = 1
     void loadFeedbacks()
   },
 )
@@ -136,7 +142,7 @@ onMounted(() => {
     :subtitle="pageSubtitle"
   >
     <template #actions>
-      <span class="header-meta">当前 {{ feedbackList.length }} 条</span>
+      <span class="header-meta">共 {{ total }} 条</span>
       <el-button plain :loading="loading" :disabled="routeTypeError" @click="loadFeedbacks">刷新</el-button>
     </template>
 
@@ -180,6 +186,7 @@ onMounted(() => {
         <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">
             <el-button
+              v-if="row.status === 'PENDING' || row.status === 'PROCESSING'"
               type="primary"
               size="small"
               text
@@ -191,6 +198,8 @@ onMounted(() => {
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination v-model:current-page="page" :page-size="20" :total="total"
+        layout="prev, pager, next, total" @current-change="loadFeedbacks" />
 
       <el-alert
         v-if="routeTypeError"
@@ -223,7 +232,7 @@ onMounted(() => {
             :rows="3"
             maxlength="300"
             show-word-limit
-            placeholder="输入处理备注，会作为 echo 回写反馈单"
+            placeholder="输入处理备注"
           />
         </el-form-item>
       </el-form>

@@ -27,7 +27,7 @@ const handleWorkListAuthorNickname = async () => {
     if (workList.value[i].is_claim) {
       await baseHttp.get("/user/current_by_uuid", {params: {uuid: workList.value[i].author}})
         .then(res => {
-          const data: ResponseImpl = res.data;
+          const data: ResponseImpl<UserArchiveImpl> = res.data;
           if (data.code === 0) {
             const userArchive: UserArchiveImpl = data.data;
             workList.value[i].author_nickname = userArchive.nickname;

@@ -192,9 +192,9 @@ async function handleUnbanUser(user: UserListItem): Promise<void> {
     await unbanUser({ userId: user.uuid, reason: '管理员手动解封' })
     showSuccess('解封成功')
     await loadUsers()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      showError(error.message || '解封失败')
+      showError(getErrorMessage(error, '解封失败'))
     }
   }
 }

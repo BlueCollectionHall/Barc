@@ -13,7 +13,6 @@ import com.miaoyu.barc.api.work.model.WorkModel;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.JwtService;
-import com.miaoyu.barc.utils.minio.MinioObjects;
 import com.miaoyu.barc.utils.tencent.cos.CosService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,7 +36,6 @@ class WorkServiceOwnerStatusTest {
     @Mock private StudentMapper studentMapper;
     @Mock private SchoolMapper schoolMapper;
     @Mock private ClubMapper clubMapper;
-    @Mock private MinioObjects minioObjects;
     @Mock private WorkImageMapper workImageMapper;
     @Mock private WorkCoverImageMapper workCoverImageMapper;
     @Mock private CosService cosService;
@@ -55,8 +53,8 @@ class WorkServiceOwnerStatusTest {
         work.setId("work-1");
         work.setAuthor("owner-1");
         work.setStatus(WorkStatusEnum.PUBLIC);
-        when(workMapper.selectById("work-1")).thenReturn(work);
-        when(workMapper.update(work)).thenReturn(true);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(work);
+        when(workMapper.updateStatus("work-1", WorkStatusEnum.PRIVATE, null)).thenReturn(true);
 
         ResponseEntity<J> response = workService.updateOwnerWorkVisibility("owner-1", "work-1", WorkStatusEnum.PRIVATE);
 
@@ -64,7 +62,7 @@ class WorkServiceOwnerStatusTest {
         assertNotNull(body);
         assertEquals(0, body.getCode());
         assertEquals(WorkStatusEnum.PRIVATE, work.getStatus());
-        verify(workMapper).update(work);
+        verify(workMapper).updateStatus("work-1", WorkStatusEnum.PRIVATE, null);
     }
 
     @Test
@@ -74,7 +72,7 @@ class WorkServiceOwnerStatusTest {
         work.setId("work-1");
         work.setAuthor("owner-1");
         work.setStatus(WorkStatusEnum.BAN);
-        when(workMapper.selectById("work-1")).thenReturn(work);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(work);
 
         ResponseEntity<J> response = workService.updateOwnerWorkVisibility("owner-1", "work-1", WorkStatusEnum.PUBLIC);
 

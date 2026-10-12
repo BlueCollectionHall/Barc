@@ -13,5 +13,7 @@ public class TrendImageModel {
     private Integer sort;
     private String image_url;
     private String image_name;
+    /** 新图片存储 COS key，image_url 仅作为读取时的签名展示或历史兼容字段。 */
+    private String object_key;
     private LocalDateTime created_at;
 }

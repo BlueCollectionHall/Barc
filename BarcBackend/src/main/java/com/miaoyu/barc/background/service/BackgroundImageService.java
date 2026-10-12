@@ -32,6 +32,9 @@ import java.util.Map;
 
 @Service
 public class BackgroundImageService {
+    // 等待业务行锁后读取最新提交数据，避免鉴权读在可重复读隔离下固定旧快照。
+    @Autowired private com.miaoyu.barc.api.mapper.CatalogMutationMapper catalogMutationMapper;
+    @Autowired private com.miaoyu.barc.api.file.service.ObjectStorageService objectStorage;
 
     /** 图片大小上限 1MB */
     private static final long MAX_FILE_SIZE = 1024 * 1024;
@@ -69,7 +72,10 @@ public class BackgroundImageService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ResponseEntity<J> uploadService(String uuid, MultipartFile file, String module, String timePeriod, String festival) {
+        // 与节日解绑及背景排序共用事务锁，防止读到即将删除的节日或重复序号。
+        catalogMutationMapper.lock("presentation");
         BackgroundModuleEnum moduleEnum = BackgroundModuleEnum.fromCode(module);
         if (moduleEnum == null) {
             return ResponseEntity.ok(new J(1, "背景模块不合法: " + module, null));
@@ -96,14 +102,12 @@ public class BackgroundImageService {
         }
         // 文件名：UUID第一段 - 到秒的时间戳 . 扩展名
         String uuidSeg = new GenerateUUID().getUuid32u().substring(0, 8);
-        String ext = StringUtils.getFilenameExtension(file.getOriginalFilename());
+        String ext = com.miaoyu.barc.api.file.service.ImageInput.extension(file, MAX_FILE_SIZE);
         long epochSec = System.currentTimeMillis() / 1000;
         String objectKey = BG_PATH_PREFIX + moduleEnum.getCode() + "/" + uuidSeg + "-" + epochSec + (ext != null ? "." + ext : "");
 
-        J upload = cosService.uploadFileWithKey(file, objectKey, CosBucketConfigEnum.image);
-        if (upload.getCode() != 0) {
-            return ResponseEntity.ok(upload);
-        }
+        objectStorage.uploadWithKey(uuid, file, objectKey, MAX_FILE_SIZE);
+        objectStorage.bind(uuid, objectKey);
 
         BackgroundImageModel model = new BackgroundImageModel();
         model.setId(new GenerateUUID().getUuid32u());
@@ -119,7 +123,7 @@ public class BackgroundImageService {
         if (insert > 0) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(true, model));
         }
-        return ResponseEntity.ok(new J(1, "背景图记录保存失败", null));
+        throw new com.miaoyu.barc.exception.ApiException(new J(1, "背景图记录保存失败", null));
     }
 
     @RequireUserAndPermissionAnno({ @RequireUserAndPermissionAnno.Check(
@@ -144,15 +148,28 @@ public class BackgroundImageService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ResponseEntity<J> reorderService(String uuid, List<OrderItem> items) {
-        if (items != null) {
-            for (OrderItem item : items) {
-                if (item == null || item.getId() == null) {
-                    continue;
-                }
-                backgroundImageMapper.updateSortOrder(item.getId(), item.getSort_order() != null ? item.getSort_order() : 0);
-            }
+        if (items == null || items.isEmpty() || items.size() > 1000) throw com.miaoyu.barc.utils.RequestInput.invalid("排序列表不能为空且最多 1000 项");
+        var ids = new java.util.HashSet<String>(); var orders = new java.util.HashSet<Integer>();
+        for (OrderItem item : items) {
+            if (item == null || item.getId() == null || !ids.add(item.getId()) || item.getSort_order() == null
+                    || item.getSort_order() < 0 || item.getSort_order() > 1000000 || !orders.add(item.getSort_order()))
+                throw com.miaoyu.barc.utils.RequestInput.invalid("排序编号或顺序值无效、重复");
         }
+        catalogMutationMapper.lock("presentation");
+        String module = null;
+        for (OrderItem item : items) {
+            var stored = backgroundImageMapper.selectById(item.getId());
+            if (stored == null || (module != null && !module.equals(stored.getModule())))
+                throw com.miaoyu.barc.utils.RequestInput.invalid("排序对象不存在或不属于同一模块");
+            module = stored.getModule();
+        }
+        // 同一模块提交完整顺序，避免部分重排和未提交项发生序号冲突。
+        var currentIds = backgroundImageMapper.selectByModule(module).stream().map(BackgroundImageModel::getId).collect(java.util.stream.Collectors.toSet());
+        if (!ids.equals(currentIds)) throw com.miaoyu.barc.utils.RequestInput.invalid("背景列表已变化，请刷新后排序");
+        for (OrderItem item : items) if (backgroundImageMapper.updateSortOrder(item.getId(), item.getSort_order()) != 1)
+            throw com.miaoyu.barc.utils.RequestInput.invalid("背景排序失败，请刷新重试");
         return ResponseEntity.ok(new SuccessR().normal("排序已更新"));
     }
 
@@ -162,13 +179,16 @@ public class BackgroundImageService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ResponseEntity<J> setEnabledService(String uuid, String id, boolean enabled) {
+        catalogMutationMapper.lock("presentation");
         BackgroundImageModel existing = backgroundImageMapper.selectById(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         }
         int rows = backgroundImageMapper.updateEnabled(id, enabled);
         if (rows > 0) {
+            existing.setEnabled(enabled);
             return ResponseEntity.ok(new ResourceR().resourceSuch(true, existing));
         }
         return ResponseEntity.ok(new J(1, "更新失败", null));
@@ -180,7 +200,9 @@ public class BackgroundImageService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ResponseEntity<J> updateSceneService(String uuid, String id, String timePeriod, String festival) {
+        catalogMutationMapper.lock("presentation");
         BackgroundImageModel existing = backgroundImageMapper.selectById(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
@@ -210,7 +232,9 @@ public class BackgroundImageService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ResponseEntity<J> deleteService(String uuid, String id) {
+        catalogMutationMapper.lock("presentation");
         BackgroundImageModel existing = backgroundImageMapper.selectById(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
@@ -218,6 +242,7 @@ public class BackgroundImageService {
         // 交给 GC 任务清理 COS 对象，避免阻塞
         cosGcService.enqueue(cosConfig.getImage().getBucketName(), existing.getObject_key());
         int rows = backgroundImageMapper.softDelete(id);
+        if (rows != 1) throw com.miaoyu.barc.utils.RequestInput.invalid("背景删除失败");
         return ResponseEntity.ok(new ResourceR().resourceSuch(rows > 0, null));
     }
 

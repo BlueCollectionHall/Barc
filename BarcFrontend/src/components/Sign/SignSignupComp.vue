@@ -15,7 +15,7 @@
  * 3、倒计时使用可清理的定时器并禁用按钮，禁止重复索取验证码。
  */
 import type {UserBasicImpl} from "@/interfaces/UserImpl.ts";
-import {computed, onMounted, onUnmounted, ref, watch} from "vue";
+import {computed, onUnmounted, ref, watch} from "vue";
 import {slowHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import {errorMessage, successMessage} from "@/utils/MessageAlert.ts";
@@ -75,9 +75,11 @@ const clearCodeSession = () => {
   }
 };
 
+// 在注册邮箱监听器之前恢复初始值，避免挂载回填邮箱被误判为用户改邮箱而作废验证码。
+const restoredCodeSession = readCodeSession();
 const signupForm = ref<SignupImpl>({
-  email: "",
-  unique_id: "",
+  email: restoredCodeSession?.email || "",
+  unique_id: restoredCodeSession?.unique_id || "",
   code: "",
   uuid: "", username: "", password: "", password_version: 0, email_verified: false, telephone: null, safe_level: 100, created_at: new Date(), updated_at: new Date()
 });
@@ -137,21 +139,6 @@ const startCountDown = () => {
 onUnmounted(stopCountDown);
 
 /**
- * 组件挂载时恢复上一次的验证码会话。
- *
- * 场景：用户获取验证码后页面被刷新或整页重载，若不做恢复，
- * unique_id 会丢失而邮箱仍在，用户手填邮件里的验证码后必然报失败。
- */
-onMounted(() => {
-  const session = readCodeSession();
-  if (!session) return;
-  signupForm.value.unique_id = session.unique_id;
-  if (signupForm.value.email === "") {
-    signupForm.value.email = session.email;
-  }
-});
-
-/**
  * 获取邮箱验证码。
  *
  * 处理逻辑：
@@ -169,8 +156,9 @@ const getCode = async () => {
   }
   isCodeSending.value = true;
   try {
-    const response = await slowHttp("/email/send/signup", {method: "GET", params: {email: signupForm.value.email}});
-    const data: ResponseImpl = response.data;
+    // 发码是写操作，邮箱与验证码相关参数统一放在 JSON 请求体。
+    const response = await slowHttp.post("/email/send/signup", {email: signupForm.value.email});
+    const data: ResponseImpl<string> = response.data;
     if (data.code === 0) {
       // unique_id 是后续注册的必需参数，必须落进表单状态并持久化到会话，抗页面重载
       signupForm.value.unique_id = data.data;
@@ -181,10 +169,9 @@ const getCode = async () => {
       // 后端明确返回失败时要把原因透出，不能静默吞掉
       errorMessage(data.data || data.msg || "验证码发送失败，请重试");
     }
-  } catch (err) {
+  } catch {
     // 超时、断网等异常都必须反馈给用户，否则会表现为「点了没反应」
     errorMessage("验证码发送失败，请检查网络后重试");
-    console.log("获取验证码失败", err);
   } finally {
     isCodeSending.value = false;
   }
@@ -204,11 +191,8 @@ const signup = async () => {
   }
   isSubmitting.value = true;
   try {
-    const response = await slowHttp("/user/sign/up", {method: "POST", params: {
-        unique_id: signupForm.value.unique_id,
-        code: signupForm.value.code,
-        email: signupForm.value.email,}, data: signupForm.value});
-    const data: ResponseImpl = response.data;
+    const response = await slowHttp.post("/user/sign/up", signupForm.value);
+    const data: ResponseImpl<string> = response.data;
     if (data.code === 0) {
       // 注册成功后必须清除会话中的 unique_id，避免复用一个已使用的验证码
       clearCodeSession();
@@ -218,9 +202,8 @@ const signup = async () => {
       // 后端失败原因直接呈现给用户（如「验证码不匹配」「验证码会话不存在或已过期」）
       errorMessage(data.data || data.msg);
     }
-  } catch (err) {
+  } catch {
     errorMessage("注册失败，请检查网络后重试");
-    console.log("注册失败", err);
   } finally {
     isSubmitting.value = false;
   }

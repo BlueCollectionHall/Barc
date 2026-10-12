@@ -37,9 +37,26 @@ export const baseHttp = axios.create({
  * 与 baseHttp 共用同一 baseURL 来源，避免两处配置漂移。
  *
  * @example
- * await slowHttp("/email/send/signup", {method: "GET", params: {email}});
+ * await slowHttp.post("/email/send/signup", {email});
  */
 export const slowHttp = axios.create({
   baseURL: baseHttp.defaults.baseURL,
   timeout: SLOW_TIMEOUT,
 });
+
+// 两个实例使用相同认证格式；保留调用方显式传入的令牌并仅添加一次 Token 前缀。
+for (const client of [baseHttp, slowHttp]) {
+  client.interceptors.request.use((config) => {
+    const supplied = config.headers.Authorization;
+    const token = typeof supplied === 'string' ? supplied : window.localStorage.getItem('token');
+    if (token) config.headers.Authorization = /^Token /i.test(token) ? token : `Token ${token}`;
+    return config;
+  });
+  client.interceptors.response.use((response) => response, (error: unknown) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      window.localStorage.removeItem('token');
+      window.dispatchEvent(new Event('barc:auth-expired'));
+    }
+    return Promise.reject(error);
+  });
+}

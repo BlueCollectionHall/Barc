@@ -274,7 +274,7 @@ describe('FestivalsListView', () => {
 
   it('shows an error when the list request fails', async () => {
     fetchFestivals.mockRejectedValue(new Error('boom'))
-    const wrapper = mount(FestivalsListView, mountOptions)
+    mount(FestivalsListView, mountOptions)
 
     await flushPromises()
 

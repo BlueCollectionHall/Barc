@@ -14,8 +14,8 @@ class ClientIpResolverTest {
     private final ClientIpResolver resolver = new ClientIpResolver();
 
     @Test
-    @DisplayName("X-Real-IP 应优先于 X-Forwarded-For")
-    void resolve_WhenXRealIpPresent_ShouldPreferItOverXForwardedFor() {
+    @DisplayName("客户端伪造转发头不能改变浏览去重身份")
+    void resolve_WhenForgedHeadersPresent_ShouldUseConnectionAddress() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Real-IP", "203.0.113.9");
         request.addHeader("X-Forwarded-For", "198.51.100.10");
@@ -25,7 +25,7 @@ class ClientIpResolverTest {
 
         assertNotNull(info);
         assertEquals("IPV4", info.viewerType());
-        assertEquals("203.0.113.9", info.normalizedIp());
+        assertEquals("192.0.2.1", info.normalizedIp());
     }
 
     @Test

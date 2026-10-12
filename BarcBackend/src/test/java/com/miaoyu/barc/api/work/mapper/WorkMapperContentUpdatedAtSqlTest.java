@@ -18,11 +18,9 @@ class WorkMapperContentUpdatedAtSqlTest {
 
     @Test
     @DisplayName("按天查询应使用内容更新时间并回退创建时间")
-    void selectByDay_ShouldFilterByCoalescedContentUpdatedAt() throws NoSuchMethodException {
-        String sql = normalizedSelectSql(WorkMapper.class.getMethod("selectByDay", Integer.class, com.miaoyu.barc.api.work.enumeration.WorkStatusEnum.class));
-
-        assertTrue(sql.contains("COALESCE(w.content_updated_at, w.created_at) >= DATE_SUB(now(), INTERVAL #{day} DAY)"),
-                "selectByDay should filter by COALESCE(content_updated_at, created_at)");
+    void selectByDay_ShouldFilterByCoalescedContentUpdatedAt() throws IOException {
+        String sql = normalizedXmlBlock("<sql id=\"whereConditions\"", "</sql>");
+        assertTrue(sql.contains("COALESCE(w.content_updated_at, w.created_at) >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL #{condition.day} DAY)"));
     }
 
     @Test
@@ -37,7 +35,7 @@ class WorkMapperContentUpdatedAtSqlTest {
     @Test
     @DisplayName("公开分类分页排序应使用内容更新时间并回退创建时间")
     void selectByPageOnCategory_ShouldOrderByCoalescedContentUpdatedAt() throws IOException {
-        String block = normalizedXmlBlock("<select id=\"selectByPageOnCategory\"", "</select>");
+        String block = normalizedXmlBlock("<select id=\"selectByPage\"", "</select>");
 
         assertTrue(block.contains("ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC"),
                 "selectByPageOnCategory should order by coalesced content freshness");

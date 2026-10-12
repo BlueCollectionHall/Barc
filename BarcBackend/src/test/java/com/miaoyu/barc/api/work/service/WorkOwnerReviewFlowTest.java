@@ -35,10 +35,11 @@ class WorkOwnerReviewFlowTest {
     void rejectedWorkEdit_ShouldNotAutomaticallyResubmit() {
         WorkModel stored = ownedWork("owner-1");
         WorkModel update = new WorkModel();
-        update.setId("work-1");
+        update.setId("work-1"); update.setTitle("修订作品");
         WorkReviewModel review = review(WorkReviewStatusEnum.REJECTED);
-        when(workMapper.selectById("work-1")).thenReturn(stored);
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(stored);
         when(workMapper.updateText(update)).thenReturn(true);
+        when(workMapper.touchContent("work-1")).thenReturn(true);
         when(workReviewMapper.selectByWorkId("work-1")).thenReturn(review);
 
         ResponseEntity<J> response = workService.updateOwnerWorkContent("owner-1", update);
@@ -51,7 +52,7 @@ class WorkOwnerReviewFlowTest {
     @Test
     @DisplayName("作品所有者可以将驳回作品再次提交为待审")
     void rejectedWorkOwner_ShouldResubmitToPending() {
-        when(workMapper.selectById("work-1")).thenReturn(ownedWork("owner-1"));
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(ownedWork("owner-1"));
         when(workReviewMapper.selectByWorkId("work-1"))
                 .thenReturn(review(WorkReviewStatusEnum.REJECTED));
         when(workReviewMapper.resubmitRejected("work-1")).thenReturn(true);
@@ -65,7 +66,7 @@ class WorkOwnerReviewFlowTest {
     @Test
     @DisplayName("非作品所有者不能再次提审")
     void rejectedWorkNonOwner_ShouldBeRejectedBeforeReviewUpdate() {
-        when(workMapper.selectById("work-1")).thenReturn(ownedWork("owner-1"));
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(ownedWork("owner-1"));
 
         ResponseEntity<J> response = workService.resubmitRejectedWork("other-user", "work-1");
 
@@ -77,7 +78,7 @@ class WorkOwnerReviewFlowTest {
     @Test
     @DisplayName("待审或已通过作品不能调用再次提审")
     void nonRejectedWork_ShouldNotResubmit() {
-        when(workMapper.selectById("work-1")).thenReturn(ownedWork("owner-1"));
+        when(workMapper.selectByIdForUpdate("work-1")).thenReturn(ownedWork("owner-1"));
         when(workReviewMapper.selectByWorkId("work-1"))
                 .thenReturn(review(WorkReviewStatusEnum.PENDING));
 

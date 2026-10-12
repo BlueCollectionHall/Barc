@@ -1,8 +1,9 @@
 package com.miaoyu.barc.user.service;
 
 import com.miaoyu.barc.annotation.RequireUserAndPermissionAnno;
-import com.miaoyu.barc.email.utils.SendEmailUtils;
 import com.miaoyu.barc.permission.PermissionConst;
+import com.miaoyu.barc.permission.PermissionPolicy;
+import com.miaoyu.barc.response.ErrorR;
 import com.miaoyu.barc.response.ChangeR;
 import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.response.UserR;
@@ -17,11 +18,13 @@ import com.miaoyu.barc.utils.dto.ValueLabelDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Objects;
 
 @Service
+@Slf4j
 public class UserPermissionService {
     @Autowired
     private PermissionConst permissionConst;
@@ -30,7 +33,7 @@ public class UserPermissionService {
     @Autowired
     private UserPermissionMapper userPermissionMapper;
     @Autowired
-    private SendEmailUtils sendEmailUtils;
+    private com.miaoyu.barc.email.service.MailOutbox mailOutbox;
     @Autowired
     private UserBasicMapper userBasicMapper;
 
@@ -63,25 +66,40 @@ public class UserPermissionService {
             @RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.THI_MAINTAINER, isSuchElseRequire = false),
             @RequireUserAndPermissionAnno.Check(uuidIndex = 1)
     })
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<J> changeUserPermissionService(
             String operatorUUID, String uuid, UserIdentityEnum identity, Integer permission
     ) {
+        // 拒绝负数、空值和身份之外的权限位，避免位运算将 -1 当作全部角色。
+        if (!PermissionPolicy.isValid(identity, permission)) {
+            return ResponseEntity.ok(new ErrorR().normal("身份或权限值无效"));
+        }
         UserArchiveModel opArchive = userArchiveMapper.selectByUuid(operatorUUID);
-        // 要修改的权限是管理员权限 并且 发起请求的管理员权限低于要修改的权限值
-        if (identity.equals(UserIdentityEnum.MANAGER) && opArchive.getPermission() <= permission) {
+        if (!PermissionPolicy.matches(opArchive, UserIdentityEnum.MANAGER, PermissionConst.THI_MAINTAINER, false)
+                || operatorUUID.equals(uuid)) {
             return ResponseEntity.ok(new UserR().insufficientAccountPermission());
         }
         UserArchiveModel userArchive = userArchiveMapper.selectByUuid(uuid);
-        // 被修改用户也是管理员 并且 发起请求的管理员权限低于被修改用户的权限
-        if (userArchive.getIdentity().equals(UserIdentityEnum.MANAGER) && opArchive.getPermission() <= userArchive.getPermission()) {
+        if (userArchive == null) return ResponseEntity.ok(new UserR().noSuchUser());
+        // 授权级别看最高角色位，不能靠叠加低位越过同级账号保护。
+        int operatorRank = Integer.highestOneBit(opArchive.getPermission());
+        if ((identity == UserIdentityEnum.MANAGER && operatorRank <= Integer.highestOneBit(permission))
+                || (userArchive.getIdentity() == UserIdentityEnum.MANAGER
+                && (!PermissionPolicy.isValid(userArchive.getIdentity(), userArchive.getPermission())
+                || operatorRank <= Integer.highestOneBit(userArchive.getPermission())))) {
             return ResponseEntity.ok(new UserR().insufficientAccountPermission());
         }
+        UserIdentityEnum previousIdentity = userArchive.getIdentity();
+        Integer previousPermission = userArchive.getPermission();
         userArchive.setPermission(permission);
         userArchive.setIdentity(identity);
         boolean update = userPermissionMapper.update(userArchive);
         if (update) {
+            log.info("账号权限变更：operator={}, target={}, before={}/{}, after={}/{}", operatorUUID, uuid,
+                    previousIdentity, previousPermission, identity, permission);
             UserBasicModel userBasic = userBasicMapper.selectByUuid(userArchive.getUuid());
-            sendEmailUtils.customEmail(
+            if (userBasic != null && userBasic.getEmail() != null) mailOutbox.enqueue(
+                    "permission:" + java.util.UUID.randomUUID(),
                     userBasic.getEmail(),
                     "账号权限变更",
                     userArchive.getNickname() + "，您的账号已经变更为【" + identity.getDisplayName() + "：" + permissionConst.toString(identity, permission) + "】！"

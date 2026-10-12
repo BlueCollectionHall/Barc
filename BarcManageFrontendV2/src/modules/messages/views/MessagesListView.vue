@@ -148,7 +148,8 @@ async function submitEdit(): Promise<void> {
       content: editContent.value.trim(),
       reason: editReason.value.trim(),
     })
-    showSuccess(msg || '留言已修改。邮件通知已发送。')
+    // 修改成功仅确认业务提交，通知由邮件队列随后投递。
+    showSuccess(msg || '留言已修改，将通知发布者。')
     editDialogVisible.value = false
     await loadMessages()
   } catch (error) {

@@ -14,7 +14,7 @@ const student = ref<StudentImpl | null>(null);
 const fetchStudent = async (studentId: string) => {
   try {
     const response = await baseHttp.get(`/api/student/${studentId}`);
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<StudentImpl> = response.data;
     if (data.code === 0) {
       student.value = data.data;
     } else infoMessage(data.msg);

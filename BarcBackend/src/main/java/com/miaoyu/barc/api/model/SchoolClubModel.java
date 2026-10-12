@@ -1,6 +1,11 @@
 package com.miaoyu.barc.api.model;
 
 public class SchoolClubModel {
+    // 新字段分开存储 key 与展示 URL；旧图片字段仍返回 URL 供既有页面展示。
+    @lombok.Getter @lombok.Setter private String logo_key;
+    @lombok.Getter @lombok.Setter private String logo_url;
+    @lombok.Getter @lombok.Setter private String bg_key;
+    @lombok.Getter @lombok.Setter private String bg_url;
     private String id;
     private String school;
     private String cn_name;

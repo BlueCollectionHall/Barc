@@ -58,7 +58,7 @@ export const updateOwnerWorkVisibility = async (
   token: string,
 ): Promise<void> => {
   if (status !== "PUBLIC" && status !== "PRIVATE") {
-    throw new Error("只允许切换公开/私有状态");
+    throw new Error(String("只允许切换公开/私有状态"));
   }
 
   const response = await baseHttp.put(
@@ -67,7 +67,7 @@ export const updateOwnerWorkVisibility = async (
     {headers: {Authorization: token}},
   );
   const data: ResponseImpl = response.data;
-  if (data.code !== 0) throw new Error(data.msg || "状态更新失败");
+  if (data.code !== 0) throw new Error(String(data.msg || "状态更新失败"));
 };
 
 /** 审核未通过作品由所有者确认修改完成后显式再次提审。 */
@@ -78,5 +78,5 @@ export const resubmitRejectedWork = async (workId: string, token: string): Promi
     {headers: {Authorization: token}},
   );
   const data: ResponseImpl = response.data;
-  if (data.code !== 0) throw new Error(data.data || data.msg || "再次提审失败");
+  if (data.code !== 0) throw new Error(String(data.data || data.msg || "再次提审失败"));
 };

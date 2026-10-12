@@ -48,8 +48,8 @@ export interface EditDirtyState {
 
 export type EditUpdatePayload = Pick<
   WorkImpl,
-  "id" | "title" | "description" | "content" | "author_nickname" | "is_claim" | "student"
->;
+  "id" | "title" | "description" | "content" | "author_nickname" | "student"
+> & { expected_revision?: number };
 
 interface RawContentImage {
   id?: unknown;
@@ -108,7 +108,7 @@ export const normalizeEditDetail = (detail: RawEditDetail): NormalizedEditDetail
   // API 边界：新版 content_images 带有数据库 id，可用于删除；旧版 URL 只能预览，不能假装可删。
   const galleryImages: Array<EditGalleryImage> = richImages.length > 0
     ? richImages
-      .map((item: any, index: number) => ({
+      .map((item: RawContentImage, index: number) => ({
         id: typeof item.id === "string" ? item.id : null,
         previewUrl: typeof item.url === "string" ? item.url : "",
         sort: typeof item.sort === "number" ? item.sort : index,
@@ -142,7 +142,8 @@ export const toEditUpdatePayload = (work: WorkImpl): EditUpdatePayload => ({
   description: work.description,
   content: work.content,
   author_nickname: work.author_nickname,
-  is_claim: work.is_claim,
+  // 认领与归属只经独立审核命令变更；正文提交携带读取版本。
+  expected_revision: work.content_revision,
   student: work.student,
 });
 

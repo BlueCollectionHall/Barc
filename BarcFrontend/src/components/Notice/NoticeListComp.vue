@@ -20,7 +20,7 @@ const pageResult = ref<PageResultImpl<NoticeNicknameImpl> | null>(null);
 const fetchNotice = async () => {
   try {
     const response = await baseHttp.post("/notice/notices_by_page", pageRequest.value);
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<PageResultImpl<NoticeNicknameImpl>> = response.data;
     if (data.code === 0) {
       pageResult.value = data.data;
       if (pageResult.value) {
@@ -29,7 +29,7 @@ const fetchNotice = async () => {
           for (let i = 0; i < noticeList.value.length; i++) {
             await baseHttp.get("/user/current_by_uuid", {params: {uuid: noticeList.value[i].author}})
               .then(res => {
-                const data: ResponseImpl = res.data;
+                const data: ResponseImpl<{ nickname: string; avatar: string }> = res.data;
                 const userArchive = data.data;
                 if (data.code === 0) {
                   noticeList.value[i].nickname = userArchive.nickname;

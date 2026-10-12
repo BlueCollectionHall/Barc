@@ -3,7 +3,7 @@
     <div v-if="modelValue || localPreview" class="preview">
       <img :src="displayUrl" />
       <el-button size="small" @click="clear">替换</el-button>
-      <el-button v-if="hasChanges && entityId" type="success" size="small" @click="save" :loading="saving">
+      <el-button v-if="hasChanges && entityId && saveFn" type="success" size="small" @click="save" :loading="saving">
         保存图片
       </el-button>
     </div>
@@ -27,16 +27,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { isApiEnvelope, getErrorMessage } from '@/shared/types/api'
 import { SESSION_TOKEN_KEY } from '@/shared/constants/auth'
 
 const props = defineProps<{
   modelValue?: string
+  previewUrl?: string
   uploadUrl: string
   entityId?: string
   fieldKey?: string
-  saveFn?: (id: string, value: string) => Promise<any>
+  saveFn?: (id: string, value: string) => Promise<unknown>
 }>()
 
 const emit = defineEmits<{
@@ -53,12 +55,12 @@ const saving = ref(false)
 
 const uploadHeaders = computed(() => {
   const token = window.localStorage.getItem(SESSION_TOKEN_KEY)
-  return token ? { Authorization: token } : {}
+  return token ? { Authorization: /^Token /i.test(token) ? token : `Token ${token}` } : {}
 })
 
 const isReady = computed(() => {
   try {
-    const url = new URL(props.uploadUrl)
+    const url = new URL(props.uploadUrl, window.location.origin)
     const path = url.searchParams.get('path') || ''
     return path.length > 0 && !path.includes('//')
   } catch {
@@ -69,6 +71,7 @@ const isReady = computed(() => {
 const displayUrl = computed(() => {
   // 优先显示本地预览（base64）
   if (localPreview.value) return localPreview.value
+  if (props.previewUrl) return props.previewUrl
   const v = props.modelValue
   if (!v) return ''
   // 完整URL直接返回
@@ -78,9 +81,9 @@ const displayUrl = computed(() => {
 })
 
 function beforeUpload(file: File) {
-  const isImage = file.type.startsWith('image/')
+  const isImage = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type) && file.size <= 10 * 1024 * 1024
   if (!isImage) {
-    ElMessage.error('请上传图片文件')
+    ElMessage.error('请上传 10MB 以内的 PNG/JPEG/GIF/WebP 图片')
     return false
   }
   // 生成本地预览（base64）
@@ -92,8 +95,8 @@ function beforeUpload(file: File) {
   return true
 }
 
-function handleSuccess(res: any) {
-  if (res.code === 0) {
+function handleSuccess(res: unknown) {
+  if (isApiEnvelope(res) && res.code === 0 && typeof res.data === 'string') {
     // 上传成功，保存 COS key 到 modelValue
     emit('update:modelValue', res.data as string)
     hasChanges.value = true
@@ -101,15 +104,15 @@ function handleSuccess(res: any) {
   } else {
     localPreview.value = ''
     hasChanges.value = false
-    ElMessage.error(res.msg || '上传失败')
+    ElMessage.error(isApiEnvelope(res) ? res.msg || '上传失败' : '上传响应无效')
   }
 }
 
-function handleError(err: any) {
+function handleError(err: unknown) {
   console.error('上传失败:', err)
   localPreview.value = ''
   hasChanges.value = false
-  const msg = err?.message || err?.msg || '上传失败，请重试'
+  const msg = getErrorMessage(err, '上传失败，请重试')
   ElMessage.error(msg)
 }
 
@@ -129,15 +132,18 @@ async function save() {
     await props.saveFn(props.entityId, props.modelValue)
     ElMessage.success('图片保存成功')
     hasChanges.value = false
-    localPreview.value = ''
+    // 保留本地预览直到父组件拿到新的签名 URL，避免保存后图片突然消失。
     emit('saved')
-  } catch (err: any) {
+  } catch (err) {
     console.error('保存图片失败:', err)
-    ElMessage.error(err?.message || '保存图片失败')
+    ElMessage.error(getErrorMessage(err, '保存图片失败'))
   } finally {
     saving.value = false
   }
 }
+
+// 服务端新签名展示已到达后，才释放上传阶段的本地预览。
+watch(() => props.previewUrl, () => { localPreview.value = '' })
 </script>
 
 <style scoped>

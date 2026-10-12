@@ -10,6 +10,7 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface RequireUserAndPermissionAnno {
+    /** 所有 Check 必须同时满足；同一身份任一角色使用一个 Check 的按位或权限掩码。 */
     Check[] value();
 
     /**

@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
@@ -35,6 +36,8 @@ import java.util.List;
  */
 @Service
 public class FestivalService {
+    // 等待业务行锁后读取最新提交数据，避免鉴权读在可重复读隔离下固定旧快照。
+    @Autowired private com.miaoyu.barc.api.mapper.CatalogMutationMapper catalogMutationMapper;
 
     /** 节日名称长度上限 */
     private static final int MAX_NAME_LENGTH = 64;
@@ -56,11 +59,8 @@ public class FestivalService {
             isHasElseUpper = true
     )})
     public ResponseEntity<J> listService(String uuid) {
-        List<FestivalModel> list = festivalMapper.selectAll();
-        // 逐项补上绑定数量：节日数量极少，逐条统计比写复杂聚合 SQL 更直观，也便于前端直接展示
-        for (FestivalModel model : list) {
-            model.setBound_backgrounds(backgroundImageMapper.countByFestival(model.getId()));
-        }
+        // 管理列表需要统计，轻量 options 继续只读节日表。
+        List<FestivalModel> list = festivalMapper.selectAllWithCounts();
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, list));
     }
 
@@ -75,8 +75,9 @@ public class FestivalService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> createService(String uuid, FestivalItem item) {
+        catalogMutationMapper.lock("presentation");
         String nameError = validateName(item);
         if (nameError != null) {
             return ResponseEntity.ok(new J(1, nameError, null));
@@ -116,8 +117,9 @@ public class FestivalService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> updateService(String uuid, String id, FestivalItem item) {
+        catalogMutationMapper.lock("presentation");
         FestivalModel existing = festivalMapper.selectById(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
@@ -158,7 +160,9 @@ public class FestivalService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> setEnabledService(String uuid, String id, boolean enabled) {
+        catalogMutationMapper.lock("presentation");
         FestivalModel existing = festivalMapper.selectById(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
@@ -185,8 +189,9 @@ public class FestivalService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> deleteService(String uuid, String id) {
+        catalogMutationMapper.lock("presentation");
         FestivalModel existing = festivalMapper.selectById(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));

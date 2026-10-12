@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {useRouter, useRoute} from "vue-router";
 import {onMounted, ref} from "vue";
-import {errorMessage, infoMessage} from "@/utils/MessageAlert.ts";
+import {errorMessage} from "@/utils/MessageAlert.ts";
 
 const router = useRouter();
 const route = useRoute();

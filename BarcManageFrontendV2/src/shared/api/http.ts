@@ -26,7 +26,8 @@ httpClient.interceptors.request.use((config) => {
   if (token) {
     config.headers = config.headers ?? {}
     if (!('Authorization' in config.headers)) {
-      config.headers.Authorization = token
+      // 后端兼容旧裸令牌，新的请求统一遵循 Token 前缀契约。
+      config.headers.Authorization = /^Token /i.test(token) ? token : `Token ${token}`
     }
   }
   return config

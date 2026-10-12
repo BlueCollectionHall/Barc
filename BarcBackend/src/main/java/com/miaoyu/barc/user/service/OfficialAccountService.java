@@ -41,6 +41,7 @@ import java.util.stream.Collectors;
  */
 @Service
 public class OfficialAccountService {
+    @Autowired private UserSearchService userSearchService;
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -161,11 +162,7 @@ public class OfficialAccountService {
             isHasElseUpper = true,
             isSuchElseRequire = false)})
     public ResponseEntity<J> searchUserService(String uuid, String keyword) {
-        if (keyword == null || keyword.isBlank()) {
-            return ResponseEntity.ok(new ResourceR().resourceSuch(true, List.of()));
-        }
-        List<UserInfoVo> users = userArchiveMapper.searchByKeyword(keyword.trim());
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, users));
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, userSearchService.search(keyword)));
     }
 
     /**

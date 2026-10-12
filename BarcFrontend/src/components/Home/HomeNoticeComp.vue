@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {sanitizeHtmlContent} from '@/utils/richText';
 import {onMounted, ref} from "vue";
 import {SoundOutlined} from '@ant-design/icons-vue';
 import type {NoticeImpl} from "@/interfaces/NoticeImpl.ts";
@@ -17,7 +18,7 @@ const userArchive = ref<UserArchiveImpl | null>(null);
 const fetchLatestNotice = async () => {
   try {
     const response = await baseHttp.get("/notice/latest", {params: {day: 30}});
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<NoticeImpl[]> = response.data;
     if (data.code === 0) {
       noticeList.value = data.data;
       if (noticeList.value.length !== 0) {
@@ -33,7 +34,7 @@ const fetchLatestNotice = async () => {
 const fetchUserArchive = async (uuid: string) => {
   try {
     const response = await baseHttp.get("/user/current_by_uuid", {params: {uuid}});
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<UserArchiveImpl> = response.data;
     if (data.code === 0) {
       userArchive.value = data.data;
     }
@@ -74,7 +75,7 @@ onMounted(() => {
             <span class="updated_at">编辑于：{{timestampToCn(item.updated_at)}}</span>
           </div>
         </div>
-        <div class="content" v-html="item.content">
+        <div class="content" v-html="sanitizeHtmlContent(item.content)">
         </div>
       </div>
     </div>

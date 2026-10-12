@@ -15,6 +15,12 @@ public class ClubController {
     @Autowired
     private ClubService clubService;
 
+    /** 迁移影响只读预览，不能用预览结果替代保存时的事务校验。 */
+    @GetMapping("/{id}/move-preview")
+    public ResponseEntity<J> movePreview(@PathVariable String id, @RequestParam("school_id") String schoolId, HttpServletRequest request) {
+        return clubService.movePreview((String) request.getAttribute("uuid"), id, schoolId);
+    }
+
     @IgnoreAuth
     @GetMapping("/list")
     public ResponseEntity<J> list(

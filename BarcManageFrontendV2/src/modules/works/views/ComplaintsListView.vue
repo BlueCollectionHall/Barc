@@ -29,21 +29,21 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import ComplaintListComp from '../components/ComplaintListComp.vue'
-import { processComplaint, updateWorkStatus } from '../api/workManage'
+import { processComplaint, updateWorkStatus, type ComplaintRecord } from '../api/workManage'
 
 const complaintListRef = ref()
 const dialogVisible = ref(false)
 const processAction = ref('COMPLETED')
 const processRemark = ref('')
-let pendingRow: any = null
+let pendingRow: ComplaintRecord | null = null
 
 const workStatusActions: Record<string, { status: string; defaultRemark: string }> = {
   BAN: { status: 'BAN', defaultRemark: '管理员已封禁作品并完成投诉' },
   OFF: { status: 'OFF', defaultRemark: '管理员已下架作品并完成投诉' },
-  RESTORE: { status: 'PUBLIC', defaultRemark: '管理员已恢复作品公开状态' },
+  RESTORE: { status: 'PUBLIC', defaultRemark: '管理员已恢复作品原可见性' },
 }
 
-const openProcessDialog = (row: any) => { pendingRow = row; dialogVisible.value = true }
+const openProcessDialog = (row: ComplaintRecord) => { pendingRow = row; dialogVisible.value = true }
 
 const confirmProcess = async () => {
   if (!pendingRow) return

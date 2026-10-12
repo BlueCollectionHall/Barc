@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import { getErrorMessage } from '@/shared/types/api'
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { banUser } from '@/modules/users/api/users.service'
-import type { BanRequest, BanType } from '@/shared/types/user'
-import { BAN_TYPE_LABELS } from '@/shared/types/user'
+import type { BanRequest } from '@/shared/types/user'
 
 const props = defineProps<{
   visible: boolean
@@ -60,8 +60,8 @@ async function handleSubmit(): Promise<void> {
     ElMessage.success('封号成功')
     emit('success')
     handleClose()
-  } catch (error: any) {
-    ElMessage.error(error.message || '封号失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '封号失败'))
   } finally {
     loading.value = false
   }

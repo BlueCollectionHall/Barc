@@ -21,6 +21,8 @@ export interface WorkImpl {
   student: string;
   created_at: Date;
   content_updated_at?: Date | null;
+  /** 服务端内容版本，用于编辑冲突检测。 */
+  content_revision?: number;
   updated_at: Date;
 }
 
@@ -31,6 +33,8 @@ export interface WorkCommentImpl {
   content: string;
   created_at: Date;
   replies?: Array<WorkCommentReplyImpl>
+  /** 回复分页的真实总数，首屏只附带少量预览。 */
+  reply_count?: number;
 }
 
 export interface WorkCommentReplyImpl {

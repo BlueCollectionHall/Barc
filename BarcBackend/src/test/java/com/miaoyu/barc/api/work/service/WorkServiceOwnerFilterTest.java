@@ -14,7 +14,6 @@ import com.miaoyu.barc.api.work.model.entity.WorkEntity;
 import com.miaoyu.barc.user.mapper.UserArchiveMapper;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.JwtService;
-import com.miaoyu.barc.utils.minio.MinioObjects;
 import com.miaoyu.barc.utils.tencent.cos.CosBucketConfigEnum;
 import com.miaoyu.barc.utils.tencent.cos.CosService;
 import org.junit.jupiter.api.DisplayName;
@@ -52,8 +51,6 @@ class WorkServiceOwnerFilterTest {
     private SchoolMapper schoolMapper;
     @Mock
     private ClubMapper clubMapper;
-    @Mock
-    private MinioObjects minioObjects;
     @Mock
     private WorkImageMapper workImageMapper;
     @Mock

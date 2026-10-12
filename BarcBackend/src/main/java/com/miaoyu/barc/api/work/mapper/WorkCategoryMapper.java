@@ -11,6 +11,9 @@ import java.util.List;
 public interface WorkCategoryMapper {
     @Select("SELECT * FROM work_category WHERE id = #{id}")
     WorkCategoryModel selectById(@RequestParam("id") String id);
+    /** 取得父作品锁后进行当前读，避免复用普通查询在 MyBatis 一级缓存中的旧关联。 */
+    @Select("SELECT * FROM work_category WHERE id = #{id} FOR UPDATE")
+    WorkCategoryModel selectByIdForUpdate(@org.apache.ibatis.annotations.Param("id") String id);
     @Select("SELECT * FROM work_category WHERE work_id = #{work_id}")
     List<WorkCategoryModel> selectByWorkId(@RequestParam("work_id") String workId);
 

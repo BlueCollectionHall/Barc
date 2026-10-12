@@ -1,6 +1,14 @@
+import type { EntityDraft } from './entityDraft'
 import { http } from '@/shared/api/http'
 
 export interface School {
+  // 原始 key 只用于写入，签名 URL 只用于展示。
+  logo_key?: string
+  logo_url?: string
+  beautify_logo_key?: string
+  beautify_logo_url?: string
+  bg_key?: string
+  bg_url?: string
   id: string
   cn_name: string
   jp_name?: string
@@ -25,11 +33,11 @@ export function fetchSchoolById(id: string): Promise<School> {
   return http.get<School>(`/api/school/${id}`)
 }
 
-export function createSchool(payload: School): Promise<School> {
+export function createSchool(payload: EntityDraft): Promise<School> {
   return http.post<School>('/api/school', payload)
 }
 
-export function updateSchool(id: string, payload: Partial<School>): Promise<School> {
+export function updateSchool(id: string, payload: Partial<EntityDraft>): Promise<School> {
   return http.put<School>(`/api/school/${id}`, payload)
 }
 

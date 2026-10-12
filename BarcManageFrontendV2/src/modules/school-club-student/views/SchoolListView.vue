@@ -3,15 +3,15 @@
     <div class="toolbar">
       <el-input v-model="keyword" :placeholder="searchPlaceholder" clearable @change="loadPage(1)" style="width: 240px;" />
       <el-radio-group v-model="mode" @change="loadPage(1)">
-        <el-radio-button label="school">学园</el-radio-button>
-        <el-radio-button label="club">部团</el-radio-button>
-        <el-radio-button label="student">学生</el-radio-button>
+        <el-radio-button value="school">学园</el-radio-button>
+        <el-radio-button value="club">部团</el-radio-button>
+        <el-radio-button value="student">学生</el-radio-button>
       </el-radio-group>
       <el-button v-if="mode === 'school'" type="primary" @click="openCreate">新增学园</el-button>
     </div>
     <div class="card-grid">
+      <template v-if="mode === 'school'">
       <SchoolCard
-        v-if="mode === 'school'"
         v-for="school in list"
         :key="school.id"
         :id="school.id"
@@ -21,8 +21,9 @@
         @edit="openEdit"
         @delete="handleDelete"
       />
+      </template>
+      <template v-if="mode === 'club'">
       <ClubCard
-        v-if="mode === 'club'"
         v-for="club in list"
         :key="club.id"
         :id="club.id"
@@ -32,8 +33,9 @@
         @edit="openEditClub"
         @delete="handleDeleteClub"
       />
+      </template>
+      <template v-if="mode === 'student'">
       <StudentCard
-        v-if="mode === 'student'"
         v-for="student in list"
         :key="student.id"
         :id="student.id"
@@ -43,6 +45,7 @@
         @edit="openEditStudent"
         @delete="handleDeleteStudent"
       />
+      </template>
     </div>
     <div class="pagination-wrap">
       <el-pagination
@@ -68,6 +71,8 @@
 </template>
 
 <script setup lang="ts">
+import { studentContent, type EntityDraft, type EntityRecord } from '../api/entityDraft'
+import { loadAllOptions } from "../api/options"
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -80,7 +85,6 @@ import { fetchClubList, updateClub, deleteClub } from '../api/club'
 import { fetchStudentList, updateStudent, deleteStudent } from '../api/student'
 import type { School } from '../api/school'
 import type { Club } from '../api/club'
-import type { Student } from '../api/student'
 
 const router = useRouter()
 const mode = ref<'school' | 'club' | 'student'>('school')
@@ -88,10 +92,10 @@ const keyword = ref('')
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
-const list = ref<any[]>([])
+const list = ref<EntityRecord[]>([])
 const drawerVisible = ref(false)
 const isEdit = ref(false)
-const editData = ref<Partial<any>>({})
+const editData = ref<Partial<EntityRecord>>({})
 const drawerEntityType = ref<'school' | 'club' | 'student'>('school')
 const parentId = ref<string>('')  // 新增：用于传递父级ID
 const schoolOptions = ref<{ id: string; cn_name: string }[]>([])
@@ -105,7 +109,7 @@ const searchPlaceholder = computed(() => {
 async function loadPage(p = 1) {
   page.value = p
   try {
-    let res: any
+    let res: { list: EntityRecord[]; total: number }
     if (mode.value === 'school') {
       res = await fetchSchoolList(keyword.value, page.value, size.value)
     } else if (mode.value === 'club') {
@@ -125,7 +129,7 @@ function goToClubs(id: string) {
 }
 
 function goToStudents(id: string) {
-  router.push({ name: 'students-list', params: { schoolId: list.value.find((c: Club) => c.id === id)?.school, clubId: id } })
+  router.push({ name: 'students-list', params: { schoolId: list.value.find((c) => c.id === id)?.school, clubId: id } })
 }
 
 function openCreate() {
@@ -136,7 +140,7 @@ function openCreate() {
 }
 
 function openEdit(id: string) {
-  const s = list.value.find((x: School) => x.id === id)
+  const s = list.value.find((x) => x.id === id)
   if (!s) return
   drawerEntityType.value = 'school'
   isEdit.value = true
@@ -150,13 +154,13 @@ async function handleDelete(id: string) {
     await deleteSchool(id)
     ElMessage.success('删除成功')
     loadPage()
-  } catch (e) {
+  } catch {
     // cancel
   }
 }
 
 async function openEditClub(id: string) {
-  const c = list.value.find((x: Club) => x.id === id)
+  const c = list.value.find((x) => x.id === id)
   if (!c) return
   drawerEntityType.value = 'club'
   isEdit.value = true
@@ -172,13 +176,13 @@ async function handleDeleteClub(id: string) {
     await deleteClub(id)
     ElMessage.success('删除成功')
     loadPage()
-  } catch (e) {
+  } catch {
     // cancel
   }
 }
 
 async function openEditStudent(id: string) {
-  const s = list.value.find((x: Student) => x.id === id)
+  const s = list.value.find((x) => x.id === id)
   if (!s) return
   drawerEntityType.value = 'student'
   isEdit.value = true
@@ -194,14 +198,14 @@ async function handleDeleteStudent(id: string) {
     await deleteStudent(id)
     ElMessage.success('删除成功')
     loadPage()
-  } catch (e) {
+  } catch {
     // cancel
   }
 }
 
 async function loadSchoolOptions() {
   try {
-    const res = await fetchSchoolList('', 1, 9999)
+    const res = await loadAllOptions((page, size) => fetchSchoolList('', page, size))
     schoolOptions.value = res.list.map((s: School) => ({ id: s.id, cn_name: s.cn_name }))
   } catch {
     schoolOptions.value = []
@@ -210,7 +214,7 @@ async function loadSchoolOptions() {
 
 async function loadClubOptions(schoolId?: string) {
   try {
-    const res = await fetchClubList(schoolId || '', '', 1, 9999)
+    const res = await loadAllOptions((page, size) => fetchClubList(schoolId || '', '', page, size))
     clubOptions.value = res.list.map((c: Club) => ({ id: c.id, cn_name: c.cn_name }))
   } catch {
     clubOptions.value = []
@@ -222,20 +226,20 @@ async function handleSchoolChange(schoolId: string) {
   await loadClubOptions(schoolId)
 }
 
-async function handleSubmit(data: Record<string, any>) {
+async function handleSubmit(data: EntityDraft) {
   try {
     if (drawerEntityType.value === 'school') {
       if (isEdit.value) {
         await updateSchool(data.id, data)
       } else {
-        await createSchool(data as School)
+        await createSchool(data)
       }
     } else if (drawerEntityType.value === 'club') {
       // school 字段已在 EntityFormDrawer 中设置，后端从 request body 读取
       await updateClub(data.id, data)
     } else if (drawerEntityType.value === 'student') {
-      const clubId = data.club
-      const { school, club, school_id, club_id, ...rest } = data
+      const clubId = data.club || undefined
+      const rest = studentContent(data)
       await updateStudent(data.id, rest, clubId)
     }
     ElMessage.success(isEdit.value ? '修改成功' : '创建成功')

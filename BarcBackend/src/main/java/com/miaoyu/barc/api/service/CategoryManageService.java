@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
@@ -43,6 +44,8 @@ import java.util.regex.Pattern;
  */
 @Service
 public class CategoryManageService {
+    @Autowired private com.miaoyu.barc.api.mapper.CatalogMutationMapper catalogMutationMapper;
+    // 等待业务行锁后读取最新提交数据，避免鉴权读在可重复读隔离下固定旧快照。
 
     private static final Logger log = LoggerFactory.getLogger(CategoryManageService.class);
 
@@ -91,8 +94,9 @@ public class CategoryManageService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> createService(String uuid, CategoryForm form) {
+        catalogMutationMapper.lock("category");
         if (form == null) {
             return businessError("请填写分类信息");
         }
@@ -150,8 +154,9 @@ public class CategoryManageService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> updateService(String uuid, String id, CategoryForm form) {
+        catalogMutationMapper.lock("category");
         CategoryPojo existing = id == null ? null : categoryMapper.selectById(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
@@ -218,7 +223,7 @@ public class CategoryManageService {
                     continue;
                 }
                 int nodeLevel = node.getLevel() == null ? newLevel : node.getLevel();
-                categoryMapper.updateLevel(node.getId(), nodeLevel + delta);
+                if (categoryMapper.updateLevel(node.getId(), nodeLevel + delta) != 1) throw com.miaoyu.barc.utils.RequestInput.invalid("分类层级更新失败");
             }
         }
         log.info("作品分类修改：operator={}, id={}, name={}, parent_id={}, level={}, sort={}, moved={}",
@@ -246,8 +251,9 @@ public class CategoryManageService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> moveSortService(String uuid, String id, String direction) {
+        catalogMutationMapper.lock("category");
         CategoryPojo existing = id == null ? null : categoryMapper.selectById(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
@@ -264,15 +270,6 @@ public class CategoryManageService {
         List<CategoryPojo> siblings = categoryMapper.selectByParentId(existing.getParent_id());
         if (siblings.isEmpty()) {
             return businessError("同级分类列表为空，无法排序");
-        }
-        // 第一步：规范化同级 sort 为 1..n（只在值发生变化时写库，减少无意义更新）
-        for (int i = 0; i < siblings.size(); i++) {
-            CategoryPojo sibling = siblings.get(i);
-            int normalized = i + 1;
-            if (sibling.getSort() == null || sibling.getSort() != normalized) {
-                categoryMapper.updateSort(sibling.getId(), normalized);
-            }
-            sibling.setSort(normalized);
         }
         // 第二步：定位自身并找到相邻项
         int index = -1;
@@ -292,9 +289,19 @@ public class CategoryManageService {
         if (target >= siblings.size()) {
             return businessError("该分类已经是同级的最后一个，无法下移");
         }
+        // 边界检查通过后才开始写入，失败请求不会偷偷改动同级序号。
+        // 第一步：规范化同级 sort 为 1..n（只在值发生变化时写库，减少无意义更新）
+        for (int i = 0; i < siblings.size(); i++) {
+            CategoryPojo sibling = siblings.get(i);
+            int normalized = i + 1;
+            if (sibling.getSort() == null || sibling.getSort() != normalized) {
+                if (categoryMapper.updateSort(sibling.getId(), normalized) != 1) throw com.miaoyu.barc.utils.RequestInput.invalid("分类排序更新失败");
+            }
+            sibling.setSort(normalized);
+        }
         CategoryPojo neighbour = siblings.get(target);
-        categoryMapper.updateSort(existing.getId(), neighbour.getSort());
-        categoryMapper.updateSort(neighbour.getId(), index + 1);
+        if (categoryMapper.updateSort(existing.getId(), neighbour.getSort()) != 1) throw com.miaoyu.barc.utils.RequestInput.invalid("分类排序更新失败");
+        if (categoryMapper.updateSort(neighbour.getId(), index + 1) != 1) throw com.miaoyu.barc.utils.RequestInput.invalid("分类排序更新失败");
         log.info("作品分类排序：operator={}, id={}, direction={}, from={}, to={}",
                 uuid, existing.getId(), up ? "up" : "down", index + 1, target + 1);
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, categoryMapper.selectByParentId(existing.getParent_id())));
@@ -315,9 +322,10 @@ public class CategoryManageService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> deleteService(String uuid, String id) {
-        CategoryPojo existing = id == null ? null : categoryMapper.selectById(id);
+        catalogMutationMapper.lock("category");
+        CategoryPojo existing = id == null ? null : categoryMapper.selectByIdForUpdate(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         }

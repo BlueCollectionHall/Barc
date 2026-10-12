@@ -4,13 +4,15 @@ import {useRouter} from "vue-router";
 const router = useRouter();
 import {useUserPinia} from "@/stores/UserPinia.ts";
 import {storeToRefs} from "pinia";
-import {onMounted, ref, watch} from "vue";
+import {onMounted} from "vue";
 const userPinia = useUserPinia();
 
 const {userArchive} = storeToRefs(userPinia);
 
 interface ItemImpl {label: string; value: string; identity: string; permission: number; icon?: string;}
 const items: Array<ItemImpl> = [
+  // 认领进度沿用登录用户的内容管理入口。
+  {label: "认领记录", value: "ManageClaims", identity: "USER", permission: 1, icon: "FlagOutlined"},
   {label: "作品", value: "ManageWork", identity: "USER", permission: 1, icon: "HighlightOutlined"},
   {label: "文章", value: "ManageArticle", identity: "USER", permission: 1, icon: "FileTextOutlined"},
   {label: "公告", value: "ManageNotice", identity: "MANAGER", permission: 1, icon: "SoundOutlined"}

@@ -42,6 +42,8 @@
 </template>
 
 <script setup lang="ts">
+import { studentContent, type EntityDraft } from '../api/entityDraft'
+import { loadAllOptions } from "../api/options"
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -104,8 +106,8 @@ async function openEdit(id: string) {
 
 async function loadClubOptions(schoolId?: string) {
   try {
-    const res = await fetchClubList(schoolId || '', '', 1, 9999)
-    clubOptions.value = res.list.map((c: any) => ({ id: c.id, cn_name: c.cn_name }))
+    const res = await loadAllOptions((page, size) => fetchClubList(schoolId || '', '', page, size))
+    clubOptions.value = res.list.map((c) => ({ id: c.id, cn_name: c.cn_name }))
   } catch {
     clubOptions.value = []
   }
@@ -119,8 +121,8 @@ async function handleSchoolChange(schoolId: string) {
 // 加载学园选项
 async function loadSchoolOptions() {
   try {
-    const res = await fetchSchoolList('', 1, 9999)
-    schoolOptions.value = res.list.map((s: any) => ({ id: s.id, cn_name: s.cn_name }))
+    const res = await loadAllOptions((page, size) => fetchSchoolList('', page, size))
+    schoolOptions.value = res.list.map((s) => ({ id: s.id, cn_name: s.cn_name }))
   } catch {
     schoolOptions.value = []
   }
@@ -132,21 +134,21 @@ async function handleDelete(id: string) {
     await deleteStudent(id)
     ElMessage.success('删除成功')
     loadPage()
-  } catch (e) {
+  } catch {
     // cancel
   }
 }
 
-async function handleSubmit(data: Record<string, any>) {
+async function handleSubmit(data: EntityDraft) {
   if (isEdit.value) {
     // EntityFormDrawer 发送 payload.club = form.club_id，所以用 data.club
-    const clubId = data.club
+    const clubId = data.club || undefined
     // 移除 school/club 字段，避免与 @RequestParam 冲突（后端通过 clubId 查询 school）
-    const { school, club, school_id, club_id, ...rest } = data
+    const rest = studentContent(data)
     await updateStudent(data.id, rest, clubId)
     ElMessage.success('修改成功')
   } else {
-    await createStudent(data as Student, data.club)
+    await createStudent(data, data.club || clubId.value)
     ElMessage.success('创建成功')
   }
   drawerVisible.value = false
@@ -158,7 +160,7 @@ onMounted(async () => {
     try {
       const s = await fetchSchoolById(schoolId.value)
       cache.setSchoolName(schoolId.value, s.cn_name)
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -166,7 +168,7 @@ onMounted(async () => {
     try {
       const c = await fetchClubById(clubId.value)
       cache.setClubName(clubId.value, c.cn_name)
-    } catch (e) {
+    } catch {
       // ignore
     }
   }

@@ -3,7 +3,7 @@ export interface PageRequestImpl {
     page_size: number; // 每页条数
     sort_field?: string; // 排序字段
     sort_order?: string; // 排序方向
-    params?: any; // 查询参数
+    params?: Record<string, unknown>; // 查询参数
 }
 export interface PageResultImpl<T> {
     page_num: number;

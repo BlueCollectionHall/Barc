@@ -25,6 +25,9 @@ import java.util.List;
  *    因此列名与实体属性名必须保持同一种下划线写法。
  */
 public interface CategoryMapper {
+    /** 删除检查与绑定外键共用分类行锁，防止计数之后出现新关联而被级联删除。 */
+    @Select("SELECT * FROM category WHERE id=#{id} FOR UPDATE")
+    CategoryPojo selectByIdForUpdate(@Param("id") String id);
 
     // ==================== 用户端（公开，只读） ====================
 

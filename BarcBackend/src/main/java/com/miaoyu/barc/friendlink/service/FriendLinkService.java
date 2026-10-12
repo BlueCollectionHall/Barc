@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,10 +33,9 @@ import java.util.List;
  * 与同组的背景图 / 节日管理完全一致。公开接口走 @IgnoreAuth，不经过本类的权限注解。
  *
  * 上传流程（拍板 Q9，方案 A「先传后落」）：
- * 1、uploadService 只把 logo 传到 COS 并返回 objectKey，**不写数据库**；
+ * 1、uploadService 上传前登记对象和补偿任务，返回 objectKey，不创建友链业务记录；
  * 2、前端随新增 / 修改表单一并提交该 key，落库只发生在 createService / updateService；
- * 3、与背景图、学园/部团/学生三图完全同构；若用户上传后放弃保存，会产生 COS 孤儿对象，
- *    本期不做补偿（与既有链路一致），待「COS 孤儿对象巡检」独立需求统一治理。
+ * 3、放弃保存或业务回滚后，未引用对象在七天保留期之后交引用复核回收。
  *
  * 排序（拍板 Q3，不做批量排序接口）：
  * moveService 在**同一事务**内交换相邻两条的 sort_order；已在首位上移 / 末位下移时返回失败提示，
@@ -43,6 +43,9 @@ import java.util.List;
  */
 @Service
 public class FriendLinkService {
+    // 等待业务行锁后读取最新提交数据，避免鉴权读在可重复读隔离下固定旧快照。
+    @Autowired private com.miaoyu.barc.api.mapper.CatalogMutationMapper catalogMutationMapper;
+    @Autowired private com.miaoyu.barc.api.file.service.ObjectStorageService objectStorage;
 
     /** 图片大小上限 1MB（与背景图保持一致，便于前端复用同一套提示文案） */
     private static final long MAX_FILE_SIZE = 1024 * 1024;
@@ -101,7 +104,8 @@ public class FriendLinkService {
         }
         String objectKey = buildLogoKey(file);
         // 交给 COS 上传（uploadFileWithKey 不做二次重命名，完全按调用方给定的 key 落桶）
-        return ResponseEntity.ok(cosService.uploadFileWithKey(file, objectKey, CosBucketConfigEnum.image));
+        objectStorage.uploadWithKey(uuid, file, objectKey, MAX_FILE_SIZE);
+        return ResponseEntity.ok(new J(0, "图片上传成功", objectKey));
     }
 
     /** 管理端列表：全部友链，按 sort_order 升序，逐条把 logo_key 签名成 logo_url */
@@ -124,7 +128,9 @@ public class FriendLinkService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> createService(String uuid, FriendLinkItem item) {
+        catalogMutationMapper.lock("friendlink");
         String error = validate(item);
         if (error != null) {
             return ResponseEntity.ok(new J(1, error, null));
@@ -135,6 +141,7 @@ public class FriendLinkService {
         model.setTitle(item.getTitle().trim());
         model.setUrl(item.getUrl().trim());
         model.setLogo_key(normalizeLogoKey(item.getLogo_key()));
+        objectStorage.bind(uuid, model.getLogo_key());
         model.setIntro(normalizeIntro(item.getIntro()));
         model.setSort_order(friendLinkMapper.selectMaxSortOrder() + 1);
         model.setEnabled(true);
@@ -145,7 +152,7 @@ public class FriendLinkService {
             resolveLogoUrl(model);
             return ResponseEntity.ok(new ResourceR().resourceSuch(true, model));
         }
-        return ResponseEntity.ok(new J(1, "友链新增失败", null));
+        throw com.miaoyu.barc.utils.RequestInput.invalid("友链新增失败");
     }
 
     /**
@@ -159,8 +166,9 @@ public class FriendLinkService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> updateService(String uuid, String id, FriendLinkItem item) {
+        catalogMutationMapper.lock("friendlink");
         FriendLinkModel existing = friendLinkMapper.selectById(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
@@ -172,6 +180,7 @@ public class FriendLinkService {
 
         String nextLogoKey = normalizeLogoKey(item.getLogo_key());
         String oldLogoKey = existing.getLogo_key();
+        if (!java.util.Objects.equals(oldLogoKey, nextLogoKey)) objectStorage.bind(uuid, nextLogoKey);
         // 只有「原来有图」且「换成了另一个 key」时，旧对象才需要清理
         if (StringUtils.hasText(oldLogoKey) && !oldLogoKey.equals(nextLogoKey)) {
             cosGcService.enqueue(cosConfig.getImage().getBucketName(), oldLogoKey);
@@ -194,7 +203,7 @@ public class FriendLinkService {
             resolveLogoUrl(latest);
             return ResponseEntity.ok(new ResourceR().resourceSuch(true, latest));
         }
-        return ResponseEntity.ok(new J(1, "友链修改失败", null));
+        throw com.miaoyu.barc.utils.RequestInput.invalid("友链修改失败");
     }
 
     /**
@@ -208,7 +217,7 @@ public class FriendLinkService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> moveService(String uuid, String id, String direction) {
         boolean up;
         if ("up".equalsIgnoreCase(direction)) {
@@ -219,25 +228,21 @@ public class FriendLinkService {
             return ResponseEntity.ok(new J(1, "移动方向不合法: " + direction, null));
         }
 
-        FriendLinkModel current = friendLinkMapper.selectById(id);
-        if (current == null) {
-            return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        // 所有创建、删除和移动共同持有同一事务行锁；按稳定展示顺序移动并重排。
+        catalogMutationMapper.lock("friendlink");
+        List<FriendLinkModel> list = new ArrayList<>(friendLinkMapper.selectAll());
+        int index = -1;
+        for (int i = 0; i < list.size(); i++) if (id.equals(list.get(i).getId())) { index = i; break; }
+        if (index < 0) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        int target = up ? index - 1 : index + 1;
+        if (target < 0 || target >= list.size()) return ResponseEntity.ok(new J(1, up ? "该友链已经在最前" : "该友链已经在最后", null));
+        java.util.Collections.swap(list, index, target);
+        // 重排也修复历史同序号记录，任意一行失败则回滚整个移动。
+        for (int i = 0; i < list.size(); i++) {
+            if (friendLinkMapper.updateSortOrder(list.get(i).getId(), i + 1) != 1)
+                throw com.miaoyu.barc.utils.RequestInput.invalid("友链移动失败");
+            list.get(i).setSort_order(i + 1);
         }
-
-        int currentOrder = current.getSort_order() != null ? current.getSort_order() : 0;
-        FriendLinkModel neighbor = up
-                ? friendLinkMapper.selectPrevBySortOrder(currentOrder)
-                : friendLinkMapper.selectNextBySortOrder(currentOrder);
-        if (neighbor == null) {
-            return ResponseEntity.ok(new J(1, up ? "该友链已经在最前" : "该友链已经在最后", null));
-        }
-
-        int neighborOrder = neighbor.getSort_order() != null ? neighbor.getSort_order() : 0;
-        friendLinkMapper.updateSortOrder(current.getId(), neighborOrder);
-        friendLinkMapper.updateSortOrder(neighbor.getId(), currentOrder);
-
-        // 回传交换后的完整列表，前端直接替换本地状态，避免再发一次列表请求
-        List<FriendLinkModel> list = friendLinkMapper.selectAll();
         list.forEach(this::resolveLogoUrl);
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, list));
     }
@@ -249,8 +254,9 @@ public class FriendLinkService {
             isSuchElseRequire = false,
             isHasElseUpper = true
     )})
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> deleteService(String uuid, String id) {
+        catalogMutationMapper.lock("friendlink");
         FriendLinkModel existing = friendLinkMapper.selectById(id);
         if (existing == null) {
             return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
@@ -259,6 +265,7 @@ public class FriendLinkService {
             cosGcService.enqueue(cosConfig.getImage().getBucketName(), existing.getLogo_key());
         }
         int rows = friendLinkMapper.softDelete(id);
+        if (rows != 1) throw com.miaoyu.barc.utils.RequestInput.invalid("友链删除失败");
         return ResponseEntity.ok(new ResourceR().resourceSuch(rows > 0, null));
     }
 
@@ -295,7 +302,7 @@ public class FriendLinkService {
      */
     private String buildLogoKey(MultipartFile file) {
         String originalFilename = file.getOriginalFilename();
-        String extension = StringUtils.getFilenameExtension(originalFilename);
+        String extension = com.miaoyu.barc.api.file.service.ImageInput.extension(file, MAX_FILE_SIZE);
         String baseName = sanitizeBaseName(originalFilename);
         String uuidSeg = new GenerateUUID().getUuid36l().split("-")[0].toUpperCase();
         long epochSec = System.currentTimeMillis() / 1000;

@@ -10,45 +10,21 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.Locale;
 
 @Component
 public class ClientIpResolver {
-    private static final String HEADER_X_REAL_IP = "X-Real-IP";
-    private static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
-
+    /** 只采用服务器连接来源；可信代理转换应在部署容器中配置，不采信任意客户端头。 */
     public ClientIpInfo resolve(HttpServletRequest request) {
         if (request == null) {
             return null;
         }
 
-        for (String candidate : candidates(request)) {
-            InetAddress address = parseIp(candidate);
-            if (address != null) {
-                String normalizedIp = normalize(address);
-                return new ClientIpInfo(viewerType(address), normalizedIp, sha256Hex(normalizedIp));
-            }
-        }
-
-        return null;
-    }
-
-    private List<String> candidates(HttpServletRequest request) {
-        return Arrays.asList(
-                request.getHeader(HEADER_X_REAL_IP),
-                firstForwardedFor(request.getHeader(HEADER_X_FORWARDED_FOR)),
-                request.getRemoteAddr()
-        );
-    }
-
-    private String firstForwardedFor(String headerValue) {
-        if (headerValue == null) {
-            return null;
-        }
-        return headerValue.split(",", 2)[0];
+        InetAddress address = parseIp(request.getRemoteAddr());
+        if (address == null) return null;
+        String normalizedIp = normalize(address);
+        return new ClientIpInfo(viewerType(address), normalizedIp, sha256Hex(normalizedIp));
     }
 
     private InetAddress parseIp(String value) {
@@ -57,7 +33,7 @@ public class ClientIpResolver {
         }
 
         String candidate = value.trim();
-        if (candidate.isBlank() || "unknown".equalsIgnoreCase(candidate)) {
+        if (candidate.isBlank() || candidate.length() > 45 || "unknown".equalsIgnoreCase(candidate)) {
             return null;
         }
 

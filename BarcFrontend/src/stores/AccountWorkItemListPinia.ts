@@ -5,13 +5,12 @@ import {baseHttp} from "@/utils/https.ts";
 import type {ResponseImpl} from "@/interfaces/ResponseImpl.ts";
 import {errorMessage, infoMessage} from "@/utils/MessageAlert.ts";
 import type {PageRequestImpl, PageResultImpl} from "@/interfaces/PageImpl.ts";
-import {useRoute, useRouter} from "vue-router";
+import {useRoute} from "vue-router";
 import {fetchLikedWorksByUsername} from "@/utils/accountLikeApi.ts";
 
 export const useAccountWorkItemPinia = defineStore('account_work_list', () => {
 
   const route = useRoute();
-  const router = useRouter();
 
   const pageRequest = ref<PageRequestImpl>({page_num: 1, page_size: 15});
   const pageResult = ref<PageResultImpl<WorkImpl> | null>(null);
@@ -55,7 +54,7 @@ export const useAccountWorkItemPinia = defineStore('account_work_list', () => {
     // 获取作品列表
     await baseHttp.post("/api/work/works_by_page", pageRequest.value, {params: {status: 'PUBLIC'}})
       .then(res => {
-        const data: ResponseImpl = res.data;
+        const data: ResponseImpl<PageResultImpl<WorkImpl>> = res.data;
         if (data.code === 0) {
           pageResult.value = data.data;
         } else infoMessage(data.msg);

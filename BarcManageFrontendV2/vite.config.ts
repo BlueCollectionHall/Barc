@@ -72,6 +72,8 @@ export default defineConfig({
     },
   },
   test: {
+    // include 覆盖所有业务源码，测试辅助与声明文件不属于运行时代码。
+    coverage: { provider: 'v8', all: true, include: ['src/**/*.{ts,vue}'], exclude: ['src/**/__tests__/**', 'src/**/*.d.ts', 'src/test-utils/**'], reporter: ['text', 'html', 'json-summary'], thresholds: { lines: 90 } },
     environment: 'jsdom',
     setupFiles: ['./src/test-utils/setup.ts'],
     css: false,

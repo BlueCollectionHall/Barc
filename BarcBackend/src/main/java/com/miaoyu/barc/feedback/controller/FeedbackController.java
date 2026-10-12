@@ -4,6 +4,8 @@ import com.miaoyu.barc.annotation.IgnoreAuth;
 import com.miaoyu.barc.feedback.enumeration.FeedbackStatusEnum;
 import com.miaoyu.barc.feedback.enumeration.FeedbackTypeEnum;
 import com.miaoyu.barc.feedback.model.FeedbackFormModel;
+import com.miaoyu.barc.feedback.model.FeedbackCreateRequest;
+import com.miaoyu.barc.feedback.model.FeedbackUpdateRequest;
 import com.miaoyu.barc.feedback.service.FeedbackService;
 import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.utils.J;
@@ -36,7 +38,7 @@ public class FeedbackController {
 
     /**根据类型获取全部投诉反馈信息
      * @param request 用户登录信息
-     * @param count 获取数量，0为全部
+     * @param count 获取数量，默认及零值最多 100 条；完整记录通过 page 入口读取
      * @param typeEnum 类型
      * @param isManager 是否是管理员请求接口
      * @return List类型中包含指定数量符合条件的Feedback实体*/
@@ -47,10 +49,15 @@ public class FeedbackController {
             @RequestParam("type") FeedbackTypeEnum typeEnum,
             @RequestParam("is_manager") Boolean isManager
     ) {
-        if (isManager) {
-            return feedbackService.getFeedbacksByTypeWithManagerService(request.getAttribute("uuid").toString(), typeEnum);
-        }
-        return feedbackService.getFeedbacksByTypeWithMeService(request.getAttribute("uuid").toString(), typeEnum);
+        return feedbackService.getLegacyList(request.getAttribute("uuid").toString(), typeEnum, Boolean.TRUE.equals(isManager), count);
+    }
+
+    /** 新分页入口兼顾本人记录和分类管理；服务层再次检查治理权限。 */
+    @GetMapping("/page")
+    public ResponseEntity<J> getPage(HttpServletRequest request, @RequestParam FeedbackTypeEnum type,
+            @RequestParam(required = false) FeedbackStatusEnum status, @RequestParam(defaultValue = "false") boolean is_manager,
+            @RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "20") Integer size) {
+        return feedbackService.getPage(request.getAttribute("uuid").toString(), type, status, is_manager, page, size);
     }
 
     /**根据Feedback的ID获取唯一符合要求的Feedback实体（管理员用）
@@ -82,8 +89,9 @@ public class FeedbackController {
      * @return 上传是否成功*/
     @IgnoreAuth
     @PostMapping("/upload")
-    public ResponseEntity<J> uploadFeedbackControl(@RequestBody FeedbackFormModel requestModel) {
-        return feedbackService.uploadFeedbackService(requestModel);
+    public ResponseEntity<J> uploadFeedbackControl(HttpServletRequest request, @RequestBody FeedbackCreateRequest requestModel) {
+        // 认证拦截器支持公开接口的可选身份；连接地址不采信客户端伪造的转发头。
+        return feedbackService.uploadFeedbackService((String) request.getAttribute("uuid"), request.getRemoteAddr(), requestModel);
     }
 
     /**修改投诉表单
@@ -93,7 +101,7 @@ public class FeedbackController {
     @PutMapping("/update")
     public ResponseEntity<J> updateFeedbackControl(
             HttpServletRequest request,
-            @RequestBody FeedbackFormModel requestModel) {
+            @RequestBody FeedbackUpdateRequest requestModel) {
         return feedbackService.updateFeedbackService(request.getAttribute("uuid").toString(), requestModel);
     }
 

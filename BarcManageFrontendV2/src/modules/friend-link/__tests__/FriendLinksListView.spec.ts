@@ -148,7 +148,7 @@ describe('FriendLinksListView', () => {
 
   it('列表接口失败时提示错误且页面不崩', async () => {
     fetchFriendLinks.mockRejectedValue(new Error('boom'))
-    const wrapper = mount(FriendLinksListView)
+    mount(FriendLinksListView)
     await flushPromises()
 
     expect(showError).toHaveBeenCalledWith('boom')

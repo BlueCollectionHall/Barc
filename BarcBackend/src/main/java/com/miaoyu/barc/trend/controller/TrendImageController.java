@@ -25,32 +25,12 @@ public class TrendImageController {
     private TrendImageMapper trendImageMapper;
 
     @PostMapping("/upload")
-    public ResponseEntity<J> uploadTrendImageControl(HttpServletRequest request, @RequestParam("trend_id") String trendId, @RequestBody MultipartFile file) {
-        TrendModel trend = trendSelectMapper.selectById(trendId);
-        if (trend == null) {
-            return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
-        }
-        return trendImageService.uploadTrendImageService(
-                request.getAttribute("uuid").toString(),
-                trend.getAuthor(),
-                trendId,
-                file);
+    public ResponseEntity<J> uploadTrendImageControl(HttpServletRequest request, @RequestParam("trend_id") String trendId, @RequestParam("file") MultipartFile file) {
+        return trendImageService.uploadTrendImageService((String) request.getAttribute("uuid"), trendId, file);
     }
 
     @DeleteMapping("/delete")
     public ResponseEntity<J> deleteTrendImageControl(HttpServletRequest request, @RequestParam("trend_image_id") String trendImageId) {
-        TrendImageModel waitDeleteImage = trendImageMapper.selectById(trendImageId);
-        if (waitDeleteImage == null) {
-            return ResponseEntity.ok(new ErrorR().normal("系统未找到图片索引！"));
-        }
-        TrendModel trend = trendSelectMapper.selectById(waitDeleteImage.getTrend_id());
-        if (trend == null) {
-            return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
-        }
-        return trendImageService.deleteTrendImageService(
-                request.getAttribute("uuid").toString(),
-                trend.getAuthor(),
-                trend.getId(),
-                waitDeleteImage);
+        return trendImageService.deleteTrendImageService((String) request.getAttribute("uuid"), trendImageId);
     }
 }

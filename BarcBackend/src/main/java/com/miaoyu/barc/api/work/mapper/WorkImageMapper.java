@@ -11,6 +11,10 @@ public interface WorkImageMapper {
     @Select("SELECT * FROM work_image WHERE id = #{id}")
     WorkImageModel selectById(@Param("id") String id);
 
+    /** 父作品锁之后复查图片，使用独立语句避免事务内普通查询缓存返回旧记录。 */
+    @Select("SELECT * FROM work_image WHERE id = #{id} FOR UPDATE")
+    WorkImageModel selectByIdForUpdate(@Param("id") String id);
+
     @Insert("INSERT INTO work_image (id, work_id, sort, object_key) VALUES (#{id}, #{work_id}, #{sort}, #{object_key})")
     boolean insert(WorkImageModel workImageModel);
     @Update("UPDATE work_image SET sort = #{sort}, object_key = #{object_key} WHERE id = #{id}")

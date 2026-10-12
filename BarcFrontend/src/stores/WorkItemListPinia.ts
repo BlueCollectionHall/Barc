@@ -47,7 +47,7 @@ export const useWorkItemListPinia = defineStore("work_item_list", () => {
           status
         }
       });
-      const data: ResponseImpl = response.data;
+      const data: ResponseImpl<PageResultImpl<WorkImpl>> = response.data;
       if (data.code === 0) {
         pageResult.value = data.data;
         workList.value = pageResult.value?.list || [];

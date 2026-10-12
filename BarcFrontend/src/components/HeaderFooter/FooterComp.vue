@@ -23,7 +23,7 @@ const icp = ref<string | null>(null);
 const fetchIcp = async () => {
   try {
     const response = await baseHttp.get("/info/icp_num");
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<string> = response.data;
     if (data.code === 0) {
       icp.value = data.data;
     } else infoMessage("一个不必要组件的信息获取异常");
@@ -34,7 +34,7 @@ const fetchIcp = async () => {
 const fetchCopyright = async () => {
   try {
     const response = await baseHttp.get("/info/copyright");
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<string> = response.data;
     if (data.code === 0) {
       copyright.value = data.data;
     } else infoMessage("一个不必要组件的信息获取异常");

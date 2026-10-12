@@ -1,0 +1,20 @@
+# 测试仅使用独立内存库；严禁回退到 application.yaml 中的业务数据源或执行业务迁移。
+spring:
+  datasource:
+    url: jdbc:h2:mem:barc-test;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    druid:
+      enabled: false
+  flyway:
+    enabled: false
+  sql:
+    init:
+      mode: never
+  mail:
+    host: 127.0.0.1
+    port: 1
+    username: test
+    password: ""

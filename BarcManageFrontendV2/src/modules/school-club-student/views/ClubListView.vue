@@ -39,6 +39,8 @@
 </template>
 
 <script setup lang="ts">
+import { type EntityDraft } from '../api/entityDraft'
+import { loadAllOptions } from "../api/options"
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -100,8 +102,8 @@ async function openEdit(id: string) {
 
 async function loadSchoolOptions() {
   try {
-    const res = await fetchSchoolList('', 1, 9999)
-    schoolOptions.value = res.list.map((s: any) => ({ id: s.id, cn_name: s.cn_name }))
+    const res = await loadAllOptions((page, size) => fetchSchoolList('', page, size))
+    schoolOptions.value = res.list.map((s) => ({ id: s.id, cn_name: s.cn_name }))
   } catch {
     schoolOptions.value = []
   }
@@ -113,17 +115,17 @@ async function handleDelete(id: string) {
     await deleteClub(id)
     ElMessage.success('删除成功')
     loadPage()
-  } catch (e) {
+  } catch {
     // cancel
   }
 }
 
-async function handleSubmit(data: Record<string, any>) {
+async function handleSubmit(data: EntityDraft) {
   if (isEdit.value) {
     await updateClub(data.id, data)
     ElMessage.success('修改成功')
   } else {
-    await createClub(data as Club, schoolId.value)
+    await createClub(data, schoolId.value)
     ElMessage.success('创建成功')
   }
   drawerVisible.value = false
@@ -135,7 +137,7 @@ onMounted(async () => {
     try {
       const s = await fetchSchoolById(schoolId.value)
       cache.setSchoolName(schoolId.value, s.cn_name)
-    } catch (e) {
+    } catch {
       // ignore
     }
   }

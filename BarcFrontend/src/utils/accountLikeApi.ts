@@ -37,10 +37,10 @@ export async function fetchLikedWorksByUsername(
 
   if (res.data.code === 0) {
     if (!isLikedWorksPage(res.data.data)) {
-      throw new Error("喜欢作品分页响应格式异常");
+      throw new Error(String("喜欢作品分页响应格式异常"));
     }
     return res.data.data;
   }
 
-  throw new Error(res.data.msg || res.data.data || "喜欢作品列表获取失败");
+  throw new Error(String(res.data.msg || res.data.data || "喜欢作品列表获取失败"));
 }

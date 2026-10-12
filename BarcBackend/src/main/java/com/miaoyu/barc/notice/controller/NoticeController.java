@@ -19,10 +19,10 @@ public class NoticeController {
     /**
      * 获取最新的公告
      *
-     * 说明：优先返回 day 天内的最新公告；若 day 天内没有任何公告，则回退返回全表最近的一条公告，
-     * 保证前端首页公告组件不会因为公告超过天数而显示“暂无公告”。
+     * 说明：一次查询返回最近一条公告；原来的日期范围查询加回退与此结果相同。
+     * day 仅保留请求兼容，首页不会因为公告超过天数而显示“暂无公告”。
      *
-     * @param day 优先查询的日期范围（天）
+     * @param day 兼容旧客户端的日期参数
      * @return 公告列表（0 或 1 条），返回结构与改动前保持一致
      * */
     @IgnoreAuth
@@ -74,7 +74,8 @@ public class NoticeController {
             HttpServletRequest request,
             @RequestBody NoticeModel model
     ) {
-        return noticeService.updateNoticeService(request.getAttribute("uuid").toString(), model.getAuthor(), model);
+        // 作者归属由服务层按公告 ID 读取，请求体 author 不参与授权。
+        return noticeService.updateNoticeService(request.getAttribute("uuid").toString(), model);
     }
 
     /**

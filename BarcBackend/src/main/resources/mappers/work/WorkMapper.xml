@@ -10,11 +10,20 @@
             AND wr.status = 'APPROVED'
             <!-- 确保condition存在 -->
             <if test="condition != null">
-                <!-- 筛选keyword（标题、描述、学生名、学园名、部团名） -->
+                <!-- 分类/维度/作者入口统一引用这组筛选，不再维护分类专用条件。 -->
+                <if test="condition.category_id != null and condition.category_id != ''">
+                    AND EXISTS (SELECT 1 FROM work_category wc WHERE wc.work_id = w.id AND wc.category_id = #{condition.category_id})
+                </if>
+                <if test="condition.day != null">
+                    AND COALESCE(w.content_updated_at, w.created_at) >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL #{condition.day} DAY)
+                </if>
+                <!-- 筛选keyword（标题、描述、角色及作者署名） -->
                 <if test="condition.keyword != null and condition.keyword != ''">
                     AND (
                         w.title LIKE CONCAT('%', #{condition.keyword}, '%')
                         OR w.description LIKE CONCAT('%', #{condition.keyword}, '%')
+                        OR w.author_nickname LIKE CONCAT('%', #{condition.keyword}, '%')
+                        OR EXISTS (SELECT 1 FROM user_archive ua WHERE (ua.uuid = w.author OR ua.uuid = w.uploader) AND ua.nickname LIKE CONCAT('%', #{condition.keyword}, '%'))
                         OR w.student IN (
                             SELECT s.id FROM student s
                             WHERE s.cn_name LIKE CONCAT('%', #{condition.keyword}, '%')
@@ -126,18 +135,13 @@
             w.is_claim,
             w.status,
             w.student,
-            w.updated_at,
-            w.content_updated_at,
-            wr.status AS review_status,
-            wr.rejection_reason AS review_reason,
-            wr.reviewer_uuid,
-            wr.submitted_at AS review_submitted_at,
-            wr.reviewed_at
+            w.created_at, w.updated_at, w.content_updated_at,
+            wr.status AS review_status
         FROM work w
         JOIN work_review wr ON wr.work_id = w.id
         <include refid="whereConditions"/>
         <!-- 公开列表新鲜度按内容更新时间排序；历史空值回退到创建时间，避免浏览/点赞刷新排序。 -->
-        ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC
+        ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC, w.id DESC
         LIMIT #{offset}, #{page_size}
     </select>
     <!-- 按条件查出总数 -->
@@ -147,17 +151,7 @@
         JOIN work_review wr ON wr.work_id = w.id
         <include refid="whereConditions"/>
     </select>
-    <!-- 作者内容管理筛选：允许本人查看待审/驳回记录，但作者 UUID 仍由服务端强制传入。 -->
-    <select id="selectByUuidWithFilters" resultType="com.miaoyu.barc.api.work.model.entity.WorkEntity">
-        SELECT
-            w.*,
-            wr.status AS review_status,
-            wr.rejection_reason AS review_reason,
-            wr.reviewer_uuid,
-            wr.submitted_at AS review_submitted_at,
-            wr.reviewed_at
-        FROM work w
-        JOIN work_review wr ON wr.work_id = w.id
+    <sql id="ownerConditions">
         <where>
             (w.author = #{uuid} OR w.uploader = #{uuid})
             <if test="status != null">
@@ -194,11 +188,9 @@
                 </if>
             </if>
         </where>
-        <!-- 作者列表沿用公开新鲜度口径；历史空值回退创建时间，避免非内容变更刷新排序。 -->
-        ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC
-    </select>
-    <!-- 对外作者列表沿用公共审核门禁，并保留账户页的搜索能力。 -->
-    <select id="selectPublicByUuidWithFilters" resultType="com.miaoyu.barc.api.work.model.entity.WorkEntity">
+    </sql>
+    <!-- 作者内容管理筛选：允许本人查看待审/驳回记录，但作者 UUID 仍由服务端强制传入。 -->
+    <select id="selectByUuidWithFilters" resultType="com.miaoyu.barc.api.work.model.entity.WorkEntity">
         SELECT
             w.*,
             wr.status AS review_status,
@@ -208,97 +200,15 @@
             wr.reviewed_at
         FROM work w
         JOIN work_review wr ON wr.work_id = w.id
-        <include refid="whereConditions"/>
-        ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC
+        <include refid="ownerConditions"/>
+        <!-- 作者列表沿用公开新鲜度口径；历史空值回退创建时间，避免非内容变更刷新排序。 -->
+        ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC, w.id DESC
+        LIMIT #{condition.offset}, #{condition.limit}
     </select>
-    <!-- 分类以及分页条件筛选片段SQL -->
-    <sql id="whereConditionOnCategory">
-        JOIN work_category wc
-        ON w.id = wc.work_id
-        JOIN work_review wr
-        ON wr.work_id = w.id
-        <where>
-            wc.category_id = #{category_id}
-            <!-- 必要筛选作品状态 -->
-            AND w.status = #{status}
-            AND wr.status = 'APPROVED'
-            <if test="condition.keyword != null and condition.keyword != ''">
-                AND (
-                    <!-- 筛选keyword -->
-                    w.title LIKE CONCAT('%', #{condition.keyword}, '%')
-                    OR w.description LIKE CONCAT('%', #{condition.keyword}, '%')
-                    <!-- 筛选学生名 -->
-                    OR w.student IN (
-                        <!-- 子查询联表 -->
-                        SELECT s.id FROM student s
-                        WHERE s.cn_name LIKE CONCAT('%', #{condition.keyword}, '%')
-                        OR s.jp_name LIKE CONCAT('%', #{condition.keyword}, '%')
-                        OR s.kr_name LIKE CONCAT('%', #{condition.keyword}, '%')
-                        OR s.en_name LIKE CONCAT('%', #{condition.keyword}, '%')
-                    )
-                    <!-- 筛选学园名 -->
-                    OR w.student IN (
-                        SELECT s.id FROM student s
-                        INNER JOIN school sc ON s.school = sc.id
-                        WHERE sc.cn_name LIKE CONCAT ('%', #{condition.keyword}, '%')
-                    )
-                    <!-- 筛选部团名 -->
-                    OR w.student IN (
-                        SELECT s.id FROM student s
-                        INNER JOIN club c ON s.club = c.id
-                        WHERE c.cn_name LIKE CONCAT('%', #{condition.keyword}, '%')
-                    )
-                    <!-- 筛选作者昵称 或者 收录者昵称 或者 三方作者昵称 -->
-                    OR w.author IN (
-                        SELECT ua.uuid FROM user_archive ua
-                        WHERE ua.nickname = #{condition.keyword}
-                        AND w.author = ua.uuid
-                    )
-                    OR w.author_nickname LIKE CONCAT('%', #{condition.keyword}, '%')
-                    OR w.uploader IN (
-                        SELECT ua.uuid FROM user_archive ua
-                        WHERE ua.nickname = #{condition.keyword}
-                        AND w.uploader = ua.uuid
-                    )
-                )
-            </if>
-        </where>
-    </sql>
-    <!-- 按照分类以及分页和条件筛选内容 -->
-    <select id="selectByPageOnCategory" resultType="com.miaoyu.barc.api.work.model.WorkModel">
-        SELECT
-        w.id,
-        w.title,
-        w.description,
-        w.cover_image,
-        w.view_count,
-        w.like_count,
-        w.author,
-        w.author_nickname,
-        w.uploader,
-        w.is_claim,
-        w.status,
-        w.student,
-        w.updated_at,
-        w.content_updated_at,
-        wr.status AS review_status,
-        wr.rejection_reason AS review_reason,
-        wr.reviewer_uuid,
-        wr.submitted_at AS review_submitted_at,
-        wr.reviewed_at
-        FROM work w
-        <include refid="whereConditionOnCategory"/>
-        <!-- 分类公开列表新鲜度按内容更新时间排序；历史空值回退到创建时间，避免浏览/点赞刷新排序。 -->
-        ORDER BY COALESCE(w.content_updated_at, w.created_at) DESC
-        LIMIT #{offset}, #{page_size}
+    <select id="countByUuidWithFilters" resultType="long">
+        SELECT COUNT(*) FROM work w JOIN work_review wr ON wr.work_id = w.id
+        <include refid="ownerConditions"/>
     </select>
-    <!-- 按照分类以及分页和条件查出总数 -->
-    <select id="countByPageOnCategory" resultType="long">
-        SELECT COUNT(*)
-        FROM work w
-        <include refid="whereConditionOnCategory"/>
-    </select>
-
     <!-- ==================== 管理端查询 ==================== -->
 
     <!-- 管理端分页查询作品（含所有状态） -->
@@ -324,14 +234,20 @@
                      OR (w.is_claim = 0 AND w.author_nickname LIKE CONCAT('%', #{keyword}, '%')))
             </if>
         </where>
+        <!-- 排序列和方向只能由固定 SQL 分支生成，任何调用方都不能注入 SQL 片段。 -->
+        ORDER BY
         <choose>
-            <when test="sortField != null and sortField != ''">
-                ORDER BY w.${sortField} ${sortOrder}
-            </when>
-            <otherwise>
-                ORDER BY w.created_at DESC
-            </otherwise>
+            <when test="sortField == 'id'">w.id</when>
+            <when test="sortField == 'title'">w.title</when>
+            <when test="sortField == 'updated_at'">w.updated_at</when>
+            <when test="sortField == 'view_count'">w.view_count</when>
+            <when test="sortField == 'like_count'">w.like_count</when>
+            <otherwise>w.created_at</otherwise>
         </choose>
+        <choose>
+            <when test="sortOrder == 'ASC' or sortOrder == 'asc'">ASC</when>
+            <otherwise>DESC</otherwise>
+        </choose>, w.id DESC
         LIMIT #{offset}, #{limit}
     </select>
 
@@ -356,7 +272,7 @@
                      OR (w.is_claim = 0 AND w.author_nickname LIKE CONCAT('%', #{keyword}, '%')))
             </if>
         </where>
-        ORDER BY wr.submitted_at ASC, w.created_at ASC
+        ORDER BY wr.submitted_at ASC, w.created_at ASC, w.id ASC
         LIMIT #{offset}, #{limit}
     </select>
 

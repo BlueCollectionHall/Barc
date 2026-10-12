@@ -24,6 +24,8 @@ public class WorkEntity {
     private LocalDateTime created_at;
     private LocalDateTime updated_at;
     private LocalDateTime content_updated_at;
+    /** 与详情一致的只读版本，供审核页面识别当前内容。 */
+    private Long content_revision;
     private WorkReviewStatusEnum review_status;
     private String review_reason;
     private String reviewer_uuid;

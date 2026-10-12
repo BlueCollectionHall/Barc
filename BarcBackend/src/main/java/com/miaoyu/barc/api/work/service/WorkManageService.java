@@ -3,28 +3,18 @@ package com.miaoyu.barc.api.work.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miaoyu.barc.annotation.RequireUserAndPermissionAnno;
-import com.miaoyu.barc.api.mapper.ClubMapper;
-import com.miaoyu.barc.api.mapper.SchoolMapper;
-import com.miaoyu.barc.api.mapper.StudentMapper;
-import com.miaoyu.barc.api.model.SchoolClubModel;
-import com.miaoyu.barc.api.model.SchoolModel;
-import com.miaoyu.barc.api.model.StudentModel;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
 import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.mapper.WorkClaimMapper;
-import com.miaoyu.barc.api.work.mapper.WorkCoverImageMapper;
-import com.miaoyu.barc.api.work.mapper.WorkImageMapper;
 import com.miaoyu.barc.api.work.mapper.WorkMapper;
 import com.miaoyu.barc.api.work.mapper.WorkOperationLogMapper;
 import com.miaoyu.barc.api.work.mapper.WorkReviewMapper;
 import com.miaoyu.barc.api.work.model.WorkClaimListDto;
 import com.miaoyu.barc.api.work.model.WorkClaimModel;
-import com.miaoyu.barc.api.work.model.WorkCoverImageModel;
 import com.miaoyu.barc.api.work.model.WorkEditDetailDto;
-import com.miaoyu.barc.api.work.model.WorkImageModel;
 import com.miaoyu.barc.api.work.model.WorkModel;
+import com.miaoyu.barc.api.work.model.WorkSearchView;
 import com.miaoyu.barc.api.work.model.WorkOperationLogModel;
-import com.miaoyu.barc.email.utils.SendEmailUtils;
 import com.miaoyu.barc.permission.PermissionConst;
 import com.miaoyu.barc.response.ChangeR;
 import com.miaoyu.barc.response.ErrorR;
@@ -36,25 +26,20 @@ import com.miaoyu.barc.user.mapper.UserArchiveMapper;
 import com.miaoyu.barc.user.mapper.UserBasicMapper;
 import com.miaoyu.barc.user.model.UserArchiveModel;
 import com.miaoyu.barc.user.model.UserBasicModel;
-import com.miaoyu.barc.user.model.vo.UserInfoVo;
 import com.miaoyu.barc.user.service.OfficialAccountService;
 import com.miaoyu.barc.utils.GenerateUUID;
 import com.miaoyu.barc.utils.J;
 import com.miaoyu.barc.utils.dto.PageRequestDto;
 import com.miaoyu.barc.utils.dto.PageResultDto;
 import com.miaoyu.barc.utils.pojo.PageInitPojo;
-import com.miaoyu.barc.utils.tencent.cos.CosBucketConfigEnum;
-import com.miaoyu.barc.utils.tencent.cos.CosService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 管理端作品管理服务
@@ -64,6 +49,8 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class WorkManageService {
+    // 等待业务行锁后读取最新提交数据，避免鉴权读在可重复读隔离下固定旧快照。
+    @Autowired private com.miaoyu.barc.user.service.UserSearchService userSearchService;
 
     public static final String OP_BAN = "BAN";
     public static final String OP_OFF = "OFF";
@@ -82,16 +69,9 @@ public class WorkManageService {
     @Autowired private WorkReviewMapper workReviewMapper;
     @Autowired private UserBasicMapper userBasicMapper;
     @Autowired private UserArchiveMapper userArchiveMapper;
-    @Autowired private SendEmailUtils sendEmailUtils;
+    @Autowired private com.miaoyu.barc.email.service.MailOutbox mailOutbox;
     @Autowired private WorkService workService;
-    @Autowired private WorkAttributionService workAttributionService;
     @Autowired private OfficialAccountService officialAccountService;
-    @Autowired private WorkImageMapper workImageMapper;
-    @Autowired private CosService cosService;
-    @Autowired private WorkCoverImageMapper workCoverImageMapper;
-    @Autowired private StudentMapper studentMapper;
-    @Autowired private SchoolMapper schoolMapper;
-    @Autowired private ClubMapper clubMapper;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -99,13 +79,15 @@ public class WorkManageService {
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
     public ResponseEntity<J> getWorkListForManage(String uuid, PageRequestDto dto) {
+        // 与公开分页采用同一输入容量；管理身份不能绕过关键词长度限制。
+        if (dto == null) dto = new PageRequestDto();
         PageInitPojo pageInit = new PageInitPojo(dto);
         int offset = pageInit.getOffset();
         int pageSize = pageInit.getPageSize();
         int pageNum = pageInit.getPageNum();
         Map<String, Object> params = dto.getParams() != null ? dto.getParams() : new HashMap<>();
         String status = params.get("status") != null ? params.get("status").toString() : null;
-        String keyword = params.get("keyword") != null ? params.get("keyword").toString() : null;
+        String keyword = com.miaoyu.barc.utils.RequestInput.search(params.get("keyword"), "关键词", 100);
 
         List<WorkModel> works = workMapper.selectByPageForManage(status, keyword, offset, pageSize, dto.getSort_field(), dto.getSort_order());
         Long total = workMapper.countByPageForManage(status, keyword);
@@ -135,9 +117,10 @@ public class WorkManageService {
             isHasElseUpper = true,
             isSuchElseRequire = false)})
     public ResponseEntity<J> getReviewList(String uuid, WorkReviewStatusEnum reviewStatus, PageRequestDto dto) {
+        if (dto == null) dto = new PageRequestDto();
         PageInitPojo pageInit = new PageInitPojo(dto);
         Map<String, Object> params = dto.getParams() != null ? dto.getParams() : new HashMap<>();
-        String keyword = params.get("keyword") != null ? params.get("keyword").toString().trim() : null;
+        String keyword = com.miaoyu.barc.utils.RequestInput.search(params.get("keyword"), "关键词", 100);
         WorkReviewStatusEnum safeStatus = reviewStatus == null ? WorkReviewStatusEnum.PENDING : reviewStatus;
         List<WorkModel> works = workMapper.selectByPageForReview(
                 safeStatus, keyword, pageInit.getOffset(), pageInit.getPageSize());
@@ -157,10 +140,14 @@ public class WorkManageService {
             targetPermission = PermissionConst.SEC_MAINTAINER,
             isHasElseUpper = true,
             isSuchElseRequire = false)})
-    @Transactional
-    public ResponseEntity<J> reviewWork(String uuid, String workId, boolean approved, String reason) {
-        WorkModel work = workMapper.selectById(workId);
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ResponseEntity<J> reviewWork(String uuid, String workId, boolean approved, String reason, Long expectedRevision) {
+        WorkModel work = workMapper.selectByIdForUpdate(workId);
         if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        if (expectedRevision == null || !expectedRevision.equals(work.getContent_revision())) {
+            return ResponseEntity.ok(new ErrorR().normal("作品内容已变化，请刷新并重新查看后审核"));
+        }
+        if (work.getStatus() == WorkStatusEnum.DELETED) return ResponseEntity.ok(new ErrorR().normal("已删除作品不能审核"));
         if (work.getReview_status() != WorkReviewStatusEnum.PENDING) {
             return ResponseEntity.ok(new ErrorR().normal("只能处理审核中的作品"));
         }
@@ -182,7 +169,7 @@ public class WorkManageService {
         }
 
         recordLog(workId, uuid, approved ? OP_REVIEW_APPROVE : OP_REVIEW_REJECT,
-                Map.of("result", result.name(), "reason", normalizedReason));
+                Map.of("result", result.name(), "reason", normalizedReason, "content_revision", expectedRevision.toString()));
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
     }
 
@@ -192,80 +179,25 @@ public class WorkManageService {
         WorkModel work = workMapper.selectById(workId);
         if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
 
-        // 1. 获取封面图 object_key 并签名（不污染 WorkModel.cover_image）
-        String coverUrl = "";
-        WorkCoverImageModel cover = workCoverImageMapper.selectByWorkId(workId);
-        if (cover != null) {
-            coverUrl = cosService.generateSignedUrl(cover.getObject_key(),
-                    new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
-        }
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workService.buildWorkEditDetailDto(work)));
+    }
 
-        // 2. 签名内容图
-        List<WorkImageModel> images = workImageMapper.selectByWorkId(workId);
-        List<String> contentUrls = List.of();
-        List<WorkEditDetailDto.ContentImageDto> contentImages = List.of();
-        if (!images.isEmpty()) {
-            List<WorkImageModel> sortedImages = images.stream().sorted(Comparator.comparing(WorkImageModel::getSort)).toList();
-            List<String> keys = sortedImages.stream().map(WorkImageModel::getObject_key).toList();
-            contentUrls = cosService.generateBatchSignedUrl(keys,
-                    new Date(System.currentTimeMillis() + 60 * 1000), CosBucketConfigEnum.image);
-            List<String> signedUrls = contentUrls;
-            contentImages = new java.util.ArrayList<>();
-            for (int i = 0; i < sortedImages.size(); i++) {
-                WorkImageModel image = sortedImages.get(i);
-                WorkEditDetailDto.ContentImageDto imageDto = new WorkEditDetailDto.ContentImageDto();
-                imageDto.setId(image.getId());
-                imageDto.setSort(image.getSort());
-                imageDto.setUrl(signedUrls.get(i));
-                contentImages.add(imageDto);
-            }
-        }
-
-        // 3. 收录者昵称
-        String uploaderNickname = workAttributionService.resolveUploaderNickname(work);
-
-        // 4. 归属者显示
-        // author 是平台内当前归属；author_nickname 只是站外原作者署名，不能用于“暂归属”。
-        String authorDisplay = workAttributionService.resolvePlatformOwnerNickname(work);
-
-        // 5. 学园/部团/学生名
-        String schoolName = "", clubName = "", studentName = "";
-        if (work.getStudent() != null && !work.getStudent().isEmpty()) {
-            StudentModel stu = studentMapper.selectById(work.getStudent());
-            if (stu != null) {
-                studentName = stu.getCn_name();
-                if (stu.getSchool() != null) {
-                    SchoolModel sch = schoolMapper.selectById(stu.getSchool());
-                    if (sch != null) schoolName = sch.getCn_name();
-                }
-                if (stu.getClub() != null) {
-                    SchoolClubModel cl = clubMapper.selectById(stu.getClub());
-                    if (cl != null) clubName = cl.getCn_name();
-                }
-            }
-        }
-
-        // 6. 组装 DTO
-        WorkEditDetailDto dto = new WorkEditDetailDto();
-        dto.setWork(work);
-        dto.setCover_image_url(coverUrl);
-        dto.setContent_image_urls(contentUrls);
-        dto.setContent_images(contentImages);
-        dto.setUploader_nickname(uploaderNickname);
-        dto.setAuthor_display(authorDisplay);
-        dto.setSchool_name(schoolName);
-        dto.setClub_name(clubName);
-        dto.setStudent_name(studentName);
-
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, dto));
+    /** 认领证据读取拥有独立的最小授权边界。 */
+    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER,
+        targetPermission = PermissionConst.SEC_MAINTAINER | PermissionConst.DISCIPLINARY_COMMITTEE,
+        isHasElseUpper = true, isSuchElseRequire = false)})
+    public ResponseEntity<J> getClaimWorkDetail(String uuid, String workId) {
+        WorkModel work = workMapper.selectById(workId);
+        if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workService.buildWorkEditDetailDto(work)));
     }
 
     // ==================== 作品状态管理 ====================
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> updateWorkStatus(String uuid, String workId, WorkStatusEnum newStatus, String remark) {
-        WorkModel work = workMapper.selectById(workId);
+        WorkModel work = workMapper.selectByIdForUpdate(workId);
         if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         WorkStatusEnum oldStatus = work.getStatus();
         String operationType;
@@ -288,8 +220,15 @@ public class WorkManageService {
             return ResponseEntity.ok(new ErrorR().normal("不支持的状态转换"));
         }
 
+        com.miaoyu.barc.utils.RequestInput.optional(remark, "处理说明", 500);
+        WorkStatusEnum restore = work.getRestore_status();
+        if (newStatus == WorkStatusEnum.PUBLIC) {
+            // 老记录没有原可见性时保守恢复为私有；客户端 PUBLIC 表示恢复命令。
+            newStatus = restore == WorkStatusEnum.PUBLIC ? WorkStatusEnum.PUBLIC : WorkStatusEnum.PRIVATE;
+            restore = null;
+        } else if (oldStatus == WorkStatusEnum.PUBLIC || oldStatus == WorkStatusEnum.PRIVATE) restore = oldStatus;
+        if (!workMapper.updateStatus(workId, newStatus, restore)) throw com.miaoyu.barc.utils.RequestInput.invalid("作品状态保存失败");
         work.setStatus(newStatus);
-        if (!workMapper.update(work)) return ResponseEntity.ok(new ChangeR().udu(false, 3));
 
         recordLog(workId, uuid, operationType, Map.of("remark", remark != null ? remark : "", "old_status", oldStatus.name(), "new_status", newStatus.name()));
         notifyAuthor(work, operationType, remark);
@@ -299,11 +238,15 @@ public class WorkManageService {
     // ==================== 作品内容修改 ====================
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> updateWorkContent(String uuid, WorkModel requestModel) {
-        if (workMapper.selectById(requestModel.getId()) == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
-        // 纯文字更新：不改封面/Banner/作者/收录者（图片在独立表中管理）
-        if (!workMapper.updateText(requestModel)) return ResponseEntity.ok(new ChangeR().udu(false, 3));
+        WorkModel existing = workMapper.selectByIdForUpdate(requestModel.getId());
+        if (existing == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        workService.validateContentUpdate(existing, requestModel);
+        // 管理代改不自动提审，但同样递增版本，使其他审核员的旧页面失效。
+        if (!workMapper.updateText(requestModel) || !workMapper.touchContent(requestModel.getId())) {
+            throw com.miaoyu.barc.utils.RequestInput.invalid("作品内容保存失败");
+        }
         recordLog(requestModel.getId(), uuid, OP_EDIT, Map.of("remark", "管理员修改作品内容"));
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
     }
@@ -321,64 +264,57 @@ public class WorkManageService {
             isHasElseUpper = true,
             isSuchElseRequire = false)})
     public ResponseEntity<J> getClaimsList(String uuid) {
-        List<WorkClaimModel> claims = workClaimMapper.selectAll();
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        List<WorkClaimListDto> dtos = new ArrayList<>();
-        for (WorkClaimModel c : claims) {
-            WorkClaimListDto dto = new WorkClaimListDto();
-            dto.setId(c.getId());
-            dto.setWork_id(c.getWork_id());
-            dto.setApplicant_uuid(c.getApplicant_uuid());
-            dto.setCreated_at(c.getCreated_at() != null ? c.getCreated_at().format(fmt) : "");
+        // 旧数组入口保留首批100条；新版分页入口供管理页完整遍历。
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workClaimMapper.selectPage("PENDING", null, null, 0, 100)));
+    }
 
-            WorkModel w = workMapper.selectById(c.getWork_id());
-            dto.setWork_title(w != null ? w.getTitle() : "未知作品");
-
-            UserArchiveModel ua = userArchiveMapper.selectByUuid(c.getApplicant_uuid());
-            dto.setApplicant_nickname(ua != null ? ua.getNickname() : "");
-            UserBasicModel ub = userBasicMapper.selectByUuid(c.getApplicant_uuid());
-            dto.setApplicant_username(ub != null ? ub.getUsername() : "");
-
-            dtos.add(dto);
-        }
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, dtos));
+    @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER,
+        targetPermission = PermissionConst.SEC_MAINTAINER | PermissionConst.DISCIPLINARY_COMMITTEE,
+        isHasElseUpper = true, isSuchElseRequire = false)})
+    public ResponseEntity<J> getClaimsPage(String uuid, String status, String workId, Integer page, Integer size) {
+        if (status != null && !Set.of("PENDING", "APPROVED", "REJECTED", "SUPERSEDED").contains(status)) throw com.miaoyu.barc.utils.RequestInput.invalid("认领状态无效");
+        PageInitPojo p = new PageInitPojo(page, size);
+        long total = workClaimMapper.countPage(status, workId, null);
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, new PageResultDto<>(total,
+            workClaimMapper.selectPage(status, workId, null, p.getOffset(), p.getPageSize()),
+            p.getPageNum(), p.getPageSize(), Math.max(1, (int) Math.ceil((double) total / p.getPageSize())))));
     }
 
     @RequireUserAndPermissionAnno({
-        @RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.DISCIPLINARY_COMMITTEE, isHasElseUpper = true, isSuchElseRequire = false),
-        @RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)
+        // 两种认领治理角色任一即可；不能写成两个必须同时满足的 Check。
+        @RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.DISCIPLINARY_COMMITTEE | PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)
     })
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> approveClaim(String uuid, String claimId, boolean approved) {
-        WorkClaimModel claim = workClaimMapper.selectById(claimId);
-        if (claim == null) return ResponseEntity.ok(new ErrorR().normal("认领申请不存在"));
-        WorkModel work = workMapper.selectById(claim.getWork_id());
-
+        WorkClaimModel initial = workClaimMapper.selectById(claimId);
+        if (initial == null) return ResponseEntity.ok(new ErrorR().normal("认领申请不存在"));
+        WorkModel work = workMapper.selectByIdForUpdate(initial.getWork_id());
+        WorkClaimModel claim = workClaimMapper.selectByIdForUpdate(claimId);
+        if (work == null || claim == null) throw com.miaoyu.barc.utils.RequestInput.invalid("作品或申请不存在");
+        if (!"PENDING".equals(claim.getStatus())) return ResponseEntity.ok(new ErrorR().normal("申请已处理，请刷新查看结果"));
+        if (approved && (Boolean.TRUE.equals(work.getIs_claim()) || work.getStatus() != WorkStatusEnum.PUBLIC || work.getReview_status() != WorkReviewStatusEnum.APPROVED)) {
+            throw com.miaoyu.barc.utils.RequestInput.invalid("作品已认领或已删除");
+        }
+        String result = approved ? "APPROVED" : "REJECTED";
+        if (!workClaimMapper.resolve(claimId, result, uuid, approved ? "认领通过" : "认领未通过")) throw com.miaoyu.barc.utils.RequestInput.invalid("申请状态已变化");
         if (approved) {
-            if (work == null) return ResponseEntity.ok(new ErrorR().normal("作品不存在"));
-            if (work.getIs_claim()) return ResponseEntity.ok(new ErrorR().normal("作品已经被认领"));
-            work.setIs_claim(true);
-            work.setAuthor(claim.getApplicant_uuid());
-            workMapper.update(work);
-            workClaimMapper.deleteByWorkId(claim.getWork_id());
-            recordLog(claim.getWork_id(), uuid, OP_CLAIM_APPROVE, Map.of("applicant_uuid", claim.getApplicant_uuid(), "result", "approved"));
-            UserBasicModel applicant = userBasicMapper.selectByUuid(claim.getApplicant_uuid());
-            if (applicant != null) sendEmailUtils.customEmail(applicant.getEmail(), "作品认领申请已通过", "您对作品《" + work.getTitle() + "》的认领申请已通过审核！");
-        } else {
-            workClaimMapper.deleteById(claimId);
-            recordLog(claim.getWork_id(), uuid, OP_CLAIM_APPROVE, Map.of("applicant_uuid", claim.getApplicant_uuid(), "result", "rejected"));
-            if (work != null) {
-                UserBasicModel applicant = userBasicMapper.selectByUuid(claim.getApplicant_uuid());
-                if (applicant != null) sendEmailUtils.customEmail(applicant.getEmail(), "作品认领申请已拒绝", "您对作品《" + work.getTitle() + "》的认领申请未通过审核。");
-            }
+            if (userArchiveMapper.selectByUuid(claim.getApplicant_uuid()) == null) throw com.miaoyu.barc.utils.RequestInput.invalid("申请人已不存在");
+            if (!workMapper.updateAttribution(work.getId(), claim.getApplicant_uuid(), true)) throw com.miaoyu.barc.utils.RequestInput.invalid("作品归属保存失败");
+            workClaimMapper.closeOtherPending(work.getId(), uuid);
+        }
+        recordLog(work.getId(), uuid, OP_CLAIM_APPROVE, Map.of("applicant_uuid", claim.getApplicant_uuid(), "result", result));
+        UserBasicModel applicant = userBasicMapper.selectByUuid(claim.getApplicant_uuid());
+        if (applicant != null && applicant.getEmail() != null && !applicant.getEmail().isBlank()) {
+            mailOutbox.enqueue("claim:" + claimId, applicant.getEmail(), "作品认领申请处理结果",
+                "您对作品《" + work.getTitle() + "》的认领申请" + (approved ? "已通过。" : "未通过。"));
         }
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
     }
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> revokeClaim(String uuid, String workId) {
-        WorkModel work = workMapper.selectById(workId);
+        WorkModel work = workMapper.selectByIdForUpdate(workId);
         if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         if (!work.getIs_claim()) return ResponseEntity.ok(new ErrorR().normal("该作品未被认领"));
         // 归属账号必须在改动作品之前解析：未配置时直接阻断，不落任何脏归属
@@ -389,21 +325,21 @@ public class WorkManageService {
         }
         work.setIs_claim(false);
         work.setAuthor(officialUuid);
-        workMapper.update(work);
+        if (!workMapper.updateAttribution(workId, work.getAuthor(), Boolean.TRUE.equals(work.getIs_claim()))) throw com.miaoyu.barc.utils.RequestInput.invalid("作品归属保存失败");
         recordLog(workId, uuid, OP_CLAIM_REVOKE, Map.of("remark", "管理员撤销认领"));
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
     }
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ResponseEntity<J> assignAuthor(String uuid, String workId, String authorUuid) {
-        WorkModel work = workMapper.selectById(workId);
+        WorkModel work = workMapper.selectByIdForUpdate(workId);
         if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         if (userArchiveMapper.selectByUuid(authorUuid) == null) return ResponseEntity.ok(new UserR().noSuchUser());
         work.setIs_claim(true);
         work.setAuthor(authorUuid);
-        workMapper.update(work);
-        workClaimMapper.deleteByWorkId(workId);
+        if (!workMapper.updateAttribution(workId, work.getAuthor(), Boolean.TRUE.equals(work.getIs_claim()))) throw com.miaoyu.barc.utils.RequestInput.invalid("作品归属保存失败");
+        workClaimMapper.closeOtherPending(workId, uuid);
         recordLog(workId, uuid, OP_CLAIM_ASSIGN, Map.of("assigned_author_uuid", authorUuid));
         return ResponseEntity.ok(new ChangeR().udu(true, 3));
     }
@@ -415,7 +351,7 @@ public class WorkManageService {
             isHasElseUpper = true,
             isSuchElseRequire = false)})
     public ResponseEntity<J> getClaimHistory(String uuid, String workId) {
-        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workClaimMapper.selectByWorkId(workId)));
+        return ResponseEntity.ok(new ResourceR().resourceSuch(true, workClaimMapper.selectPage(null, workId, null, 0, 100)));
     }
 
     // 说明（2026-10 下线）：原「投诉处理」区块的 getComplaintsList / processComplaint 两个方法
@@ -429,6 +365,7 @@ public class WorkManageService {
 
     @RequireUserAndPermissionAnno({@RequireUserAndPermissionAnno.Check(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true, isSuchElseRequire = false)})
     public ResponseEntity<J> getOperationLogs(String uuid, PageRequestDto dto) {
+        if (dto == null) dto = new PageRequestDto();
         PageInitPojo pageInit = new PageInitPojo(dto);
         int offset = pageInit.getOffset(), pageSize = pageInit.getPageSize(), pageNum = pageInit.getPageNum();
         Map<String, Object> params = dto.getParams() != null ? dto.getParams() : new HashMap<>();
@@ -462,8 +399,12 @@ public class WorkManageService {
             targetPermission = PermissionConst.DISCIPLINARY_COMMITTEE,
             isHasElseUpper = false,
             isSuchElseRequire = false)})
-    public List<WorkModel> searchWorks(String uuid, String keyword) {
-        return workMapper.selectByPageForManage(null, keyword, 0, 10, "created_at", "DESC");
+    public List<WorkSearchView> searchWorks(String uuid, String keyword) {
+        String normalized = com.miaoyu.barc.utils.RequestInput.search(keyword, "关键词", 100);
+        if (normalized == null) return List.of();
+        // 复用已有有界查询；传输层仅保留选择器真正需要的公开标识和标题。
+        return workMapper.selectByPageForManage(null, normalized, 0, 10, "created_at", "DESC")
+                .stream().map(work -> new WorkSearchView(work.getId(), work.getTitle())).toList();
     }
 
     /** 搜索用户（按UUID/用户名/昵称），返回最多15条；鉴权同 searchWorks */
@@ -472,8 +413,8 @@ public class WorkManageService {
             targetPermission = PermissionConst.DISCIPLINARY_COMMITTEE,
             isHasElseUpper = false,
             isSuchElseRequire = false)})
-    public List<UserInfoVo> searchUsers(String uuid, String keyword) {
-        return userArchiveMapper.searchByKeyword(keyword);
+    public List<com.miaoyu.barc.user.model.vo.UserSearchView> searchUsers(String uuid, String keyword) {
+        return userSearchService.search(keyword);
     }
 
     private void recordLog(String workId, String operatorUuid, String operationType, Map<String, String> detail) {
@@ -484,17 +425,17 @@ public class WorkManageService {
             logEntry.setOperator_uuid(operatorUuid);
             logEntry.setOperation_type(operationType);
             logEntry.setDetail(objectMapper.writeValueAsString(detail));
-            workOperationLogMapper.insert(logEntry);
-        } catch (JsonProcessingException e) { log.error("操作日志JSON序列化失败", e); }
+            if (workOperationLogMapper.insert(logEntry) != 1) throw com.miaoyu.barc.utils.RequestInput.invalid("操作审计保存失败");
+        } catch (JsonProcessingException e) { throw new IllegalStateException("操作日志序列化失败", e); }
     }
 
+    /** 通知任务与状态变更同事务保存，队列失败必须向外传播。 */
     private void notifyAuthor(WorkModel work, String operationType, String remark) {
-        try {
             UserBasicModel author = userBasicMapper.selectByUuid(work.getAuthor());
             if (author != null && author.getEmail() != null) {
                 String opName = switch (operationType) { case OP_BAN -> "封禁"; case OP_OFF -> "下架"; case OP_DELETE -> "删除"; case OP_RESTORE -> "恢复"; default -> operationType; };
-                sendEmailUtils.customEmail(author.getEmail(), "您的作品已被" + opName, "您在蔚蓝收录馆中收录的作品《" + work.getTitle() + "》已被" + opName + "。" + (remark != null ? "处理备注：" + remark : ""));
+                mailOutbox.enqueue("work-status:" + java.util.UUID.randomUUID(), author.getEmail(), "您的作品已被" + opName, "您在蔚蓝收录馆中收录的作品《" + work.getTitle() + "》已被" + opName + "。" + (remark != null ? "处理备注：" + remark : ""));
             }
-        } catch (Exception e) { log.error("通知作者邮件发送失败: workId={}", work.getId(), e); }
+
     }
 }

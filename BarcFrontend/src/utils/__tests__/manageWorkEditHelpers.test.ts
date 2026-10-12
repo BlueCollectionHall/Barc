@@ -128,7 +128,7 @@ describe("owner edit detail helpers", () => {
       description: "旧简介",
       content: "<p>旧内容</p>",
       author_nickname: null,
-      is_claim: true,
+      expected_revision: undefined,
       student: "student-1",
     });
   });

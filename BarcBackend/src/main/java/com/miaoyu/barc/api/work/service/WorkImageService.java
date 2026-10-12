@@ -32,6 +32,10 @@ import java.util.Objects;
 
 @Service
 public class WorkImageService {
+    @Autowired private com.miaoyu.barc.api.file.service.ObjectStorageService objectStorage;
+    @Autowired private com.miaoyu.barc.api.service.CosGcService garbage;
+    @Autowired private com.miaoyu.barc.utils.tencent.cos.CosConfig cosConfig;
+    @Autowired private com.miaoyu.barc.user.mapper.UserArchiveMapper users;
     @Autowired
     private WorkImageMapper workImageMapper;
     @Autowired
@@ -74,19 +78,19 @@ public class WorkImageService {
     }
 
     /** 作者侧追加内容图：只写 work_image，并按现有最大 sort 追加到末尾 */
-    @Transactional
+    // 等待父作品锁后，图片列表和删除复查必须读取其他事务最新提交的版本。
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ResponseEntity<J> uploadWorkImageService(String uuid, String workId, MultipartFile file) {
-        WorkModel work = workMapper.selectById(workId);
+        WorkModel work = workMapper.selectByIdForUpdate(workId);
         if (work == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
         if (!Objects.equals(work.getAuthor(), uuid) && !Objects.equals(work.getUploader(), uuid)) {
             return ResponseEntity.ok(new UserR().uuidMismatch());
         }
 
-        final String KEY = "/" + uuid + "/work_images/";
-        J uploadResult = cosService.uploadFile(file, KEY, CosBucketConfigEnum.image);
-        if (uploadResult == null || uploadResult.getCode() != 0) {
-            return ResponseEntity.ok(new ErrorR().normal("上传作品图时出现异常：From Server!"));
-        }
+        if (work.getStatus() == WorkStatusEnum.DELETED) return ResponseEntity.ok(new ErrorR().normal("已删除作品不能追加图片"));
+        if (workImageMapper.selectByWorkId(workId).size() >= 20) return ResponseEntity.ok(new ErrorR().normal("每个作品最多20张内容图"));
+        String key = objectStorage.upload(uuid, file, "uploads/" + uuid + "/work_images/", 10L * 1024 * 1024);
+        objectStorage.bind(uuid, key);
 
         List<WorkImageModel> images = workImageMapper.selectByWorkId(workId);
         int nextSort = images.stream()
@@ -99,28 +103,37 @@ public class WorkImageService {
         image.setId(new GenerateUUID().getUuid36l());
         image.setWork_id(workId);
         image.setSort(nextSort);
-        image.setObject_key(uploadResult.getData().toString());
+        image.setObject_key(key);
         if (!workImageMapper.insert(image)) {
-            cosService.deleteFile(image.getObject_key(), CosBucketConfigEnum.image);
-            return ResponseEntity.ok(new ChangeR().udu(false, 1));
+            throw new com.miaoyu.barc.exception.ApiException(new ErrorR().normal("图片记录保存失败"));
         }
         workService.submitForReview(workId);
         return ResponseEntity.ok(new ChangeR().udu(true, 1));
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     @RequireSelfOrPermissionAnno(identity = UserIdentityEnum.MANAGER, targetPermission = PermissionConst.SEC_MAINTAINER, isHasElseUpper = true)
     public ResponseEntity<J> deleteWorkImageService(String uuid, String authorUuid, String workImageId) {
         WorkImageModel workImage = workImageMapper.selectById(workImageId);
         if (workImage == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        // Controller 的旧作者快照不能替代事务内的真实对象授权。
+        WorkModel work = workMapper.selectByIdForUpdate(workImage.getWork_id());
+        // 获取父锁后重新读取，防止另一个删除请求已经移除该图片。
+        workImage = workImageMapper.selectByIdForUpdate(workImageId);
+        if (workImage == null) return ResponseEntity.ok(new ResourceR().resourceSuch(false, null));
+        if (work == null || (!Objects.equals(uuid, work.getAuthor()) && !Objects.equals(uuid, work.getUploader())
+                && !com.miaoyu.barc.permission.PermissionPolicy.matches(users.selectByUuid(uuid), UserIdentityEnum.MANAGER, PermissionConst.SEC_MAINTAINER, true))) {
+            return ResponseEntity.ok(new UserR().insufficientAccountPermission());
+        }
         int sort = workImage.getSort();
         boolean delete = workImageMapper.delete(workImageId);
         if (delete) {
+            garbage.enqueue(cosConfig.getImage().getBucketName(), workImage.getObject_key());
             List<WorkImageModel> workImages = workImageMapper.selectByWorkId(workImage.getWork_id());
             for (WorkImageModel workImageModel : workImages) {
                 if (sort < workImageModel.getSort()) {
                     workImageModel.setSort(workImageModel.getSort() - 1);
-                    workImageMapper.update(workImageModel);
+                    if (!workImageMapper.update(workImageModel)) throw com.miaoyu.barc.utils.RequestInput.invalid("图片排序保存失败");
                 }
             }
             workService.submitForReview(workImage.getWork_id());

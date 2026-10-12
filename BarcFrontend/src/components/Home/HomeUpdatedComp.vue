@@ -13,7 +13,7 @@ const studentList = ref<Array<StudentImpl>>([]);
 const fetchUpdatedStudents = async () => {
   try {
     const response = await baseHttp.get("/api/work/new", {params: {day: 30, is_student_list: true}});
-    const data: ResponseImpl = response.data;
+    const data: ResponseImpl<StudentImpl[]> = response.data;
     if (data.code === 0) studentList.value = data.data;
     else infoMessage(data.msg);
   } catch {

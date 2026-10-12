@@ -3,6 +3,8 @@ package com.miaoyu.barc.api.work.controller;
 import com.miaoyu.barc.api.work.enumeration.WorkStatusEnum;
 import com.miaoyu.barc.api.work.enumeration.WorkReviewStatusEnum;
 import com.miaoyu.barc.api.work.model.WorkModel;
+import com.miaoyu.barc.api.work.model.WorkCommands;
+import com.miaoyu.barc.api.work.model.WorkSearchView;
 import com.miaoyu.barc.api.work.service.WorkManageService;
 import com.miaoyu.barc.response.ResourceR;
 import com.miaoyu.barc.user.model.vo.UserInfoVo;
@@ -51,12 +53,8 @@ public class WorkManageController {
 
     /** 静默审核作品；拒绝时 reason 必填，处理结果不会触发邮件。 */
     @PostMapping("/review")
-    public ResponseEntity<J> reviewWork(HttpServletRequest r, @RequestBody Map<String, Object> body) {
-        return workManageService.reviewWork(
-                uuid(r),
-                body.get("work_id").toString(),
-                Boolean.parseBoolean(body.get("approved").toString()),
-                body.get("reason") != null ? body.get("reason").toString() : null);
+    public ResponseEntity<J> reviewWork(HttpServletRequest r, @RequestBody WorkCommands.Review body) {
+        return workManageService.reviewWork(uuid(r), body.work_id(), body.approved(), body.reason(), body.expected_revision());
     }
 
     /** 获取作品编辑详情（含封面/内容图签名URL、作者/收录者信息、学园/部团/学生名） */
@@ -67,17 +65,14 @@ public class WorkManageController {
 
     // ==================== 作品状态管理 ====================
     @PutMapping("/status")
-    public ResponseEntity<J> updateWorkStatusManage(HttpServletRequest r, @RequestBody Map<String, Object> body) {
-        return workManageService.updateWorkStatus(uuid(r),
-                body.get("work_id").toString(),
-                WorkStatusEnum.valueOf(body.get("status").toString()),
-                body.get("remark") != null ? body.get("remark").toString() : null);
+    public ResponseEntity<J> updateWorkStatusManage(HttpServletRequest r, @RequestBody WorkCommands.Status body) {
+        return workManageService.updateWorkStatus(uuid(r), body.work_id(), body.status(), body.remark());
     }
 
     // ==================== 作品内容修改 ====================
     @PutMapping("/update")
-    public ResponseEntity<J> updateWorkContentManage(HttpServletRequest r, @RequestBody WorkModel workModel) {
-        return workManageService.updateWorkContent(uuid(r), workModel);
+    public ResponseEntity<J> updateWorkContentManage(HttpServletRequest r, @RequestBody WorkCommands.Content workModel) {
+        return workManageService.updateWorkContent(uuid(r), workModel.toModel());
     }
 
     // ==================== 认领管理 ====================
@@ -86,19 +81,35 @@ public class WorkManageController {
         return workManageService.getClaimsList(uuid(r));
     }
 
+    /** 有界认领队列/历史；旧 claims 数组入口留作兼容。 */
+    @GetMapping("/claims/page")
+    public ResponseEntity<J> claimsPage(HttpServletRequest r,
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "work_id", required = false) String workId,
+            @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @RequestParam(value = "size", defaultValue = "20") Integer size) {
+        return workManageService.getClaimsPage(uuid(r), status, workId, page, size);
+    }
+
+    /** 风纪委员查看认领证据，不因此获得作品编辑或管理状态写入能力。 */
+    @GetMapping("/claim/detail")
+    public ResponseEntity<J> claimDetail(HttpServletRequest r, @RequestParam("work_id") String workId) {
+        return workManageService.getClaimWorkDetail(uuid(r), workId);
+    }
+
     @PostMapping("/claim/approve")
-    public ResponseEntity<J> approveClaimManage(HttpServletRequest r, @RequestBody Map<String, Object> body) {
-        return workManageService.approveClaim(uuid(r), body.get("claim_id").toString(), Boolean.parseBoolean(body.get("approved").toString()));
+    public ResponseEntity<J> approveClaimManage(HttpServletRequest r, @RequestBody WorkCommands.ClaimReview body) {
+        return workManageService.approveClaim(uuid(r), body.claim_id(), body.approved());
     }
 
     @PostMapping("/claim/revoke")
-    public ResponseEntity<J> revokeClaimManage(HttpServletRequest r, @RequestBody Map<String, String> body) {
-        return workManageService.revokeClaim(uuid(r), body.get("work_id"));
+    public ResponseEntity<J> revokeClaimManage(HttpServletRequest r, @RequestBody WorkCommands.WorkId body) {
+        return workManageService.revokeClaim(uuid(r), body.work_id());
     }
 
     @PostMapping("/claim/assign")
-    public ResponseEntity<J> assignAuthorManage(HttpServletRequest r, @RequestBody Map<String, String> body) {
-        return workManageService.assignAuthor(uuid(r), body.get("work_id"), body.get("author_uuid"));
+    public ResponseEntity<J> assignAuthorManage(HttpServletRequest r, @RequestBody WorkCommands.Assign body) {
+        return workManageService.assignAuthor(uuid(r), body.work_id(), body.author_uuid());
     }
 
     @GetMapping("/claim/history")
@@ -117,14 +128,14 @@ public class WorkManageController {
     /** 搜索作品（按ID/标题），供指派作者等下拉选择（MANAGER + 比大小鉴权，见 WorkManageService#searchWorks） */
     @GetMapping("/search-work")
     public ResponseEntity<J> searchWork(HttpServletRequest r, @RequestParam("keyword") String keyword) {
-        List<WorkModel> works = workManageService.searchWorks(uuid(r), keyword);
+        List<WorkSearchView> works = workManageService.searchWorks(uuid(r), keyword);
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, works));
     }
 
     /** 搜索用户（按UUID/用户名/昵称），供指派作者等下拉选择（MANAGER + 比大小鉴权，见 WorkManageService#searchUsers） */
     @GetMapping("/search-user")
     public ResponseEntity<J> searchUser(HttpServletRequest r, @RequestParam("keyword") String keyword) {
-        List<UserInfoVo> users = workManageService.searchUsers(uuid(r), keyword);
+        List<com.miaoyu.barc.user.model.vo.UserSearchView> users = workManageService.searchUsers(uuid(r), keyword);
         return ResponseEntity.ok(new ResourceR().resourceSuch(true, users));
     }
 }
