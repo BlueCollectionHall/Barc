@@ -59,6 +59,8 @@ const hasActiveFilters = computed(
     Boolean(filters.username?.trim()) ||
     Boolean(filters.nickname?.trim()) ||
     filters.permission !== undefined ||
+    filters.gender !== undefined ||
+    filters.age !== undefined ||
     filters.identity !== 'USER',
 )
 const showEmptyState = computed(() => !loading.value && pageResult.value !== null && pageResult.value.list.length === 0)
@@ -107,6 +109,9 @@ async function loadUsers(): Promise<boolean> {
         ...(filters.nickname ? { nickname: filters.nickname.trim() } : {}),
         ...(filters.identity ? { identity: filters.identity } : {}),
         ...(filters.permission !== undefined ? { permission: filters.permission } : {}),
+        // 性别/年龄：仅在有值时下发，避免给后端塞 undefined 键（后端按 null 判断是否拼接该筛选条件）
+        ...(filters.gender !== undefined ? { gender: filters.gender } : {}),
+        ...(filters.age !== undefined ? { age: filters.age } : {}),
       },
     })
 
@@ -129,6 +134,8 @@ function resetFilters(): void {
   filters.nickname = ''
   filters.identity = 'USER'
   filters.permission = undefined
+  filters.gender = undefined
+  filters.age = undefined
   pagination.page_num = 1
   void loadUsers()
 }
@@ -310,6 +317,21 @@ onMounted(async () => {
           <el-select v-model="filters.permission" clearable placeholder="全部权限">
             <el-option v-for="option in permissionOptions" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="性别">
+          <el-select v-model="filters.gender" clearable placeholder="全部性别">
+            <el-option label="女" :value="0" />
+            <el-option label="男" :value="1" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="年龄">
+          <el-input-number
+            v-model="filters.age"
+            :min="0"
+            :max="150"
+            controls-position="right"
+            placeholder="全部年龄"
+          />
         </el-form-item>
         <div class="filters__actions">
           <el-button @click="resetFilters">重置</el-button>

@@ -23,7 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.Period;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Slf4j
@@ -46,17 +48,14 @@ public class UserService {
         int pageNum = init.getPageNum(); // 页码
         int pageSize = init.getPageSize(); // 页大小
         int offset = init.getOffset(); // 偏移量
-        // 查询数据
-        List<UserInfoVo> models;
-        if (requestDto.getParams().isEmpty()) {
-            // 不带条件参数
-            models = userArchiveMapper.selectByPage(offset, pageSize);
-        } else {
-            // 携带条件参数
-            models = userArchiveMapper.selectUserInfoByPage(offset, pageSize, requestDto.getParams());
-        }
-        // 查询总数
-        Long total = userArchiveMapper.countUserInfo(requestDto.getParams());
+        // 查询条件：params 可能为 null —— 请求体里显式写 "params": null 时，
+        // Jackson 会用 null 覆盖掉 DTO 上的默认空 Map，旧代码直接调 .isEmpty() 会 NPE。
+        // 空条件不会让 SQL 生成 WHERE 子句，等价于全量分页。
+        Map<String, Object> condition = requestDto.getParams() == null ? new HashMap<>() : requestDto.getParams();
+        // 取数与计数共用同一套条件（2026-10 合并：原先按 params 是否为空走两条 SQL，
+        // 两条投影字段不一致、且空条件分支前端不可达，现统一为一条）
+        List<UserInfoVo> models = userArchiveMapper.selectUserInfoByPage(offset, pageSize, condition);
+        Long total = userArchiveMapper.countUserInfo(condition);
         // 计算总页数
         int mathTotalPage = (int) Math.ceil((double) total / pageSize);
         Integer totalPage = mathTotalPage == 0 ? 1 : mathTotalPage;

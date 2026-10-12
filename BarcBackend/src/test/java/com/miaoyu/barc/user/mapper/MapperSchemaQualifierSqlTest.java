@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -49,16 +50,18 @@ class MapperSchemaQualifierSqlTest {
             Pattern.compile("`([^`]+)`\\s*\\.");
 
     @Test
-    @DisplayName("无筛选条件的用户分页不得使用库名前缀，应直接 JOIN user_basic")
-    void selectByPage_ShouldJoinUserBasicWithoutSchemaPrefix() throws NoSuchMethodException {
+    @DisplayName("用户分页查询不得使用库名前缀，应直接 JOIN user_basic")
+    void userPageQuery_ShouldJoinUserBasicWithoutSchemaPrefix() throws NoSuchMethodException {
+        // 2026-10：无条件分支 selectByPage 已合并进本方法（唯一的分页查询入口），断言随之转移到这里
         String sql = normalize(String.join(" ",
-                UserArchiveMapper.class.getMethod("selectByPage", int.class, int.class)
+                UserArchiveMapper.class.getMethod(
+                                "selectUserInfoByPage", int.class, int.class, Map.class)
                         .getAnnotation(Select.class).value()));
 
         assertTrue(sql.contains("LEFT JOIN user_basic b ON a.uuid = b.uuid"),
-                "selectByPage 必须直接 JOIN user_basic（不带库名前缀）");
+                "用户分页必须直接 JOIN user_basic（不带库名前缀）");
         assertFalse(sql.contains("ba."),
-                "selectByPage 不得出现 ba. 前缀：生产库名为 ba-prod，会跨库读取开发库的 user_basic");
+                "用户分页不得出现 ba. 前缀：生产库名为 ba-prod，会跨库读取开发库的 user_basic");
     }
 
     @Test

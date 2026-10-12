@@ -47,6 +47,15 @@ export interface UserListFilters extends Record<string, unknown> {
   nickname?: string
   identity?: UserIdentity
   permission?: number
+  /**
+   * 性别（对应 user_archive.gender）。
+   *
+   * 取值约定：0 = 女、1 = 男。该列在历史上没有被任何业务入口写入过（编辑档案接口前端未接入），
+   * 库里现存记录基本都是建表默认值 0，因此按性别筛选目前多数情况下筛不出结果，属于预期现象。
+   */
+  gender?: number
+  /** 年龄（对应 user_archive.age，精确匹配） */
+  age?: number
 }
 
 export interface UserQuickCreatePayload {
