@@ -252,6 +252,8 @@ MANAGER 权限位（与前端一致）：
 > 另有两处「公开接口」事实（与折叠无关，但属菜单链路一环）：`POST /user/query/all_by_page`（整个用户分页查询**无需登录**，`UserQueryController:28`）、`GET /comment/work/comments_by_work`、`/comment/work/comment_by_id`（`WorkCommentController:32,40,48`）。`docs/superpowers/specs/2026-09-19-official-account-design.md` 已把前者记为"顺带项②，本期不动"。
 >
 > 还有一处**旧链路**：`WorkManageService.getComplaintsList/processComplaint`（`:413-439`）仍直接操作**已弃用表 `feedback_work`**（`WorkFeedbackMapper.java:12-22`，`AGENTS.md` §6 明令禁止），但管理端前端已不再调用它们（前端走 `/feedback`）。本次不处理，仅登记。
+>
+> **后续处理（2026-10-12）**：该旧链路已整体下线（提交 `cb89a63`）——`FeedbackTypeOfController`、`WorkFeedbackController`、`WorkFeedbackService`、`WorkFeedbackMapper` 及 `WorkFeedbackModel` / `FeedbackTypeModel` / `FeedbackOptionModel` 全部删除，`WorkManageService` 的投诉区块与 `FeedbackMapper` 的两个 `@Deprecated` 查询一并移除。三张弃用表本身保留在库中，**未执行 DROP**。
 
 ---
 
@@ -479,7 +481,7 @@ npm run build       # vue-tsc --build + vite build
 | `BarcBackend/.../comment/controller/WorkCommentController.java` | 32/40/48（公开读）、94-118（删除入口） |
 | `BarcBackend/.../background/service/BackgroundImageService.java` | 56/66/125/141/159/177/207（1匹配 bit32） |
 | `BarcBackend/.../festival/service/FestivalService.java` | 52/72/113/155/182/225（1匹配 bit32） |
-| `BarcBackend/.../feedback/mapper/WorkFeedbackMapper.java` | 12-22（仍在用弃用表 `feedback_work`） |
+| ~~`BarcBackend/.../feedback/mapper/WorkFeedbackMapper.java`~~ | ~~12-22（仍在用弃用表 `feedback_work`）~~ —— **2026-10-12 已随旧链路整体删除（`cb89a63`）** |
 
 ---
 
